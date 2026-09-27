@@ -13,3 +13,4 @@ export * from './import/dxf/entities';
 export * from './import/dxf/handlers';
 export * from './import/dxf/dxf';
 export * from './import/dxf/curves';
+export * from './import/importFile';
