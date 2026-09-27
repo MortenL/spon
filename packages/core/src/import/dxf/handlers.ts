@@ -69,7 +69,39 @@ const CircleHandler = entityHandler<CircleData>(
   },
 );
 
+export interface SplineData extends CommonData {
+  type: 'SPLINE';
+  degree: number;
+  /** Bit flags: 1 closed, 2 periodic, 4 rational, 8 planar, 16 linear. */
+  flags: number;
+  knots: number[];
+  controlPoints: XYZ[];
+  fitPoints: XYZ[];
+  weights: number[];
+}
+
+const SplineHandler = entityHandler<SplineData>(
+  'SPLINE',
+  () => ({ type: 'SPLINE', layer: '0', inPaperSpace: false, degree: 3, flags: 0, knots: [], controlPoints: [], fitPoints: [], weights: [] }),
+  (e, g) => {
+    switch (g.code) {
+      case 70: e.flags = num(g); break;
+      case 71: e.degree = num(g); break;
+      case 40: e.knots.push(num(g)); break;
+      case 41: e.weights.push(num(g)); break;
+      // a point starts at its X group; the Y and Z groups that follow belong to the most recent point
+      case 10: e.controlPoints.push({ x: num(g), y: 0, z: 0 }); break;
+      case 20: if (e.controlPoints.length) e.controlPoints[e.controlPoints.length - 1].y = num(g); break;
+      case 30: if (e.controlPoints.length) e.controlPoints[e.controlPoints.length - 1].z = num(g); break;
+      case 11: e.fitPoints.push({ x: num(g), y: 0, z: 0 }); break;
+      case 21: if (e.fitPoints.length) e.fitPoints[e.fitPoints.length - 1].y = num(g); break;
+      case 31: if (e.fitPoints.length) e.fitPoints[e.fitPoints.length - 1].z = num(g); break;
+    }
+  },
+);
+
 /** Replaces dxf-parser handlers that drop data Spon needs. */
 export function registerSponHandlers(parser: DxfParser): void {
   parser.registerEntityHandler(CircleHandler);
+  parser.registerEntityHandler(SplineHandler);
 }

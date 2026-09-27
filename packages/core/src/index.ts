@@ -12,3 +12,4 @@ export * from './import/dxf/affine2d';
 export * from './import/dxf/entities';
 export * from './import/dxf/handlers';
 export * from './import/dxf/dxf';
+export * from './import/dxf/curves';

@@ -1,14 +1,15 @@
 import DxfParser from 'dxf-parser';
 import type {
-  IArcEntity, IDxf, IEntity, IInsertEntity, ILineEntity, ILwpolylineEntity, IPoint, IPolylineEntity,
+  IArcEntity, IDxf, IEllipseEntity, IEntity, IInsertEntity, ILineEntity, ILwpolylineEntity, IPoint, IPolylineEntity,
 } from 'dxf-parser';
 import type { Path2D } from '../../geometry/path2d';
 import type { LengthUnit } from '../../units/units';
 import {
   AFFINE_IDENTITY, type Affine2D, affineMultiply, affineRotate, affineScale, affineTranslate,
 } from './affine2d';
+import { ellipseToPath, splineToPath } from './curves';
 import { arcToPath, circleToPath, lineToPath, polylineToPath, transformPath } from './entities';
-import { type CircleData, registerSponHandlers } from './handlers';
+import { type CircleData, registerSponHandlers, type SplineData } from './handlers';
 
 export interface DrawingLayer {
   name: string;
@@ -202,6 +203,25 @@ function processEntity(ctx: Context, entity: IEntity, m: Affine2D, inheritedLaye
       if (hasZ(...vertices.map((v) => v.z))) ctx.nonZeroZ++;
       const transform = e.is3dPolyline ? m : affineMultiply(m, ocsTransform(ctx, e));
       emit(ctx, layer, polylineToPath(vertices, !!e.shape), transform);
+      return;
+    }
+    case 'ELLIPSE': {
+      const e = entity as IEllipseEntity;
+      if (hasZ(e.center.z)) ctx.nonZeroZ++;
+      emit(ctx, layer, ellipseToPath(e.center, e.majorAxisEndPoint, e.axisRatio, e.startAngle ?? 0, e.endAngle ?? 2 * Math.PI, ctx.chordTol), m);
+      return;
+    }
+    case 'SPLINE': {
+      const e = entity as unknown as SplineData; // produced by our handler in handlers.ts
+      if (hasZ(...e.controlPoints.map((p) => p.z), ...e.fitPoints.map((p) => p.z))) ctx.nonZeroZ++;
+      let weights: number[] | null = e.weights.length ? e.weights : null;
+      if (weights && weights.length !== e.controlPoints.length) {
+        ctx.notes.add('Some SPLINE weights did not match their control points and were ignored');
+        weights = null;
+      }
+      const { path, note } = splineToPath(e.degree, e.knots, e.controlPoints, e.fitPoints, ctx.chordTol, weights);
+      if (note) ctx.notes.add(note);
+      if (path) emit(ctx, layer, path, m);
       return;
     }
     case 'INSERT': {
