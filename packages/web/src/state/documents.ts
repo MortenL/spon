@@ -1,5 +1,5 @@
 import {
-  createJob, fileKind, type Job, type LengthUnit, MAX_SOFT_IMPORT_BYTES, type ModelRef, readSpon, SPON_EXTENSION, writeSpon,
+  createJob, fileKind, type Job, type LengthUnit, MAX_SOFT_IMPORT_BYTES, modelFilePath, type ModelRef, readSpon, SPON_EXTENSION, writeSpon,
 } from '@sponcam/core';
 import { toast } from 'sonner';
 import { importInWorker } from '../workers/importClient';
@@ -12,7 +12,8 @@ const state = () => appStore.getState();
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 async function geometryForModel(model: ModelRef, bytes: Uint8Array): Promise<{ geometry: ModelGeometry; warnings: string[] }> {
-  const result = await importInWorker(model.sourceName, bytes);
+  // the stored name decides the parser, so derive it from the model kind rather than trusting sourceName
+  const result = await importInWorker(modelFilePath(model), bytes);
   if (!result.ok) throw new Error(result.error);
   return { geometry: toModelGeometry(result), warnings: result.warnings };
 }
@@ -51,7 +52,8 @@ export async function openFile(file: File, handle: FileSystemFileHandle | null =
   if (file.size > MAX_SOFT_IMPORT_BYTES && !window.confirm(`${file.name} is ${Math.round(file.size / 1048576)} MB and may take a while to load. Continue?`)) {
     return;
   }
-  if (isJob && !confirmDiscard()) return;
+  // opening a job or importing over a model replaces the current one (Spec §7: confirm when dirty)
+  if ((isJob || state().job.model) && !confirmDiscard()) return;
   const bytes = new Uint8Array(await file.arrayBuffer());
   if (isJob) await openSponBytes(bytes, handle);
   else await importModelBytes(file.name, bytes);
@@ -176,6 +178,7 @@ let restoreStarted = false;
 export async function restoreAutosave(): Promise<void> {
   if (restoreStarted) return;
   restoreStarted = true;
+  const jobAtStart = state().job;
   let saved;
   try {
     saved = await loadCurrentJob();
@@ -189,7 +192,12 @@ export async function restoreAutosave(): Promise<void> {
   let modelBytes: Uint8Array | null = null;
   let warnings: string[] = [];
   if (job.model) {
-    const bytes = await getBlob(job.model.blobId);
+    let bytes: Uint8Array | undefined;
+    try {
+      bytes = await getBlob(job.model.blobId);
+    } catch (err) {
+      console.error('Could not read the autosaved model', err);
+    }
     if (!bytes) {
       toast.warning('The autosaved model could not be found; the job was restored without it');
       job = { ...job, model: null };
@@ -203,6 +211,8 @@ export async function restoreAutosave(): Promise<void> {
       }
     }
   }
+  // the user already opened, imported or started something while the restore was pending: keep their work
+  if (state().job !== jobAtStart) return;
   state().loadDocument({ job, geometry, modelBytes, warnings, dirty: saved.dirty, fileHandle: null });
   state().requestView('fit');
 }
