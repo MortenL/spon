@@ -19,3 +19,6 @@ export * from './job/defaults';
 export * from './job/orientation';
 export * from './job/update';
 export * from './job/derive';
+export * from './io/errors';
+export * from './io/migrations';
+export * from './io/spon';
