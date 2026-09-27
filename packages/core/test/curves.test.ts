@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { segmentStart, tessellatePath, type Vec2 } from '../src/geometry/path2d';
 import { ellipseToPath, evalBSpline, flattenCurve, splineToPath } from '../src/import/dxf/curves';
 import { parseDxf } from '../src/import/dxf/dxf';
-import { dxfText, ellipse, insert, spline, splineFit } from './fixtures/dxfBuilder';
+import { dxfText, ellipse, type Entity, insert, spline, splineFit } from './fixtures/dxfBuilder';
 
 const bezier2 = (p0: Vec2, p1: Vec2, p2: Vec2, t: number): Vec2 => ({
   x: (1 - t) ** 2 * p0.x + 2 * (1 - t) * t * p1.x + t * t * p2.x,
@@ -102,6 +102,39 @@ describe('parseDxf: curves', () => {
     expect(pts.length).toBeGreaterThan(8);
     for (const p of pts) expect(Math.hypot(p.x, p.y)).toBeCloseTo(10, 9);
     expect(r.warnings).toEqual([]);
+  });
+
+  it('mirrors a partial ELLIPSE whose extrusion is -Z (the minor axis flips; dxf-parser drops 210-230)', () => {
+    const up = parseDxf(dxfText({ entities: [ellipse('E', 0, 0, 10, 0, 0.5, 0, Math.PI)] }));
+    const down = parseDxf(dxfText({ entities: [ellipse('E', 0, 0, 10, 0, 0.5, 0, Math.PI, -1)] }));
+    // the point at t = π/2 is the one with x = 0
+    const mid = (r: ReturnType<typeof parseDxf>) =>
+      tessellatePath(r.drawing.layers[0].paths[0]).reduce((best, p) => (Math.abs(p.x) < Math.abs(best.x) ? p : best));
+    expect(mid(up).x).toBeCloseTo(0, 6);
+    expect(mid(up).y).toBeCloseTo(5, 6);
+    expect(mid(down).x).toBeCloseTo(0, 6);
+    expect(mid(down).y).toBeCloseTo(-5, 6);
+    const downPts = tessellatePath(down.drawing.layers[0].paths[0]);
+    expect(downPts[0].x).toBeCloseTo(10, 9);
+    expect(downPts.at(-1)!.x).toBeCloseTo(-10, 9);
+    expect(down.warnings).toEqual([]);
+  });
+
+  it('keeps a full ELLIPSE with -Z extrusion at the same extents', () => {
+    const r = parseDxf(dxfText({ entities: [ellipse('E', 0, 0, 10, 0, 0.5, 0, 2 * Math.PI, -1)] }));
+    const pts = tessellatePath(r.drawing.layers[0].paths[0]);
+    expect(Math.max(...pts.map((p) => p.x))).toBeCloseTo(10, 6);
+    expect(Math.min(...pts.map((p) => p.x))).toBeCloseTo(-10, 6);
+    expect(Math.max(...pts.map((p) => p.y))).toBeCloseTo(5, 2);
+    expect(Math.min(...pts.map((p) => p.y))).toBeCloseTo(-5, 2);
+    expect(r.warnings).toEqual([]);
+  });
+
+  it('notes a tilted ELLIPSE extrusion', () => {
+    const tilted: Entity = ellipse('E', 0, 0, 10, 0, 0.5, 0, 2 * Math.PI)
+      .flatMap((g): Entity => (g[0] === 31 ? [g, [210, 1], [220, 0], [230, 1]] : [g]));
+    const r = parseDxf(dxfText({ entities: [tilted] }));
+    expect(r.warnings).toContain('Some entities have a tilted extrusion direction and were projected to XY');
   });
 
   it('keeps the world-space chord tolerance for an ELLIPSE inside a scaled block', () => {

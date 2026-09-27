@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type ArcSegment, type LineSegment, segmentEnd, segmentStart, type Vec2 } from '../src/geometry/path2d';
+import { type ArcSegment, type LineSegment, segmentEnd, segmentStart, tessellatePath, type Vec2 } from '../src/geometry/path2d';
 import { countEntityTypes, DxfParseError, parseDxf } from '../src/import/dxf/dxf';
 import { arc, circle, dxfText, type Entity, hatch, insert, line, lwpolyline, polyline, text } from './fixtures/dxfBuilder';
 
@@ -103,6 +103,30 @@ describe('parseDxf: blocks', () => {
     expect(seg.sweep).toBeCloseTo(-Math.PI, 12);
   });
 
+  it('rejects INSERT arrays that expand past the segment budget, quickly', () => {
+    const one = { name: 'ONE', base: [0, 0] as [number, number], entities: [line('0', 0, 0, 1, 0)] };
+    const started = Date.now();
+    expect(() => parseDxf(dxfText({ blocks: [one], entities: [insert('A', 'ONE', 0, 0, { rows: 3000, cols: 3000 })] })))
+      .toThrow(DxfParseError);
+    expect(() => parseDxf(dxfText({ blocks: [one], entities: [insert('A', 'ONE', 0, 0, { rows: 3000, cols: 3000 })] })))
+      .toThrow('DXF expands to more than 2000000 segments (possibly malformed block references)');
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
+
+  it('rejects nested INSERT fan-out ("billion laughs") that expands past the segment budget', () => {
+    const blocks = [{ name: 'L0', base: [0, 0] as [number, number], entities: [line('0', 0, 0, 1, 0)] }];
+    for (let i = 1; i <= 8; i++) {
+      blocks.push({ name: `L${i}`, base: [0, 0], entities: Array.from({ length: 10 }, () => insert('0', `L${i - 1}`, 0, 0)) });
+    }
+    expect(() => parseDxf(dxfText({ blocks, entities: [insert('A', 'L8', 0, 0)] }))).toThrow(DxfParseError);
+  });
+
+  it('still expands a modest INSERT array', () => {
+    const one = { name: 'ONE', base: [0, 0] as [number, number], entities: [line('0', 0, 0, 1, 0)] };
+    const r = parseDxf(dxfText({ blocks: [one], entities: [insert('A', 'ONE', 0, 0, { rows: 3, cols: 4 })] }));
+    expect(layer(r, 'A').paths.length).toBe(12);
+  });
+
   it('warns about missing blocks', () => {
     const r = parseDxf(dxfText({ entities: [line('A', 0, 0, 1, 0), insert('A', 'NOPE', 0, 0)] }));
     expect(r.warnings).toContain('Block "NOPE" is referenced but not defined');
@@ -136,6 +160,26 @@ describe('parseDxf: metadata and warnings', () => {
   it('warns about non-zero Z', () => {
     const r = parseDxf(dxfText({ entities: [line('A', 0, 0, 1, 0, 5)] }));
     expect(r.warnings).toContain('1 entity had non-zero Z and was projected to XY');
+  });
+
+  it('skips entities with non-finite or non-positive values and counts them in a warning', () => {
+    const bad: Entity[] = [
+      [[0, 'CIRCLE'], [8, 'A'], [10, 0], [20, 0], [30, 0], [40, 'abc']],
+      [[0, 'CIRCLE'], [8, 'A'], [10, 0], [20, 0], [30, 0], [40, '1e400']],
+      circle('A', 0, 0, 0),
+      circle('A', 0, 0, -2),
+      arc('A', 0, 0, -1, 0, 90),
+      [[0, 'ELLIPSE'], [8, 'A'], [10, 0], [20, 0], [30, 0], [11, 10], [21, 0], [31, 0], [40, 0], [41, 0], [42, 1]],
+      line('A', 0, 0, 1e400, 0),
+    ];
+    const r = parseDxf(dxfText({ entities: [circle('OK', 0, 0, 1), ...bad] }));
+    expect(r.drawing.layers.map((l) => l.name)).toEqual(['OK']);
+    expect(r.warnings).toContain('Skipped 7 entities with invalid geometry (non-finite or non-positive values)');
+  });
+
+  it('imports a CIRCLE with an absurd radius without hanging', () => {
+    const r = parseDxf(dxfText({ entities: [circle('A', 0, 0, 1e300)] }));
+    expect(tessellatePath(r.drawing.layers[0].paths[0]).length).toBeLessThanOrEqual(2 * 4097);
   });
 
   it('rejects files without supported geometry', () => {

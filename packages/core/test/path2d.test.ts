@@ -31,6 +31,24 @@ describe('path2d', () => {
     }
   });
 
+  it('caps the step count for huge radii instead of producing millions of points or Infinity', () => {
+    const n = arcStepCount(1e15, 2 * Math.PI, 0.01);
+    expect(Number.isFinite(n)).toBe(true);
+    expect(n).toBeLessThanOrEqual(4096);
+    expect(arcStepCount(1e12, Math.PI, 0.01)).toBeLessThanOrEqual(2048);
+    expect(arcStepCount(1e15, 1e-9, 0.01)).toBe(1);
+    const huge: ArcSegment = { kind: 'arc', center: { x: 0, y: 0 }, radius: 1e15, startAngle: 0, sweep: 2 * Math.PI };
+    expect(tessellateSegment(huge, 0.01).length).toBeLessThanOrEqual(4097);
+  });
+
+  it('guards non-finite inputs to the step count', () => {
+    for (const n of [arcStepCount(Number.NaN, Math.PI, 0.01), arcStepCount(10, Number.NaN, 0.01), arcStepCount(Infinity, Math.PI, 0.01)]) {
+      expect(Number.isFinite(n)).toBe(true);
+      expect(n).toBeGreaterThanOrEqual(1);
+      expect(n).toBeLessThanOrEqual(4096);
+    }
+  });
+
   it('joins segment points without duplicating shared corners', () => {
     const path = polylineToPath([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }], false);
     expect(tessellatePath(path)).toEqual([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }]);

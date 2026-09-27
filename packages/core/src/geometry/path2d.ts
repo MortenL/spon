@@ -33,10 +33,19 @@ export const arcPoint = (arc: ArcSegment, angle: number): Vec2 => ({
 export const segmentStart = (s: Segment): Vec2 => (s.kind === 'line' ? s.from : arcPoint(s, s.startAngle));
 export const segmentEnd = (s: Segment): Vec2 => (s.kind === 'line' ? s.to : arcPoint(s, s.startAngle + s.sweep));
 
-/** Number of chords needed so that no chord deviates from the arc by more than `chordTol`. */
+/** Upper bound on chords per full circle, so absurd radii cannot produce millions of points (or Infinity). */
+export const MAX_ARC_STEPS = 4096;
+
+/**
+ * Number of chords needed so that no chord deviates from the arc by more than `chordTol`,
+ * capped at MAX_ARC_STEPS per full turn (scaled by the sweep) and never below 1.
+ */
 export function arcStepCount(radius: number, sweepAbs: number, chordTol: number): number {
+  const turns = Number.isFinite(sweepAbs) ? Math.min(Math.abs(sweepAbs), 2 * Math.PI) / (2 * Math.PI) : 1;
+  const cap = Math.max(1, Math.ceil(MAX_ARC_STEPS * turns));
   const step = chordTol >= radius ? Math.PI / 2 : 2 * Math.acos(1 - chordTol / radius);
-  return Math.max(1, Math.ceil(sweepAbs / step));
+  const n = Math.ceil(Math.abs(sweepAbs) / step);
+  return Number.isFinite(n) ? Math.min(cap, Math.max(1, n)) : cap;
 }
 
 export function tessellateSegment(s: Segment, chordTol = 0.01): Vec2[] {

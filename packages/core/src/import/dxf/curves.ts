@@ -46,11 +46,18 @@ export function pointsToPath(points: Vec2[]): Path2D {
   return { segments, closed };
 }
 
-/** DXF ELLIPSE: P(t) = C + M·cos t + m·sin t, with m = ratio · (M rotated 90° CCW). Params in radians. */
-export function ellipseToPath(center: Vec2, majorAxis: Vec2, ratio: number, startParam: number, endParam: number, tol: number): Path2D {
+/**
+ * DXF ELLIPSE: P(t) = C + M·cos t + m·sin t, with m = ratio · (extrusion × M), i.e. M rotated 90° CCW for a
+ * +Z extrusion. `mirrorMinor` negates m, for a (0, 0, −1) extrusion (the parameter then runs clockwise seen
+ * from +Z). Params in radians.
+ */
+export function ellipseToPath(
+  center: Vec2, majorAxis: Vec2, ratio: number, startParam: number, endParam: number, tol: number, mirrorMinor = false,
+): Path2D {
   let end = endParam;
   while (end <= startParam) end += TAU;
-  const minor = { x: -majorAxis.y * ratio, y: majorAxis.x * ratio };
+  const sign = mirrorMinor ? -1 : 1;
+  const minor = { x: -majorAxis.y * ratio * sign, y: majorAxis.x * ratio * sign };
   const evaluate = (t: number): Vec2 => ({
     x: center.x + majorAxis.x * Math.cos(t) + minor.x * Math.sin(t),
     y: center.y + majorAxis.y * Math.cos(t) + minor.y * Math.sin(t),

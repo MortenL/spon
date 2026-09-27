@@ -69,6 +69,42 @@ const CircleHandler = entityHandler<CircleData>(
   },
 );
 
+export interface EllipseData extends CommonData {
+  type: 'ELLIPSE';
+  center: XYZ;
+  /** Major axis end point, relative to the centre (WCS). */
+  majorAxisEndPoint: XYZ;
+  axisRatio: number;
+  /** Start and end parameters in radians. */
+  startAngle: number;
+  endAngle: number;
+  extrusionDirection: XYZ;
+}
+
+const EllipseHandler = entityHandler<EllipseData>(
+  'ELLIPSE',
+  () => ({
+    type: 'ELLIPSE', layer: '0', inPaperSpace: false, center: { x: 0, y: 0, z: 0 }, majorAxisEndPoint: { x: 1, y: 0, z: 0 },
+    axisRatio: 1, startAngle: 0, endAngle: 2 * Math.PI, extrusionDirection: { x: 0, y: 0, z: 1 },
+  }),
+  (e, g) => {
+    switch (g.code) {
+      case 10: e.center.x = num(g); break;
+      case 20: e.center.y = num(g); break;
+      case 30: e.center.z = num(g); break;
+      case 11: e.majorAxisEndPoint.x = num(g); break;
+      case 21: e.majorAxisEndPoint.y = num(g); break;
+      case 31: e.majorAxisEndPoint.z = num(g); break;
+      case 40: e.axisRatio = num(g); break;
+      case 41: e.startAngle = num(g); break;
+      case 42: e.endAngle = num(g); break;
+      case 210: e.extrusionDirection.x = num(g); break;
+      case 220: e.extrusionDirection.y = num(g); break;
+      case 230: e.extrusionDirection.z = num(g); break;
+    }
+  },
+);
+
 export interface SplineData extends CommonData {
   type: 'SPLINE';
   degree: number;
@@ -103,5 +139,6 @@ const SplineHandler = entityHandler<SplineData>(
 /** Replaces dxf-parser handlers that drop data Spon needs. */
 export function registerSponHandlers(parser: DxfParser): void {
   parser.registerEntityHandler(CircleHandler);
+  parser.registerEntityHandler(EllipseHandler);
   parser.registerEntityHandler(SplineHandler);
 }

@@ -64,16 +64,30 @@ export const polyline = (layer: string, vertices: PolyVertex[], closed: boolean)
   [0, 'SEQEND'], [8, layer],
 ];
 
-export const insert = (layer: string, name: string, x: number, y: number, o: { sx?: number; sy?: number; rotDeg?: number } = {}): Entity => [
+export interface InsertOptions {
+  sx?: number;
+  sy?: number;
+  rotDeg?: number;
+  /** MINSERT array: column count (70) and row count (71), each with spacing 1 (44/45). */
+  cols?: number;
+  rows?: number;
+}
+
+export const insert = (layer: string, name: string, x: number, y: number, o: InsertOptions = {}): Entity => [
   [0, 'INSERT'], [8, layer], [2, name], [10, x], [20, y], [30, 0],
   ...opt(o.sx !== undefined, [41, o.sx ?? 1]), ...opt(o.sy !== undefined, [42, o.sy ?? 1]), ...opt(o.rotDeg !== undefined, [50, o.rotDeg ?? 0]),
+  ...opt(o.cols !== undefined, [70, o.cols ?? 1], [44, 1]), ...opt(o.rows !== undefined, [71, o.rows ?? 1], [45, 1]),
 ];
 
 export const text = (layer: string, value: string): Entity => [[0, 'TEXT'], [8, layer], [10, 0], [20, 0], [30, 0], [40, 2], [1, value]];
 export const hatch = (layer: string): Entity => [[0, 'HATCH'], [8, layer]];
 
-export const ellipse = (layer: string, cx: number, cy: number, mx: number, my: number, ratio: number, start: number, end: number): Entity => [
-  [0, 'ELLIPSE'], [8, layer], [10, cx], [20, cy], [30, 0], [11, mx], [21, my], [31, 0], [40, ratio], [41, start], [42, end],
+export const ellipse = (
+  layer: string, cx: number, cy: number, mx: number, my: number, ratio: number, start: number, end: number, extrusionZ?: number,
+): Entity => [
+  [0, 'ELLIPSE'], [8, layer], [10, cx], [20, cy], [30, 0], [11, mx], [21, my], [31, 0],
+  ...opt(extrusionZ !== undefined, [210, 0], [220, 0], [230, extrusionZ ?? 1]),
+  [40, ratio], [41, start], [42, end],
 ];
 
 /** Control-point spline; passing `weights` makes it rational (flag 4) and writes group 41 per control point. */
