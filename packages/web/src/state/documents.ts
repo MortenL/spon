@@ -17,6 +17,20 @@ async function geometryForModel(model: ModelRef, bytes: Uint8Array): Promise<{ g
   return { geometry: toModelGeometry(result), warnings: result.warnings };
 }
 
+/**
+ * Stores the current model's blob (when there is one) and drops every other stored blob, for autosave.
+ * IndexedDB failures (quota, private browsing) must never escape as unhandled rejections or misleading
+ * toasts, so they are logged and swallowed here.
+ */
+async function persistModelBlob(keepId: string | null, bytes: Uint8Array | null): Promise<void> {
+  try {
+    if (keepId && bytes) await putBlob(keepId, bytes);
+    await removeOrphanBlobs(keepId);
+  } catch (err) {
+    console.error('Could not store the model for autosave', err);
+  }
+}
+
 function confirmDiscard(): boolean {
   return !state().dirty || window.confirm('Discard unsaved changes to this job?');
 }
@@ -24,7 +38,7 @@ function confirmDiscard(): boolean {
 export async function newDocument(): Promise<void> {
   if (!confirmDiscard()) return;
   state().loadDocument({ job: createJob(), geometry: null, modelBytes: null, warnings: [], dirty: false, fileHandle: null });
-  await removeOrphanBlobs(null);
+  await persistModelBlob(null, null);
 }
 
 /** Opens a .spon job, or imports an STL/DXF into the current job. */
@@ -80,12 +94,7 @@ export async function finishImport(pending: PendingImport, units: LengthUnit): P
   );
   state().requestView('fit');
   if (pending.warnings.length) toast.warning(`${pending.fileName} imported with ${pending.warnings.length} warning(s); see the Model panel`);
-  try {
-    await putBlob(blobId, pending.bytes);
-    await removeOrphanBlobs(blobId);
-  } catch (err) {
-    console.error('Could not store the model for autosave', err);
-  }
+  await persistModelBlob(blobId, pending.bytes);
 }
 
 export function cancelPendingImport(): void {
@@ -116,8 +125,7 @@ async function openSponBytes(bytes: Uint8Array, handle: FileSystemFileHandle | n
   }
   state().loadDocument({ job, geometry, modelBytes, warnings, dirty: false, fileHandle: handle });
   state().requestView('fit');
-  if (job.model && modelBytes) await putBlob(job.model.blobId, modelBytes);
-  await removeOrphanBlobs(job.model?.blobId ?? null);
+  await persistModelBlob(job.model?.blobId ?? null, modelBytes);
 }
 
 export async function saveDocument(saveAs = false): Promise<boolean> {
