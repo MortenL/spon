@@ -1,6 +1,6 @@
 import { vec3 } from '@sponcam/core';
 import { describe, expect, it } from 'vitest';
-import { formatPoint, formatSize } from './format';
+import { formatDuration, formatPoint, formatSize } from './format';
 
 describe('format', () => {
   it('formats sizes in display units', () => {
@@ -10,5 +10,14 @@ describe('format', () => {
 
   it('formats points without negative zero', () => {
     expect(formatPoint(vec3(0, -0, 12), 'mm')).toBe('X 0.00 · Y 0.00 · Z 12.00 mm');
+  });
+});
+
+describe('formatDuration', () => {
+  it('formats m:ss and h:mm:ss', () => {
+    expect(formatDuration(0)).toBe('0:00');
+    expect(formatDuration(65)).toBe('1:05');
+    expect(formatDuration(59.6)).toBe('1:00');
+    expect(formatDuration(3725)).toBe('1:02:05');
   });
 });
