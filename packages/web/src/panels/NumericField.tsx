@@ -2,6 +2,7 @@ import { formatLength, parseLength } from '@sponcam/core';
 import { useEffect, useRef, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { useApp } from '@/state/store';
+import { resolveNumericEdit } from './numericEdit';
 
 export interface NumericFieldProps {
   label: string;
@@ -27,9 +28,9 @@ export function NumericField({ label, value, format, parse, suffix, onCommit, te
 
   const finish = () => {
     setEditing(false);
-    const next = cancelled.current ? null : parse(text);
+    const next = cancelled.current ? null : resolveNumericEdit(text, formatted, value, parse);
     cancelled.current = false;
-    if (next === null || Math.abs(next - value) <= 1e-9) setText(formatted);
+    if (next === null) setText(formatted);
     else onCommit(next);
   };
 
