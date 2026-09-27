@@ -11,6 +11,11 @@ export const PROGRAM_EXTENSIONS = ['.nc', '.ngc', '.gcode', '.tap', '.cnc'] as c
 const state = () => appStore.getState();
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
+/** Bumped on every `reanalyzeAll` pass; a pass whose generation is stale abandons its work rather than overwrite a newer one. */
+let analysisGeneration = 0;
+/** Bumped per blobId on every `parseBlob` call; a stale (superseded) parse ignores its own result. */
+const parseTokens = new Map<string, number>();
+
 export function isProgramFile(name: string): boolean {
   const lower = name.toLowerCase();
   return PROGRAM_EXTENSIONS.some((ext) => lower.endsWith(ext));
@@ -46,12 +51,19 @@ async function parseBlob(blobId: string): Promise<void> {
   if (!bytes) return;
   const text = state().programData[blobId]?.text ?? decodeProgramText(bytes);
   state().setProgramData(blobId, { status: 'parsing', text, parsed: null, error: null });
+  // Superseded by a later parseBlob(blobId) call, or the document changed under us.
+  const token = (parseTokens.get(blobId) ?? 0) + 1;
+  parseTokens.set(blobId, token);
+  const stale = () => parseTokens.get(blobId) !== token || !state().programData[blobId];
+  const startGeneration = analysisGeneration;
   try {
     const parsed = await parseProgramInWorker(bytes, programContext(state().job, state().geometry));
-    if (!state().programData[blobId]) return; // a different document was loaded meanwhile
+    if (stale()) return;
     state().setProgramData(blobId, { status: 'ready', text, parsed, error: null });
+    // The machine/stock/WCS moved on while this parse (and its embedded analysis) was in flight.
+    if (analysisGeneration !== startGeneration) void reanalyzeAll();
   } catch (err) {
-    if (!state().programData[blobId]) return;
+    if (stale()) return;
     state().setProgramData(blobId, { status: 'failed', text, parsed: null, error: message(err) });
     toast.error(`Could not parse program: ${message(err)}`);
   }
@@ -77,11 +89,13 @@ export async function loadPrograms(): Promise<void> {
 
 /** Re-times and re-analyses every parsed program for the current machine, stock and WCS. */
 export async function reanalyzeAll(): Promise<void> {
+  const generation = ++analysisGeneration;
   const ctx = programContext(state().job, state().geometry);
   for (const [blobId, data] of Object.entries(state().programData)) {
     if (data.status !== 'ready' || !data.parsed) continue;
     try {
       const { analysis, t } = await analyzeInWorker(data.parsed.table, data.parsed.lineFlags, ctx);
+      if (generation !== analysisGeneration) return; // a newer pass superseded this one; let it win
       const current = state().programData[blobId];
       if (current?.parsed !== data.parsed) continue; // replaced meanwhile
       state().setProgramData(blobId, { ...current, parsed: { ...data.parsed, table: { ...data.parsed.table, t }, analysis } });
