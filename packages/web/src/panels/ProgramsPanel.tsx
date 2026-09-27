@@ -1,0 +1,74 @@
+import { allDiagnostics, moveProgram, removeProgram, setProgramInTimeline } from '@sponcam/core';
+import { ArrowDown, ArrowUp, Loader2, Trash2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { activateProgram } from '@/gcode/playback';
+import { cn } from '@/lib/utils';
+import { pruneBlobs } from '@/state/programs';
+import { appStore, useApp } from '@/state/store';
+import { formatDuration } from './format';
+import { PanelSection } from './PanelSection';
+
+export function ProgramsPanel() {
+  const programs = useApp((s) => s.job.programs);
+  const data = useApp((s) => s.programData);
+  const activeId = useApp((s) => s.activeProgramId);
+  const { commit } = appStore.getState();
+
+  const remove = (id: string) => {
+    commit((j) => removeProgram(j, id));
+    const s = appStore.getState();
+    if (s.activeProgramId === id) s.setActiveProgram(s.job.programs[0]?.id ?? null);
+    void pruneBlobs();
+  };
+
+  return (
+    <PanelSection title="Programs">
+      {programs.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No programs. Open or drop a G-code file (.nc, .ngc, .gcode, .tap, .cnc).</p>
+      ) : (
+        <ul className="space-y-1">
+          {programs.map((p, index) => {
+            const d = data[p.blobId];
+            const diags = d?.parsed ? allDiagnostics(d.parsed) : [];
+            const errors = diags.filter((x) => x.severity === 'error').length;
+            const warnings = diags.filter((x) => x.severity === 'warning').length;
+            return (
+              <li
+                key={p.id} data-testid={`program-${p.name}`} data-active={p.id === activeId}
+                onClick={() => activateProgram(p.id)}
+                className={cn('flex cursor-pointer items-center gap-2 rounded-md border px-2 py-1.5 text-sm', p.id === activeId ? 'border-primary bg-accent' : 'hover:bg-accent/50')}
+              >
+                <input
+                  type="checkbox" data-testid="program-in-timeline" checked={p.inTimeline} className="accent-primary" title="Include in timeline"
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => commit((j) => setProgramInTimeline(j, p.id, e.target.checked))}
+                />
+                <span className="min-w-0 flex-1 truncate" title={p.name}>{p.name}</span>
+                {d?.status === 'parsing' && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
+                {d?.status === 'failed' && <span className="text-xs text-destructive">failed</span>}
+                {d?.parsed && (
+                  <>
+                    <span className="font-mono text-xs" data-testid="program-time">{formatDuration(d.parsed.analysis.summary.totalSeconds)}</span>
+                    {errors > 0 && <span className="rounded bg-destructive/20 px-1 text-xs text-destructive">{errors}</span>}
+                    {warnings > 0 && <span className="rounded bg-amber-500/20 px-1 text-xs text-amber-500">{warnings}</span>}
+                  </>
+                )}
+                <span className="flex" onClick={(e) => e.stopPropagation()}>
+                  <Button size="icon" variant="ghost" className="size-6" data-testid="program-up" disabled={index === 0} title="Move up" onClick={() => commit((j) => moveProgram(j, p.id, -1))}>
+                    <ArrowUp className="size-3.5" />
+                  </Button>
+                  <Button size="icon" variant="ghost" className="size-6" data-testid="program-down" disabled={index === programs.length - 1} title="Move down" onClick={() => commit((j) => moveProgram(j, p.id, 1))}>
+                    <ArrowDown className="size-3.5" />
+                  </Button>
+                  <Button size="icon" variant="ghost" className="size-6" data-testid="program-remove" title="Remove" onClick={() => remove(p.id)}>
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </PanelSection>
+  );
+}
