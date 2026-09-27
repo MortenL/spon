@@ -1,7 +1,8 @@
 import { GizmoHelper, GizmoViewport, OrbitControls } from '@react-three/drei';
 import { Canvas } from '@react-three/fiber';
 import { Button } from '@/components/ui/button';
-import { appStore, type ViewPreset } from '@/state/store';
+import { cn } from '@/lib/utils';
+import { appStore, useApp, type ViewPreset } from '@/state/store';
 import { ModelObject } from './ModelObject';
 import { BedGrid, CameraRig, CursorTracker, StockBox, WcsTriad } from './SceneObjects';
 
@@ -14,8 +15,9 @@ const PRESETS: { preset: ViewPreset; label: string }[] = [
 ];
 
 export function Viewport() {
+  const pickMode = useApp((s) => s.pickMode);
   return (
-    <div className="relative h-full w-full" data-testid="viewport">
+    <div className={cn('relative h-full w-full', pickMode !== 'none' && 'cursor-crosshair')} data-testid="viewport">
       {/* up = +Z must be set before OrbitControls is created: the whole scene is Z-up like the machine. */}
       <Canvas camera={{ position: [150, -200, 150], up: [0, 0, 1], fov: 45, near: 0.1, far: 100000 }} dpr={[1, 2]}>
         <color attach="background" args={['#1c1d21']} />
@@ -40,6 +42,11 @@ export function Viewport() {
           </Button>
         ))}
       </div>
+      {pickMode !== 'none' && (
+        <div data-testid="pick-hint" className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-md bg-amber-500/90 px-3 py-1 text-xs font-medium text-black">
+          {pickMode === 'face' ? 'Click a face to put it on the bed' : 'Click an edge to line it up with X'} · Esc to cancel
+        </div>
+      )}
     </div>
   );
 }
