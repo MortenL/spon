@@ -1,3 +1,45 @@
+import { useEffect } from 'react';
+import { Toaster } from '@/components/ui/sonner';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import { DropZone } from '@/layout/DropZone';
+import { LeftPanel } from '@/layout/LeftPanel';
+import { StatusBar } from '@/layout/StatusBar';
+import { TopBar } from '@/layout/TopBar';
+import { UnitsDialog } from '@/layout/UnitsDialog';
+import { startAutosave } from '@/state/autosave';
+import { restoreAutosave } from '@/state/documents';
+import { appStore, useApp } from '@/state/store';
+import { Viewport } from '@/viewport/Viewport';
+
 export function App() {
-  return <div className="p-4 text-sm">Spon</div>;
+  useKeyboardShortcuts();
+  useDocumentTitle();
+  useEffect(() => {
+    void restoreAutosave();
+    return startAutosave(appStore);
+  }, []);
+  const hasModel = useApp((s) => s.job.model !== null);
+
+  return (
+    <div className="flex h-dvh flex-col bg-background text-foreground">
+      <TopBar />
+      <div className="flex min-h-0 flex-1">
+        <LeftPanel />
+        <main className="relative min-w-0 flex-1">
+          <DropZone>
+            <Viewport />
+            {!hasModel && (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
+                Drop an STL or DXF file here, or use Open
+              </div>
+            )}
+          </DropZone>
+        </main>
+      </div>
+      <StatusBar />
+      <UnitsDialog />
+      <Toaster position="bottom-center" richColors />
+    </div>
+  );
 }
