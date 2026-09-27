@@ -1,5 +1,37 @@
 import type { Mesh } from './mesh';
 
+/** Compacts mesh positions to remove unreferenced vertices and remaps indices. */
+function compactVertices(
+  positions: number[],
+  indices: number[],
+  normals: number[],
+): [Float32Array, Uint32Array, Float32Array] {
+  const vertexCount = positions.length / 3;
+  const used = new Uint8Array(vertexCount);
+  const remap = new Int32Array(vertexCount);
+
+  // Mark used vertices
+  for (const idx of indices) {
+    used[idx] = 1;
+  }
+
+  // Build remap array and compacted positions
+  const compactedPositions: number[] = [];
+  let newIndex = 0;
+  for (let i = 0; i < vertexCount; i++) {
+    if (used[i]) {
+      remap[i] = newIndex;
+      compactedPositions.push(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]);
+      newIndex++;
+    }
+  }
+
+  // Remap indices
+  const remappedIndices = indices.map((idx) => remap[idx]);
+
+  return [Float32Array.from(compactedPositions), Uint32Array.from(remappedIndices), Float32Array.from(normals)];
+}
+
 /**
  * Converts a triangle soup into an indexed mesh by snapping vertices to a grid of `tolerance` (a spatial hash).
  * Recomputes per-triangle normals from the winding and drops zero-area triangles.
@@ -42,8 +74,10 @@ export function weldTriangles(soup: Float32Array, tolerance = 1e-4): { mesh: Mes
     normals.push(nx / len, ny / len, nz / len);
   }
 
+  const [compactedPositions, compactedIndices, compactedNormals] = compactVertices(positions, indices, normals);
+
   return {
-    mesh: { positions: Float32Array.from(positions), indices: Uint32Array.from(indices), normals: Float32Array.from(normals) },
+    mesh: { positions: compactedPositions, indices: compactedIndices, normals: compactedNormals },
     degenerateRemoved,
   };
 }

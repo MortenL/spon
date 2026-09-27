@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { bboxOfPoints } from '../src/geometry/bbox';
 import { buildAdjacency } from '../src/geometry/adjacency';
 import { nearestTriangleEdge, triangleCount, triangleNormal } from '../src/geometry/mesh';
 import { v3near, vec3 } from '../src/geometry/vec3';
@@ -35,6 +36,13 @@ describe('weldTriangles', () => {
     const { mesh, degenerateRemoved } = weldTriangles(soup(tris));
     expect(triangleCount(mesh)).toBe(12);
     expect(degenerateRemoved).toBe(2);
+  });
+
+  it('removes unreferenced vertices when degenerate triangles are dropped', () => {
+    const { mesh, degenerateRemoved } = weldTriangles(soup([[0, 0, 0, 1, 0, 0, 0, 1, 0], [0, 0, 0, 1, 1, 1, 2, 2, 2]]));
+    expect(mesh.positions.length / 3).toBe(3);
+    expect(degenerateRemoved).toBe(1);
+    expect(Array.from(mesh.indices).every((i) => i < mesh.positions.length / 3)).toBe(true);
   });
 });
 
@@ -88,5 +96,15 @@ describe('importStl', () => {
   it('suggests inches only when the part is under 10 units on every axis', () => {
     expect(suggestStlUnits(importStl(binaryStl(boxTriangles(2, 1, 0.5))).mesh)).toBe('in');
     expect(suggestStlUnits(importStl(binaryStl(boxTriangles(20, 1, 0.5))).mesh)).toBe('mm');
+  });
+
+  it('excludes degenerate triangle vertices from mesh and diagnostics', () => {
+    const tris = [...boxTriangles(20, 10, 5), [500, 500, 500, 500, 500, 500, 600, 600, 600]];
+    const result = importStl(binaryStl(tris));
+    expect(result.diagnostics.vertices).toBe(8);
+    expect(result.diagnostics.degenerateRemoved).toBe(1);
+    expect(suggestStlUnits(result.mesh)).toBe('mm');
+    const box = bboxOfPoints(result.mesh.positions);
+    expect(box?.max).toEqual(vec3(20, 10, 5));
   });
 });
