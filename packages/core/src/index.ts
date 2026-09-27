@@ -32,3 +32,4 @@ export * from './gcode/arcs';
 export * from './gcode/diagnostics';
 export * from './gcode/cycles';
 export * from './gcode/interpreter';
+export * from './gcode/timing';
