@@ -13,9 +13,11 @@ describe('convert', () => {
     const geometry = meshToGeometry(mesh);
     expect(geometry.getAttribute('position').count).toBe(4);
     expect(Array.from(geometry.getIndex()!.array)).toEqual([0, 1, 2, 1, 3, 2]);
-    const subset = subsetGeometry(geometry, [1], mesh);
-    expect(Array.from(subset.getIndex()!.array)).toEqual([1, 3, 2]);
-    expect(subset.getAttribute('position')).toBe(geometry.getAttribute('position'));
+    const subset = subsetGeometry(mesh, [1]);
+    expect(subset.getIndex()).toBeNull();
+    expect(subset.getAttribute('position').count).toBe(3);
+    expect(Array.from(subset.getAttribute('position').array)).toEqual([1, 0, 0, 1, 1, 0, 0, 1, 0]);
+    expect(subset.getAttribute('position')).not.toBe(geometry.getAttribute('position'));
   });
 
   it('turns drawing layers into line-segment pairs', () => {

@@ -38,7 +38,7 @@ function ModelMesh({ geometry, importUnits }: { geometry: MeshGeometry; importUn
 
   const [region, setRegion] = useState<number[] | null>(null);
   const [edge, setEdge] = useState<[Vec3, Vec3] | null>(null);
-  const highlight = useMemo(() => (region ? subsetGeometry(buffer, region, geometry.mesh) : null), [region, buffer, geometry.mesh]);
+  const highlight = useMemo(() => (region ? subsetGeometry(geometry.mesh, region) : null), [region, geometry.mesh]);
   useEffect(() => () => highlight?.dispose(), [highlight]);
   useEffect(() => {
     setRegion(null);

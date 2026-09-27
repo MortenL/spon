@@ -11,15 +11,19 @@ export function meshToGeometry(mesh: Mesh): THREE.BufferGeometry {
   return geometry;
 }
 
-/** Geometry for a subset of triangles that shares the base geometry's position buffer. */
-export function subsetGeometry(base: THREE.BufferGeometry, tris: ArrayLike<number>, mesh: Mesh): THREE.BufferGeometry {
-  const index = new Uint32Array(tris.length * 3);
+/** Standalone geometry for a subset of triangles (owns its buffers, safe to dispose). */
+export function subsetGeometry(mesh: Mesh, tris: ArrayLike<number>): THREE.BufferGeometry {
+  const positions = new Float32Array(tris.length * 9);
   for (let i = 0; i < tris.length; i++) {
-    for (let k = 0; k < 3; k++) index[i * 3 + k] = mesh.indices[tris[i] * 3 + k];
+    for (let k = 0; k < 3; k++) {
+      const v = mesh.indices[tris[i] * 3 + k];
+      positions[i * 9 + k * 3] = mesh.positions[v * 3];
+      positions[i * 9 + k * 3 + 1] = mesh.positions[v * 3 + 1];
+      positions[i * 9 + k * 3 + 2] = mesh.positions[v * 3 + 2];
+    }
   }
   const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', base.getAttribute('position'));
-  geometry.setIndex(new THREE.BufferAttribute(index, 1));
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   return geometry;
 }
 
