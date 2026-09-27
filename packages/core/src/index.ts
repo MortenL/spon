@@ -27,3 +27,6 @@ export * from './job/programs';
 export * from './gcode/types';
 export * from './gcode/decode';
 export * from './gcode/lexer';
+export * from './gcode/motion';
+export * from './gcode/arcs';
+export * from './gcode/diagnostics';
