@@ -14,3 +14,7 @@ export * from './import/dxf/handlers';
 export * from './import/dxf/dxf';
 export * from './import/dxf/curves';
 export * from './import/importFile';
+export * from './job/types';
+export * from './job/defaults';
+export * from './job/orientation';
+export * from './job/update';
