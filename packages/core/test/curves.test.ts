@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { segmentStart, tessellatePath, type Vec2 } from '../src/geometry/path2d';
 import { ellipseToPath, evalBSpline, flattenCurve, splineToPath } from '../src/import/dxf/curves';
 import { parseDxf } from '../src/import/dxf/dxf';
-import { dxfText, ellipse, spline, splineFit } from './fixtures/dxfBuilder';
+import { dxfText, ellipse, insert, spline, splineFit } from './fixtures/dxfBuilder';
 
 const bezier2 = (p0: Vec2, p1: Vec2, p2: Vec2, t: number): Vec2 => ({
   x: (1 - t) ** 2 * p0.x + 2 * (1 - t) * t * p1.x + t * t * p2.x,
@@ -102,5 +102,28 @@ describe('parseDxf: curves', () => {
     expect(pts.length).toBeGreaterThan(8);
     for (const p of pts) expect(Math.hypot(p.x, p.y)).toBeCloseTo(10, 9);
     expect(r.warnings).toEqual([]);
+  });
+
+  it('keeps the world-space chord tolerance for an ELLIPSE inside a scaled block', () => {
+    const r = parseDxf(dxfText({
+      blocks: [{ name: 'EB', base: [0, 0], entities: [ellipse('0', 0, 0, 10, 0, 0.5, 0, 2 * Math.PI)] }],
+      entities: [insert('BIG', 'EB', 0, 0, { sx: 10, sy: 10 })],
+    }));
+    const pts = tessellatePath(r.drawing.layers[0].paths[0]);
+    const direct = tessellatePath(ellipseToPath({ x: 0, y: 0 }, { x: 100, y: 0 }, 0.5, 0, 2 * Math.PI, 0.01));
+    expect(pts.length).toBeGreaterThanOrEqual(direct.length * 0.9);
+  });
+
+  it('keeps the world-space chord tolerance for a SPLINE inside a scaled block', () => {
+    const r = parseDxf(dxfText({
+      blocks: [{
+        name: 'SB',
+        base: [0, 0],
+        entities: [spline('0', 2, [0, 0, 0, 1, 1, 1], [[10, 0], [10, 10], [0, 10]], [1, Math.SQRT1_2, 1])],
+      }],
+      entities: [insert('BIG', 'SB', 0, 0, { sx: 10, sy: 10 })],
+    }));
+    const pts = tessellatePath(r.drawing.layers[0].paths[0]);
+    expect(pts.length).toBeGreaterThan(8);
   });
 });

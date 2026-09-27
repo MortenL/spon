@@ -5,7 +5,7 @@ import type {
 import type { Path2D } from '../../geometry/path2d';
 import type { LengthUnit } from '../../units/units';
 import {
-  AFFINE_IDENTITY, type Affine2D, affineMultiply, affineRotate, affineScale, affineTranslate,
+  AFFINE_IDENTITY, type Affine2D, affineMaxStretch, affineMultiply, affineRotate, affineScale, affineTranslate,
 } from './affine2d';
 import { ellipseToPath, splineToPath } from './curves';
 import { arcToPath, circleToPath, lineToPath, polylineToPath, transformPath } from './entities';
@@ -208,7 +208,8 @@ function processEntity(ctx: Context, entity: IEntity, m: Affine2D, inheritedLaye
     case 'ELLIPSE': {
       const e = entity as IEllipseEntity;
       if (hasZ(e.center.z)) ctx.nonZeroZ++;
-      emit(ctx, layer, ellipseToPath(e.center, e.majorAxisEndPoint, e.axisRatio, e.startAngle ?? 0, e.endAngle ?? 2 * Math.PI, ctx.chordTol), m);
+      const tol = ctx.chordTol / affineMaxStretch(m);
+      emit(ctx, layer, ellipseToPath(e.center, e.majorAxisEndPoint, e.axisRatio, e.startAngle ?? 0, e.endAngle ?? 2 * Math.PI, tol), m);
       return;
     }
     case 'SPLINE': {
@@ -219,7 +220,8 @@ function processEntity(ctx: Context, entity: IEntity, m: Affine2D, inheritedLaye
         ctx.notes.add('Some SPLINE weights did not match their control points and were ignored');
         weights = null;
       }
-      const { path, note } = splineToPath(e.degree, e.knots, e.controlPoints, e.fitPoints, ctx.chordTol, weights);
+      const tol = ctx.chordTol / affineMaxStretch(m);
+      const { path, note } = splineToPath(e.degree, e.knots, e.controlPoints, e.fitPoints, tol, weights);
       if (note) ctx.notes.add(note);
       if (path) emit(ctx, layer, path, m);
       return;
