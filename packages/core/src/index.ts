@@ -7,3 +7,8 @@ export * from './geometry/weld';
 export * from './geometry/adjacency';
 export * from './geometry/planarRegion';
 export * from './import/stl';
+export * from './geometry/path2d';
+export * from './import/dxf/affine2d';
+export * from './import/dxf/entities';
+export * from './import/dxf/handlers';
+export * from './import/dxf/dxf';
