@@ -1,11 +1,11 @@
-# CAM Tool — Milestone 1: Foundation, Import & Job Setup
+# Spon — Milestone 1: Foundation, Import & Job Setup
 
 **Date:** 2026-09-27
 **Status:** Draft for review
 
 ## 1. Context
 
-A personal, browser-based CAM tool covering, over time:
+**Spon** (Norwegian for *swarf*, the chips a cut produces) is a personal, browser-based CAM tool covering, over time:
 
 1. **Core** — geometry, units, job model, file format, (later) tool library and post-processors.
 2. **G-code toolkit** — parse, visualise, simulate, analyse, translate between dialects, optimise.
@@ -28,19 +28,19 @@ Toolpath generation, tool library, post-processors, G-code parsing/viewing, SVG 
 
 ## 2. Architecture
 
-pnpm monorepo, TypeScript `strict` throughout.
+pnpm monorepo, TypeScript `strict` throughout. Workspace packages are `@sponcam/core` and `@sponcam/web` (the `@spon` npm scope is taken).
 
 ```
 CAM-tool/
 ├─ packages/
-│  ├─ core/            # framework-free; no DOM, React or three.js; runs in main thread or workers
+│  ├─ core/            # @sponcam/core — framework-free; no DOM, React or three.js; runs in main thread or workers
 │  │  ├─ units/        # mm canonical; format/parse for display (mm | in)
 │  │  ├─ geometry/     # Vec3, Quat, Mat4, BBox, Mesh (indexed Float32Array/Uint32Array),
 │  │  │                #   Path2D (line + arc segments), adjacency, planarRegion
 │  │  ├─ import/       # stl.ts, dxf.ts → ImportResult
 │  │  ├─ job/          # types.ts, update functions, derive.ts
 │  │  └─ io/           # .camjob read/write, schema migrations
-│  └─ web/             # Vite + React app
+│  └─ web/             # @sponcam/web — Vite + React app
 │     ├─ workers/      # import.worker.ts (Comlink) wrapping core/import
 │     ├─ state/        # Zustand store, undo/redo, IndexedDB autosave
 │     ├─ viewport/     # react-three-fiber scene
