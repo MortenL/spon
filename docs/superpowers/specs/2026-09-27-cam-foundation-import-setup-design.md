@@ -270,7 +270,15 @@ models/<blobId>.stl|.dxf  # original imported file bytes, unmodified
 
 Fixtures live in `packages/core/test/fixtures/`.
 
-## 9. Acceptance criteria
+## 9. Notes for future milestones
+
+Reviewed prior art: [deependdesigns/swarf-cam](https://github.com/deependdesigns/swarf-cam) (MIT, reviewed 2026-09-27). It is not a fit as a base: it takes OpenSCAD input only, has no STL/DXF import, no 3D CAM, no arc support and hardcoded hobby-only posts. Ideas worth borrowing, with attribution if code is reused:
+
+- **G-code toolkit:** three-way sync between the playback timeline, the G-code line view and the operations list. Scrubbing highlights the current line; clicking a line or an operation seeks the timeline.
+- **G-code toolkit:** heightmap-based stock simulation driven by the parsed program, with timeline scrubbing. Unlike swarf-cam, Spon's must handle G2/G3 arcs and take tool geometry from the job rather than from G-code comments.
+- **2D/2.5D CAM:** optional automatic suggestion of operations, found by slicing the oriented mesh at each upward-facing horizontal face level to detect pockets, holes and slots (including counterbores via per-level detection). This would be an assistive feature on top of explicit operations, never a replacement for them.
+
+## 10. Acceptance criteria
 
 - The user can drop an STL or DXF into the browser and see it in a Z-up 3D viewport, with orbit, pan, zoom, fit and view-cube.
 - Units are confirmed on import where they can't be determined, and the display switches between mm and inches without changing stored values.
