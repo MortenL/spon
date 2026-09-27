@@ -9,6 +9,7 @@ import { TopBar } from '@/layout/TopBar';
 import { UnitsDialog } from '@/layout/UnitsDialog';
 import { startAutosave } from '@/state/autosave';
 import { restoreAutosave } from '@/state/documents';
+import { startProgramAnalysis } from '@/state/programs';
 import { appStore, useApp } from '@/state/store';
 import { Viewport } from '@/viewport/Viewport';
 
@@ -17,9 +18,14 @@ export function App() {
   useDocumentTitle();
   useEffect(() => {
     void restoreAutosave();
-    return startAutosave(appStore);
+    const stopAutosave = startAutosave(appStore);
+    const stopAnalysis = startProgramAnalysis(appStore);
+    return () => {
+      stopAutosave();
+      stopAnalysis();
+    };
   }, []);
-  const hasModel = useApp((s) => s.job.model !== null);
+  const isEmpty = useApp((s) => s.job.model === null && s.job.programs.length === 0);
 
   return (
     <div className="flex h-dvh flex-col bg-background text-foreground">
@@ -29,9 +35,9 @@ export function App() {
         <main className="relative min-w-0 flex-1">
           <DropZone>
             <Viewport />
-            {!hasModel && (
+            {isEmpty && (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
-                Drop an STL or DXF file here, or use Open
+                Drop an STL, DXF or G-code file here, or use Open
               </div>
             )}
           </DropZone>
