@@ -107,7 +107,9 @@ async function openSponBytes(bytes: Uint8Array, handle: FileSystemFileHandle | n
   let job: Job;
   let modelBytes: Uint8Array | null;
   try {
-    ({ job, modelBytes } = readSpon(bytes));
+    const read = readSpon(bytes);
+    job = read.job;
+    modelBytes = job.model ? read.blobs[job.model.blobId] ?? null : null;
   } catch (err) {
     toast.error(message(err));
     return;
@@ -134,7 +136,8 @@ export async function saveDocument(saveAs = false): Promise<boolean> {
   const { job, modelBytes, fileHandle } = state();
   const fileName = `${safeFileName(job.name)}${SPON_EXTENSION}`;
   try {
-    const bytes = writeSpon(job, modelBytes);
+    const blobs = job.model && modelBytes ? { [job.model.blobId]: modelBytes } : {};
+    const bytes = writeSpon(job, blobs);
     if (supportsFsAccess()) {
       const handle = (!saveAs && fileHandle) || (await pickSaveHandle(fileName));
       if (!handle) return false;

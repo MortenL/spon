@@ -1,45 +1,65 @@
-import { unzipSync, zipSync, strToU8 } from 'fflate';
+import { strToU8, unzipSync, zipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
+import v1Job from './fixtures/job-v1.json';
 import { SponFileError } from '../src/io/errors';
 import { migrateJob } from '../src/io/migrations';
-import { modelFilePath, readSpon, writeSpon } from '../src/io/spon';
+import { jobBlobIds, modelFilePath, programFilePath, readSpon, writeSpon } from '../src/io/spon';
 import { createJob } from '../src/job/defaults';
+import { addProgram } from '../src/job/programs';
 import { setModel, setZSpin } from '../src/job/update';
 
 const MODEL = new Uint8Array([1, 2, 3, 4, 5]);
+const P1 = new TextEncoder().encode('G0 X0\n');
+const P2 = new TextEncoder().encode('G1 X1 F100\n');
+
+function fullJob() {
+  let job = setZSpin(setModel(createJob('Bracket'), { sourceName: 'b.stl', blobId: 'abc', kind: 'mesh', importUnits: 'in' }), 12.5);
+  job = addProgram(job, { name: 'rough.nc', blobId: 'p1' });
+  job = addProgram(job, { name: 'finish.nc', blobId: 'p2' });
+  return job;
+}
 
 describe('.spon files', () => {
-  it('round-trips a job with its model bytes', () => {
-    const job = setZSpin(setModel(createJob('Bracket'), { sourceName: 'b.stl', blobId: 'abc', kind: 'mesh', importUnits: 'in' }), 12.5);
-    const bytes = writeSpon(job, MODEL);
-    expect(Object.keys(unzipSync(bytes)).sort()).toEqual(['job.json', 'models/abc.stl']);
+  it('round-trips a job with a model and several programs', () => {
+    const job = fullJob();
+    const bytes = writeSpon(job, { abc: MODEL, p1: P1, p2: P2, unused: new Uint8Array([9]) });
+    expect(Object.keys(unzipSync(bytes)).sort()).toEqual(['job.json', 'models/abc.stl', 'programs/p1.nc', 'programs/p2.nc']);
     const read = readSpon(bytes);
     expect(read.job).toEqual(job);
-    expect(read.modelBytes).toEqual(MODEL);
+    expect(read.blobs).toEqual({ abc: MODEL, p1: P1, p2: P2 });
   });
 
-  it('round-trips a job without a model', () => {
+  it('round-trips a job without model or programs', () => {
     const job = createJob();
-    expect(readSpon(writeSpon(job, null))).toEqual({ job, modelBytes: null });
+    expect(readSpon(writeSpon(job, {}))).toEqual({ job, blobs: {} });
   });
 
-  it('names model files by blob id and kind', () => {
-    const job = setModel(createJob(), { sourceName: 'p.dxf', blobId: 'd1', kind: 'drawing', importUnits: 'mm' });
-    expect(modelFilePath(job.model!)).toBe('models/d1.dxf');
+  it('names blob files and lists referenced blob ids', () => {
+    const job = fullJob();
+    expect(modelFilePath(job.model!)).toBe('models/abc.stl');
+    expect(programFilePath(job.programs[0])).toBe('programs/p1.nc');
+    expect(jobBlobIds(job)).toEqual(['abc', 'p1', 'p2']);
+    expect(jobBlobIds(createJob())).toEqual([]);
   });
 
-  it('refuses a model job without model bytes', () => {
-    const job = setModel(createJob(), { sourceName: 'b.stl', blobId: 'abc', kind: 'mesh', importUnits: 'mm' });
-    expect(() => writeSpon(job, null)).toThrow(SponFileError);
+  it('refuses to write a job whose blobs are missing', () => {
+    expect(() => writeSpon(fullJob(), { abc: MODEL, p1: P1 })).toThrow('Missing data for programs/p2.nc');
+  });
+
+  it('opens Milestone 1 files and migrates them', () => {
+    const bytes = zipSync({ 'job.json': strToU8(JSON.stringify(v1Job)), 'models/b1.stl': MODEL });
+    const read = readSpon(bytes);
+    expect(read.job.schemaVersion).toBe(2);
+    expect(read.blobs).toEqual({ b1: MODEL });
   });
 
   it('rejects broken files with clear messages', () => {
     expect(() => readSpon(new Uint8Array([1, 2, 3]))).toThrow('Not a Spon job file (invalid zip)');
     expect(() => readSpon(zipSync({ 'other.txt': strToU8('x') }))).toThrow('Not a Spon job file (job.json missing)');
     expect(() => readSpon(zipSync({ 'job.json': strToU8('{oops') }))).toThrow('job.json is not valid JSON');
-    const job = setModel(createJob(), { sourceName: 'b.stl', blobId: 'abc', kind: 'mesh', importUnits: 'mm' });
-    const noModel = zipSync({ 'job.json': strToU8(JSON.stringify(job)) });
-    expect(() => readSpon(noModel)).toThrow('models/abc.stl is missing');
+    const job = fullJob();
+    const missing = zipSync({ 'job.json': strToU8(JSON.stringify(job)), 'models/abc.stl': MODEL, 'programs/p1.nc': P1 });
+    expect(() => readSpon(missing)).toThrow('programs/p2.nc is missing from the job file');
   });
 });
 
@@ -51,7 +71,7 @@ describe('migrateJob', () => {
   it('rejects data without a valid schemaVersion or job shape', () => {
     expect(() => migrateJob(null)).toThrow(SponFileError);
     expect(() => migrateJob({ name: 'x' })).toThrow(/schemaVersion/);
-    expect(() => migrateJob({ schemaVersion: 1, name: 'x' })).toThrow(/not a valid job/);
+    expect(() => migrateJob({ schemaVersion: 2, name: 'x' })).toThrow(/not a valid job/);
   });
 
   it('runs migrations in order up to the current version', () => {
@@ -64,11 +84,7 @@ describe('migrateJob', () => {
         return { ...others, name: title };
       },
     };
-    const v1Result = migrateJob(v0, migrations, 1);
-    // The test migrates from v0 to v1, so the result should have schemaVersion: 1
-    expect(v1Result.schemaVersion).toBe(1);
-    expect(v1Result.name).toBe('Migrated');
-    expect(v1Result.id).toBe(current.id);
+    expect(migrateJob(v0, migrations, 1)).toEqual({ ...current, schemaVersion: 1 });
   });
 
   it('fails when a migration step is missing', () => {

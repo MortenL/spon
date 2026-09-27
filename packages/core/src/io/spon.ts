@@ -1,5 +1,5 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
-import type { Job, ModelRef } from '../job/types';
+import type { Job, ModelRef, ProgramRef } from '../job/types';
 import { SponFileError } from './errors';
 import { migrateJob } from './migrations';
 
@@ -10,17 +10,37 @@ export function modelFilePath(model: ModelRef): string {
   return `models/${model.blobId}.${model.kind === 'mesh' ? 'stl' : 'dxf'}`;
 }
 
-/** Zip containing job.json and, when the job has a model, the original model file bytes. */
-export function writeSpon(job: Job, modelBytes: Uint8Array | null): Uint8Array {
+/** Blob bytes keyed by blobId. */
+export type BlobMap = Record<string, Uint8Array>;
+
+export function programFilePath(program: ProgramRef): string {
+  return `programs/${program.blobId}.nc`;
+}
+
+/** Every blob the job references: the model (if any) first, then programs in list order. */
+export function jobBlobIds(job: Job): string[] {
+  return [...(job.model ? [job.model.blobId] : []), ...job.programs.map((p) => p.blobId)];
+}
+
+function blobPaths(job: Job): [blobId: string, path: string][] {
+  return [
+    ...(job.model ? [[job.model.blobId, modelFilePath(job.model)] as [string, string]] : []),
+    ...job.programs.map((p): [string, string] => [p.blobId, programFilePath(p)]),
+  ];
+}
+
+/** Zip with job.json plus the original bytes of the model and every program. Blobs the job doesn't reference are ignored. */
+export function writeSpon(job: Job, blobs: BlobMap): Uint8Array {
   const files: Record<string, Uint8Array> = { 'job.json': strToU8(JSON.stringify(job, null, 2)) };
-  if (job.model) {
-    if (!modelBytes) throw new SponFileError('The job has a model but no model data to save');
-    files[modelFilePath(job.model)] = modelBytes;
+  for (const [blobId, path] of blobPaths(job)) {
+    const bytes = blobs[blobId];
+    if (!bytes) throw new SponFileError(`Missing data for ${path}`);
+    files[path] = bytes;
   }
   return zipSync(files, { level: 6 });
 }
 
-export function readSpon(bytes: Uint8Array): { job: Job; modelBytes: Uint8Array | null } {
+export function readSpon(bytes: Uint8Array): { job: Job; blobs: BlobMap } {
   let files: Record<string, Uint8Array>;
   try {
     files = unzipSync(bytes);
@@ -36,9 +56,11 @@ export function readSpon(bytes: Uint8Array): { job: Job; modelBytes: Uint8Array 
     throw new SponFileError('job.json is not valid JSON');
   }
   const job = migrateJob(raw);
-  if (!job.model) return { job, modelBytes: null };
-  const path = modelFilePath(job.model);
-  const modelBytes = files[path];
-  if (!modelBytes) throw new SponFileError(`${path} is missing from the job file`);
-  return { job, modelBytes };
+  const blobs: BlobMap = {};
+  for (const [blobId, path] of blobPaths(job)) {
+    const data = files[path];
+    if (!data) throw new SponFileError(`${path} is missing from the job file`);
+    blobs[blobId] = data;
+  }
+  return { job, blobs };
 }
