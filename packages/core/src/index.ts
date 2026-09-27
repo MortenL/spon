@@ -30,3 +30,5 @@ export * from './gcode/lexer';
 export * from './gcode/motion';
 export * from './gcode/arcs';
 export * from './gcode/diagnostics';
+export * from './gcode/cycles';
+export * from './gcode/interpreter';
