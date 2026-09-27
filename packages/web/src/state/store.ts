@@ -1,5 +1,5 @@
 import {
-  type Adjacency, createJob, type Drawing, type Job, type LengthUnit, type Mesh, type MeshDiagnostics, type NewModel, setModel,
+  type Adjacency, createJob, type Drawing, type Job, type LengthUnit, type Mesh, type MeshDiagnostics, type NewModel, type ParsedProgram, setModel,
   type Vec3,
 } from '@sponcam/core';
 import { useStore } from 'zustand';
@@ -22,6 +22,17 @@ export interface PendingImport {
   suggestedUnits: LengthUnit;
 }
 
+export interface ProgramData {
+  status: 'parsing' | 'ready' | 'failed';
+  /** Decoded text, for the line list. */
+  text: string;
+  parsed: ParsedProgram | null;
+  error: string | null;
+}
+
+export type Visibility = 'rapids' | 'model' | 'stock';
+export type DockTab = 'gcode' | 'analysis';
+
 export interface LoadedDocument {
   job: Job;
   geometry: ModelGeometry | null;
@@ -29,6 +40,7 @@ export interface LoadedDocument {
   warnings: string[];
   dirty: boolean;
   fileHandle: FileSystemFileHandle | null;
+  programBytes: Record<string, Uint8Array>;
 }
 
 export interface AppState {
@@ -48,6 +60,18 @@ export interface AppState {
   viewRequest: { preset: ViewPreset; nonce: number };
   pendingImport: PendingImport | null;
   busy: string | null;
+  /** Original program bytes by blobId (saved into .spon files). */
+  programBytes: Record<string, Uint8Array>;
+  /** Parsed program data by blobId (view state, not undoable). */
+  programData: Record<string, ProgramData>;
+  activeProgramId: string | null;
+  selectedLine: number | null;
+  /** Global timeline position, seconds. */
+  playhead: number;
+  playing: boolean;
+  speed: number;
+  visibility: Record<Visibility, boolean>;
+  dockTab: DockTab;
 
   commit(update: (job: Job) => Job): void;
   undo(): void;
@@ -62,6 +86,15 @@ export interface AppState {
   requestView(preset: ViewPreset): void;
   setPendingImport(pending: PendingImport | null): void;
   setBusy(message: string | null): void;
+  setProgramBytes(blobId: string, bytes: Uint8Array): void;
+  setProgramData(blobId: string, data: ProgramData): void;
+  setActiveProgram(id: string | null): void;
+  setSelectedLine(line: number | null): void;
+  setPlayhead(seconds: number): void;
+  setPlaying(playing: boolean): void;
+  setSpeed(speed: number): void;
+  toggleVisibility(v: Visibility): void;
+  setDockTab(tab: DockTab): void;
 }
 
 export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState> {
@@ -81,6 +114,15 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
     viewRequest: { preset: 'fit', nonce: 0 },
     pendingImport: null,
     busy: null,
+    programBytes: {},
+    programData: {},
+    activeProgramId: null,
+    selectedLine: null,
+    playhead: 0,
+    playing: false,
+    speed: 1,
+    visibility: { rapids: true, model: true, stock: true },
+    dockTab: 'gcode',
 
     commit(update) {
       const { job, past } = get();
@@ -101,7 +143,10 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
       set({ job: next, past: [...past, job].slice(-UNDO_LIMIT), future: rest, dirty: true });
     },
     loadDocument(doc) {
-      set({ ...doc, past: [], future: [], pickMode: 'none', hiddenLayers: [], pendingImport: null });
+      set({
+        ...doc, past: [], future: [], pickMode: 'none', hiddenLayers: [], pendingImport: null,
+        programData: {}, activeProgramId: doc.job.programs[0]?.id ?? null, selectedLine: null, playhead: 0, playing: false,
+      });
     },
     applyImportedModel(model, geometry, modelBytes, warnings) {
       // A new model starts a new undo history, so undo never refers to a discarded model blob.
@@ -131,6 +176,34 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
     },
     setBusy(busy) {
       set({ busy });
+    },
+    setProgramBytes(blobId, bytes) {
+      set({ programBytes: { ...get().programBytes, [blobId]: bytes } });
+    },
+    setProgramData(blobId, data) {
+      set({ programData: { ...get().programData, [blobId]: data } });
+    },
+    setActiveProgram(activeProgramId) {
+      set({ activeProgramId, selectedLine: null });
+    },
+    setSelectedLine(selectedLine) {
+      set({ selectedLine });
+    },
+    setPlayhead(playhead) {
+      set({ playhead: Math.max(0, playhead) });
+    },
+    setPlaying(playing) {
+      set({ playing });
+    },
+    setSpeed(speed) {
+      set({ speed });
+    },
+    toggleVisibility(v) {
+      const visibility = get().visibility;
+      set({ visibility: { ...visibility, [v]: !visibility[v] } });
+    },
+    setDockTab(dockTab) {
+      set({ dockTab });
     },
   }));
 }

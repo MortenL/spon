@@ -1,4 +1,4 @@
-import type { ImportResult } from '@sponcam/core';
+import type { AnalysisContext, AnalysisResult, ImportResult, MotionTable, ParsedProgram, ProgramContext } from '@sponcam/core';
 import * as Comlink from 'comlink';
 import type { ImportWorkerApi } from './import.worker';
 import { withTimeout } from './timeout';
@@ -17,17 +17,32 @@ function worker(): { worker: Worker; api: Comlink.Remote<ImportWorkerApi> } {
   return { worker: instance, api: remote };
 }
 
-/** Parses a model file off the main thread. Sends a copy of `bytes`, so the caller can keep using them. */
-export async function importInWorker(fileName: string, bytes: Uint8Array): Promise<ImportResult> {
-  const copy = bytes.slice();
+/** Runs one worker call with the stuck-worker timeout; on timeout the worker is terminated and replaced. */
+function run<T>(call: (api: Comlink.Remote<ImportWorkerApi>) => Promise<T>, message: string): Promise<T> {
   const { worker: current, api } = worker();
   const terminate = () => {
     current.terminate();
     if (instance === current) {
-      // the next import creates a fresh worker
       instance = null;
       remote = null;
     }
   };
-  return withTimeout<ImportResult>(api.import(fileName, Comlink.transfer(copy, [copy.buffer])), IMPORT_TIMEOUT_MS, terminate, 'Import timed out');
+  return withTimeout<T>(call(api), IMPORT_TIMEOUT_MS, terminate, message);
+}
+
+/** Parses a model file off the main thread. Sends a copy of `bytes`, so the caller can keep using them. */
+export function importInWorker(fileName: string, bytes: Uint8Array): Promise<ImportResult> {
+  const copy = bytes.slice();
+  return run<ImportResult>((api) => api.import(fileName, Comlink.transfer(copy, [copy.buffer])), 'Import timed out');
+}
+
+/** Parses and analyses a G-code program off the main thread (bytes are copied). */
+export function parseProgramInWorker(bytes: Uint8Array, ctx: ProgramContext): Promise<ParsedProgram> {
+  const copy = bytes.slice();
+  return run((api) => api.parseProgram(Comlink.transfer(copy, [copy.buffer]), ctx), 'Parsing the program timed out');
+}
+
+/** Re-times and re-analyses a program; the table is copied to the worker, only the new times come back. */
+export function analyzeInWorker(table: MotionTable, lineFlags: Uint8Array, ctx: AnalysisContext): Promise<{ analysis: AnalysisResult; t: Float64Array }> {
+  return run((api) => api.analyze(table, lineFlags, ctx), 'Analysing the program timed out');
 }

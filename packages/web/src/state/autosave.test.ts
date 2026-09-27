@@ -20,10 +20,13 @@ describe('autosave', () => {
   it('stores model blobs and removes orphans', async () => {
     await putBlob('a', new Uint8Array([1]));
     await putBlob('b', new Uint8Array([2]));
-    await removeOrphanBlobs('b');
+    await removeOrphanBlobs(['b']);
     expect(await getBlob('a')).toBeUndefined();
     expect(await getBlob('b')).toEqual(new Uint8Array([2]));
-    await removeOrphanBlobs(null);
+    await putBlob('c', new Uint8Array([3]));
+    await removeOrphanBlobs(['b', 'c']);
+    expect(await getBlob('c')).toEqual(new Uint8Array([3]));
+    await removeOrphanBlobs([]);
     expect(await getBlob('b')).toBeUndefined();
   });
 

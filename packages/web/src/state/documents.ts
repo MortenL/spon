@@ -26,7 +26,7 @@ async function geometryForModel(model: ModelRef, bytes: Uint8Array): Promise<{ g
 async function persistModelBlob(keepId: string | null, bytes: Uint8Array | null): Promise<void> {
   try {
     if (keepId && bytes) await putBlob(keepId, bytes);
-    await removeOrphanBlobs(keepId);
+    await removeOrphanBlobs(keepId ? [keepId] : []);
   } catch (err) {
     console.error('Could not store the model for autosave', err);
   }
@@ -38,7 +38,7 @@ function confirmDiscard(): boolean {
 
 export async function newDocument(): Promise<void> {
   if (!confirmDiscard()) return;
-  state().loadDocument({ job: createJob(), geometry: null, modelBytes: null, warnings: [], dirty: false, fileHandle: null });
+  state().loadDocument({ job: createJob(), geometry: null, modelBytes: null, warnings: [], dirty: false, fileHandle: null, programBytes: {} });
   await persistModelBlob(null, null);
 }
 
@@ -127,7 +127,7 @@ async function openSponBytes(bytes: Uint8Array, handle: FileSystemFileHandle | n
       state().setBusy(null);
     }
   }
-  state().loadDocument({ job, geometry, modelBytes, warnings, dirty: false, fileHandle: handle });
+  state().loadDocument({ job, geometry, modelBytes, warnings, dirty: false, fileHandle: handle, programBytes: {} });
   state().requestView('fit');
   await persistModelBlob(job.model?.blobId ?? null, modelBytes);
 }
@@ -216,6 +216,6 @@ export async function restoreAutosave(): Promise<void> {
   }
   // the user already opened, imported or started something while the restore was pending: keep their work
   if (state().job !== jobAtStart) return;
-  state().loadDocument({ job, geometry, modelBytes, warnings, dirty: saved.dirty, fileHandle: null });
+  state().loadDocument({ job, geometry, modelBytes, warnings, dirty: saved.dirty, fileHandle: null, programBytes: {} });
   state().requestView('fit');
 }

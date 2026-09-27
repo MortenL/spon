@@ -44,7 +44,7 @@ describe('app store', () => {
   it('loads a document with fresh history', () => {
     const store = createAppStore(createJob('A'));
     store.getState().commit(rename('B'));
-    store.getState().loadDocument({ job: createJob('Loaded'), geometry: drawing, modelBytes: null, warnings: ['w'], dirty: false, fileHandle: null });
+    store.getState().loadDocument({ job: createJob('Loaded'), geometry: drawing, modelBytes: null, warnings: ['w'], dirty: false, fileHandle: null, programBytes: {} });
     const s = store.getState();
     expect(s.job.name).toBe('Loaded');
     expect(s.past).toEqual([]);
@@ -77,5 +77,36 @@ describe('app store', () => {
     s().requestView('top');
     s().requestView('top');
     expect(s().viewRequest).toEqual({ preset: 'top', nonce: 2 });
+  });
+});
+
+describe('program and playback state', () => {
+  it('stores program bytes and data, and resets them when a document loads', () => {
+    const store = createAppStore(createJob('A'));
+    const s = () => store.getState();
+    s().setProgramBytes('p1', new Uint8Array([1]));
+    s().setProgramData('p1', { status: 'parsing', text: 'G0', parsed: null, error: null });
+    s().setActiveProgram('id1');
+    s().setPlayhead(12);
+    s().setPlaying(true);
+    s().setSelectedLine(4);
+    expect(s().programData.p1.status).toBe('parsing');
+    s().loadDocument({ job: createJob('B'), geometry: null, modelBytes: null, warnings: [], dirty: false, fileHandle: null, programBytes: { p2: new Uint8Array([2]) } });
+    expect(s().programBytes).toEqual({ p2: new Uint8Array([2]) });
+    expect(s().programData).toEqual({});
+    expect([s().activeProgramId, s().playhead, s().playing, s().selectedLine]).toEqual([null, 0, false, null]);
+  });
+
+  it('toggles visibility, speed and dock tab', () => {
+    const store = createAppStore(createJob('A'));
+    const s = () => store.getState();
+    expect(s().visibility).toEqual({ rapids: true, model: true, stock: true });
+    s().toggleVisibility('rapids');
+    expect(s().visibility.rapids).toBe(false);
+    s().setSpeed(10);
+    expect(s().speed).toBe(10);
+    expect(s().dockTab).toBe('gcode');
+    s().setDockTab('analysis');
+    expect(s().dockTab).toBe('analysis');
   });
 });

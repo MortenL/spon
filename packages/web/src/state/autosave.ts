@@ -37,11 +37,12 @@ export async function getBlob(id: string): Promise<Uint8Array | undefined> {
   return (await db()).get('blobs', id);
 }
 
-/** Deletes every stored model blob except `keepId`. */
-export async function removeOrphanBlobs(keepId: string | null): Promise<void> {
+/** Deletes every stored blob whose id is not in `keepIds`. */
+export async function removeOrphanBlobs(keepIds: readonly string[]): Promise<void> {
+  const keep = new Set(keepIds);
   const tx = (await db()).transaction('blobs', 'readwrite');
   for (const key of await tx.store.getAllKeys()) {
-    if (key !== keepId) await tx.store.delete(key);
+    if (!keep.has(key)) await tx.store.delete(key);
   }
   await tx.done;
 }
