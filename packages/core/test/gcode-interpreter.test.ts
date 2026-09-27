@@ -106,6 +106,22 @@ describe('interpretProgram: motion and modal state', () => {
     expect(r.table.flags[4] & RowFlag.CycleInternal).toBeTruthy();
   });
 
+  it('updates modal cycle parameters on a line without X/Y, without emitting a row', () => {
+    const text = `${HEADER}G0 X0 Y0 Z5\nG81 X10 Y0 Z-2 R1 F100\nR2 Z-3\nX20\nG80\n`;
+    const r = run(text);
+    // Line indices: 0,1 header; 2 G0; 3 G81 (first hole); 4 "R2 Z-3"; 5 X20 (second hole); 6 G80.
+    expect(r.firstMoveOfLine[4]).toBe(-1);
+    expect(kinds(r)).not.toContain(MoveKind.ArcCW);
+    expect(kinds(r)).not.toContain(MoveKind.ArcCCW);
+    const secondHole = Array.from(r.table.line)
+      .map((l, idx) => (l === 5 ? idx : -1))
+      .filter((idx) => idx >= 0);
+    expect(secondHole).toHaveLength(4);
+    const [, rapidToR, feedToBottom] = secondHole;
+    expect(ends(r)[rapidToR][2]).toBe(2);
+    expect(ends(r)[feedToBottom][2]).toBe(-3);
+  });
+
   it('refuses canned cycles in G91 or with L', () => {
     const r = run(`${HEADER}G0 X0 Y0 Z5\nG91 G81 X10 Z-2 R1 F100\n`);
     expect(codes(r)).toContain('not-simulated@3');

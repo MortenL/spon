@@ -212,11 +212,14 @@ export function interpretProgram(text: string, opts: InterpretOptions): Interpre
         if (motion === null || motion < 4) cycleInitialZ = pos[2];
         motion = cycleCode;
       }
-      if (motion !== null && motion >= 73 && (cycleCode !== null || programmed[0] || programmed[1])) {
+      if (motion !== null && motion >= 73) {
+        // R/Q/P/Z retained modally even on lines that don't drill a hole (e.g. a bare "R2 Z-3" line
+        // between two XY repeats): they take effect on the next hole, without a row of their own.
         if (!Number.isNaN(r)) cycleR = r * scale;
         if (!Number.isNaN(z)) cycleZ = z * scale;
         if (!Number.isNaN(q)) cycleQ = q * scale;
         if (!Number.isNaN(p)) cycleP = p;
+        if (cycleCode === null && !programmed[0] && !programmed[1]) continue;
         if (!absolute || hasL) {
           notSimulated('Canned cycles in G91 or with an L repeat count are not simulated');
           continue;
