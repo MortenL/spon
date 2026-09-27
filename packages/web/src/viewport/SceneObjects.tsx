@@ -44,8 +44,9 @@ export function BedGrid() {
 }
 
 export function StockBox() {
+  const visible = useApp((s) => s.visibility.stock);
   const box = useStockBox();
-  if (!box) return null;
+  if (!visible || !box) return null;
   const size = bboxSize(box);
   const center = bboxCenter(box);
   return (

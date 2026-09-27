@@ -1,10 +1,12 @@
 import { GizmoHelper, GizmoViewport, OrbitControls } from '@react-three/drei';
 import { Canvas } from '@react-three/fiber';
 import { Button } from '@/components/ui/button';
+import { Toggle } from '@/components/ui/toggle';
 import { cn } from '@/lib/utils';
-import { appStore, useApp, type ViewPreset } from '@/state/store';
+import { appStore, useApp, type ViewPreset, type Visibility } from '@/state/store';
 import { ModelObject } from './ModelObject';
 import { BedGrid, CameraRig, CursorTracker, StockBox, WcsTriad } from './SceneObjects';
+import { Toolpaths } from './Toolpaths';
 
 const PRESETS: { preset: ViewPreset; label: string }[] = [
   { preset: 'top', label: 'Top' },
@@ -14,8 +16,15 @@ const PRESETS: { preset: ViewPreset; label: string }[] = [
   { preset: 'fit', label: 'Fit' },
 ];
 
+const TOGGLES: { key: Visibility; label: string }[] = [
+  { key: 'rapids', label: 'Rapids' },
+  { key: 'model', label: 'Model' },
+  { key: 'stock', label: 'Stock' },
+];
+
 export function Viewport() {
   const pickMode = useApp((s) => s.pickMode);
+  const visibility = useApp((s) => s.visibility);
   return (
     <div className={cn('relative h-full w-full', pickMode !== 'none' && 'cursor-crosshair')} data-testid="viewport">
       {/* up = +Z must be set before OrbitControls is created: the whole scene is Z-up like the machine. */}
@@ -28,6 +37,7 @@ export function Viewport() {
         <BedGrid />
         <StockBox />
         <ModelObject />
+        <Toolpaths />
         <WcsTriad />
         <CameraRig />
         <CursorTracker />
@@ -35,6 +45,17 @@ export function Viewport() {
           <GizmoViewport />
         </GizmoHelper>
       </Canvas>
+      <div className="absolute left-3 top-3 flex gap-1">
+        {TOGGLES.map(({ key, label }) => (
+          <Toggle
+            key={key} size="sm" variant="outline" data-testid={`toggle-${key}`}
+            pressed={visibility[key]} onPressedChange={() => appStore.getState().toggleVisibility(key)}
+            className="bg-background/80"
+          >
+            {label}
+          </Toggle>
+        ))}
+      </div>
       <div className="absolute right-3 top-3 flex gap-1">
         {PRESETS.map(({ preset, label }) => (
           <Button key={preset} size="sm" variant="secondary" data-testid={`view-${preset}`} onClick={() => appStore.getState().requestView(preset)}>

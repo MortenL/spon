@@ -16,10 +16,11 @@ type DrawingGeometry = Extract<ModelGeometry, { kind: 'drawing' }>;
 const HIGHLIGHT = '#f59e0b';
 
 export function ModelObject() {
+  const visible = useApp((s) => s.visibility.model);
   const geometry = useApp((s) => s.geometry);
   const model = useApp((s) => s.job.model);
   const placement = usePlacement();
-  if (!geometry || !model || !placement) return null;
+  if (!visible || !geometry || !model || !placement) return null;
   const t = placement.translation;
   return (
     <group position={[t.x, t.y, t.z]} quaternion={toThreeQuaternion(placement.rotation)} scale={placement.scale}>
