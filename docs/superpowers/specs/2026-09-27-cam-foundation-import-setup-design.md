@@ -39,7 +39,7 @@ CAM-tool/
 │  │  │                #   Path2D (line + arc segments), adjacency, planarRegion
 │  │  ├─ import/       # stl.ts, dxf.ts → ImportResult
 │  │  ├─ job/          # types.ts, update functions, derive.ts
-│  │  └─ io/           # .camjob read/write, schema migrations
+│  │  └─ io/           # .spon read/write, schema migrations
 │  └─ web/             # @sponcam/web — Vite + React app
 │     ├─ workers/      # import.worker.ts (Comlink) wrapping core/import
 │     ├─ state/        # Zustand store, undo/redo, IndexedDB autosave
@@ -84,7 +84,7 @@ interface Job {
 
 interface ModelRef {
   sourceName: string;               // original filename
-  blobId: string;                   // key into models/ in .camjob and into IndexedDB
+  blobId: string;                   // key into models/ in .spon and into IndexedDB
   kind: 'mesh' | 'drawing';         // STL → mesh, DXF → drawing
   importUnits: 'mm' | 'in';         // user-confirmed; applied as a scale (in → ×25.4)
   transform: ModelTransform;
@@ -151,7 +151,7 @@ Only `zDeg` applies. The lay-flat and quarter-turn controls are disabled.
 
 ### Supporting data
 
-A triangle adjacency table (edge → triangles) is built once in the import worker and stored with the in-memory mesh. It is not stored in `.camjob` and is rebuilt on load.
+A triangle adjacency table (edge → triangles) is built once in the import worker and stored with the in-memory mesh. It is not stored in `.spon` and is rebuilt on load.
 
 ## 5. Import pipeline
 
@@ -224,7 +224,9 @@ Typed arrays are transferred between the worker and the main thread, not copied.
 
 ## 7. Persistence
 
-### `.camjob` file
+### `.spon` file
+
+A Spon job file (MIME type `application/x-spon+zip` for the File System Access API picker).
 
 A zip written with fflate:
 
@@ -239,7 +241,7 @@ models/<blobId>.stl|.dxf  # original imported file bytes, unmodified
 ### Save / Open
 
 - Chromium: the File System Access API. Save writes to the existing handle; Save As, or a job with no handle, opens a picker.
-- Other browsers: Save triggers a download named `<job name>.camjob`. Open uses `<input type="file">`.
+- Other browsers: Save triggers a download named `<job name>.spon`. Open uses `<input type="file">`.
 - The dirty flag is cleared on save, and the tab title shows `•` when there are unsaved changes.
 
 ### Autosave
@@ -258,7 +260,7 @@ models/<blobId>.stl|.dxf  # original imported file bytes, unmodified
 - **DXF:** a fixture per supported entity; LWPOLYLINE bulges produce the correct arc centre and direction; nested INSERT with rotation and scale; `$INSUNITS` detection; skipped entities are counted.
 - **Geometry:** planar-region flood-fill on a cube (one face = 2 triangles) and on a tessellated cylinder (the flat cap only, not the curved wall); the lay-flat quaternion maps the chosen normal to −Z within 1e-9; align-edge produces the expected `zDeg`.
 - **Job derivation:** placement rests on Z = 0 and is XY-centred; auto and fixed stock boxes; every WCS anchor combination; drawing placement on the stock top.
-- **IO:** `.camjob` write → read round-trip equality; a migration test harness, with a v0 → v1 fixture added only when a real migration exists; newer schema versions are refused.
+- **IO:** `.spon` write → read round-trip equality; a migration test harness, with a v0 → v1 fixture added only when a real migration exists; newer schema versions are refused.
 
 ### web (Playwright smoke)
 
@@ -285,5 +287,5 @@ Reviewed prior art: [deependdesigns/swarf-cam](https://github.com/deependdesigns
 - The user can lay an STL flat by clicking a face, rotate it in quarter-turns, spin it about Z, and align an edge to X.
 - The user can define auto or fixed stock and pick the WCS anchor, offset and work offset, all visible in the viewport.
 - Undo and redo work for every job edit.
-- The job survives a page reload and can be saved to and opened from a `.camjob` file.
+- The job survives a page reload and can be saved to and opened from a `.spon` file.
 - All core unit tests and the web smoke tests pass.
