@@ -80,7 +80,11 @@ function ModelMesh({ geometry, importUnits }: { geometry: MeshGeometry; importUn
 
   return (
     <>
-      <mesh geometry={buffer} onPointerMove={onPointerMove} onClick={onClick} onPointerOut={() => { setRegion(null); setEdge(null); }}>
+      <mesh
+        geometry={buffer} onPointerMove={onPointerMove} onClick={onClick} onPointerOut={() => { setRegion(null); setEdge(null); }}
+        // a full-mesh raycast on every pointer move is only worth it while picking a face or edge
+        raycast={pickMode === 'none' ? noRaycast : THREE.Mesh.prototype.raycast}
+      >
         <meshStandardMaterial
           color="#9aa6b5" metalness={0.15} roughness={0.65} flatShading side={THREE.DoubleSide}
           polygonOffset polygonOffsetFactor={1} polygonOffsetUnits={1}
