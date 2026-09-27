@@ -24,3 +24,6 @@ export * from './io/migrations';
 export * from './io/spon';
 export * from './job/machine';
 export * from './job/programs';
+export * from './gcode/types';
+export * from './gcode/decode';
+export * from './gcode/lexer';
