@@ -5,4 +5,5 @@ export * from './geometry/bbox';
 export * from './geometry/mesh';
 export * from './geometry/weld';
 export * from './geometry/adjacency';
+export * from './geometry/planarRegion';
 export * from './import/stl';
