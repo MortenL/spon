@@ -56,5 +56,15 @@ export function stepTime(tl: Timeline, data: Readonly<Record<string, ProgramData
   const rowStart = rowStartTime(table, row);
   if (direction === 1) return at.entry.start + table.t[row]; // start of the next move = end of this one
   if (at.local - rowStart > 1e-9) return at.entry.start + rowStart; // inside a move: back to its start
-  return at.entry.start + (row > 0 ? rowStartTime(table, row - 1) : 0);
+  if (row > 0) return at.entry.start + rowStartTime(table, row - 1); // previous move in this program
+  // At row 0: step back to the last move of the previous program if it exists
+  if (at.index > 0) {
+    const prev = tl.entries[at.index - 1];
+    const prevTable = data[prev.blobId]?.parsed?.table;
+    if (prevTable && prevTable.count > 0) {
+      return prev.start + rowStartTime(prevTable, prevTable.count - 1);
+    }
+    return prev.start;
+  }
+  return 0;
 }

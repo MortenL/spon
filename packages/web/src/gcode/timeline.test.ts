@@ -48,4 +48,11 @@ describe('timeline', () => {
     expect(stepTime(tl, all, 6, -1)).toBe(5);
     expect(stepTime(tl, all, 3, -1)).toBe(2);
   });
+
+  it('steps back across program boundaries', () => {
+    const tl = buildTimeline(programs, all);
+    // At the start of program B (global time 5), step back should go to the start of A's last move
+    // A's last move (row 1) starts at program-local time 2, so global time is 0 + 2 = 2
+    expect(stepTime(tl, all, 5, -1)).toBe(2);
+  });
 });
