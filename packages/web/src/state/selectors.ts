@@ -1,11 +1,12 @@
-import { type BBox, computePlacement, type Placement, stockBox, type Vec3, wcsPoint } from '@sponcam/core';
+import { type BBox, type Placement, stockBox, type Vec3, wcsPoint } from '@sponcam/core';
 import { useMemo } from 'react';
+import { placementFor } from './placement';
 import { useApp } from './store';
 
 export function usePlacement(): Placement | null {
   const model = useApp((s) => s.job.model);
   const geometry = useApp((s) => s.geometry);
-  return useMemo(() => (model && geometry ? computePlacement(model, geometry.rawPoints) : null), [model, geometry]);
+  return model && geometry ? placementFor(model, geometry) : null;
 }
 
 export function useStockBox(): BBox | null {
