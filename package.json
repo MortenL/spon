@@ -1,0 +1,14 @@
+{
+  "name": "spon",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.15.1",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "pnpm --filter @sponcam/web dev",
+    "build": "pnpm --filter @sponcam/web build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "e2e": "pnpm --filter @sponcam/web e2e"
+  }
+}
