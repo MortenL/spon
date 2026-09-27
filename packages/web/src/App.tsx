@@ -1,5 +1,7 @@
 import { useEffect } from 'react';
 import { Toaster } from '@/components/ui/sonner';
+import { BottomDock } from '@/dock/BottomDock';
+import { usePlaybackLoop } from '@/gcode/playbackLoop';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { DropZone } from '@/layout/DropZone';
@@ -16,6 +18,7 @@ import { Viewport } from '@/viewport/Viewport';
 export function App() {
   useKeyboardShortcuts();
   useDocumentTitle();
+  usePlaybackLoop();
   useEffect(() => {
     void restoreAutosave();
     const stopAutosave = startAutosave(appStore);
@@ -32,15 +35,18 @@ export function App() {
       <TopBar />
       <div className="flex min-h-0 flex-1">
         <LeftPanel />
-        <main className="relative min-w-0 flex-1">
-          <DropZone>
-            <Viewport />
-            {isEmpty && (
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
-                Drop an STL, DXF or G-code file here, or use Open
-              </div>
-            )}
-          </DropZone>
+        <main className="relative flex min-w-0 flex-1 flex-col">
+          <div className="relative min-h-0 flex-1">
+            <DropZone>
+              <Viewport />
+              {isEmpty && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
+                  Drop an STL, DXF or G-code file here, or use Open
+                </div>
+              )}
+            </DropZone>
+          </div>
+          <BottomDock />
         </main>
       </div>
       <StatusBar />

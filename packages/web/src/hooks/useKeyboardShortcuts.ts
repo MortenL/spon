@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { buildTimeline, stepTime } from '@/gcode/timeline';
 import { openViaPicker, saveDocument } from '@/state/documents';
 import { appStore } from '@/state/store';
 
@@ -6,7 +7,7 @@ function isTyping(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
 }
 
-/** Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y undo-redo, Ctrl+S save (Shift = Save As), Ctrl+O open, F fit, Esc cancels picking. */
+/** Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y undo-redo, Ctrl+S save (Shift = Save As), Ctrl+O open, F fit, Esc cancels picking, Space play/pause, ←/→ step one move, Home/End jump. */
 export function useKeyboardShortcuts(): void {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -24,6 +25,23 @@ export function useKeyboardShortcuts(): void {
         return;
       }
       if (isTyping(e.target)) return;
+      if (!mod && [' ', 'arrowleft', 'arrowright', 'home', 'end'].includes(key)) {
+        const tl = buildTimeline(s.job.programs, s.programData);
+        if (tl.total <= 0) return;
+        if (key === ' ') {
+          if (e.target instanceof HTMLButtonElement) return; // a focused button handles Space itself
+          e.preventDefault();
+          if (!s.playing && s.playhead >= tl.total) s.setPlayhead(0);
+          s.setPlaying(!s.playing);
+          return;
+        }
+        e.preventDefault();
+        s.setPlaying(false);
+        if (key === 'home') s.setPlayhead(0);
+        else if (key === 'end') s.setPlayhead(tl.total);
+        else s.setPlayhead(stepTime(tl, s.programData, s.playhead, key === 'arrowright' ? 1 : -1));
+        return;
+      }
       if (mod && key === 'z') {
         e.preventDefault();
         if (e.shiftKey) s.redo();
