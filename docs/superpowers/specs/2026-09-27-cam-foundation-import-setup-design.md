@@ -63,7 +63,7 @@ CAM-tool/
 | 3D | three.js via @react-three/fiber and @react-three/drei |
 | State | Zustand |
 | Workers | Comlink |
-| DXF parsing | `dxf-parser` (MIT) |
+| DXF parsing | `dxf-parser` (MIT), with Spon's own CIRCLE and SPLINE entity handlers so extrusion and spline weights are not lost (alternatives evaluated 2026-09-27: `@dxfjs/parser`, `dxf`, `dxf-viewer`, `libredwg-web`) |
 | Zip | `fflate` |
 | IndexedDB | `idb` |
 | Tests | Vitest (core), Playwright (web smoke) |

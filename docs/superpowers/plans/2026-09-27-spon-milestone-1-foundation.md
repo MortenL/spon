@@ -33,8 +33,9 @@ These refine the spec without changing its intent. Implement them as written her
 4. **Confirmations** (discard unsaved changes, files over 200 MB) use `window.confirm`.
 5. **View-cube** = overlay buttons Top / Front / Right / Iso / Fit plus drei's `GizmoViewport` axis indicator.
 6. **Open** accepts `.spon`, `.stl` and `.dxf`. A model file is imported into the current job.
-7. **DXF extrusion:** entities whose extrusion is `(0, 0, −1)` are mirrored in X (the correct OCS handling). Other tilted extrusions produce a warning and are projected. dxf-parser does not expose extrusion for CIRCLE, so mirrored circles keep their OCS X coordinate (a known limitation).
+7. **DXF extrusion:** entities whose extrusion is `(0, 0, −1)` are mirrored in X (the correct OCS handling). Other tilted extrusions produce a warning and are projected.
 8. **DXF colours** 0xFFFFFF and 0x000000 (ACI 7) render in a neutral default line colour.
+9. **dxf-parser gaps are patched with its public `registerEntityHandler` API** (`src/import/dxf/handlers.ts`). Our own CIRCLE handler reads the extrusion direction, which the built-in one drops, so mirrored holes are not misplaced. Our own SPLINE handler reads weights (group 41), which the built-in one drops, so rational splines are evaluated exactly. Alternatives evaluated on 2026-09-27: `@dxfjs/parser` (stale, loses extrusion), `dxf` (drops fit points, no types), `dxf-viewer` (parser is not a public API) and `libredwg-web` (GPL-3.0, could not read DXF). None was better overall.
 
 ## File Map
 
@@ -56,7 +57,8 @@ packages/core/
   src/import/stl.ts                 STL parsing + importStl
   src/import/dxf/affine2d.ts        2D affine transforms
   src/import/dxf/entities.ts        DXF entity → Path2D conversion, transformPath
-  src/import/dxf/curves.ts          ellipse + B-spline flattening
+  src/import/dxf/handlers.ts        dxf-parser entity handlers for CIRCLE (extrusion) and SPLINE (weights)
+  src/import/dxf/curves.ts          ellipse + (rational) B-spline flattening
   src/import/dxf/dxf.ts             parseDxf orchestrator (layers, blocks, warnings)
   src/import/importFile.ts          ImportResult, fileKind, importFile, transferables
   src/job/types.ts                  Job and related types
@@ -1276,7 +1278,7 @@ git commit -m "feat(core): find planar face regions for lay-flat" -m "Co-Authore
 
 **Files:**
 - Create: `packages/core/src/geometry/path2d.ts`
-- Create: `packages/core/src/import/dxf/affine2d.ts`, `packages/core/src/import/dxf/entities.ts`, `packages/core/src/import/dxf/dxf.ts`
+- Create: `packages/core/src/import/dxf/affine2d.ts`, `packages/core/src/import/dxf/entities.ts`, `packages/core/src/import/dxf/handlers.ts`, `packages/core/src/import/dxf/dxf.ts`
 - Create: `packages/core/test/fixtures/dxfBuilder.ts`
 - Modify: `packages/core/src/index.ts`
 - Test: `packages/core/test/path2d.test.ts`, `packages/core/test/dxf.test.ts`
@@ -1288,6 +1290,7 @@ git commit -m "feat(core): find planar face regions for lay-flat" -m "Co-Authore
   - `arcPoint(arc, angle)`, `segmentStart(s)`, `segmentEnd(s)`, `arcStepCount(radius, sweepAbs, chordTol)`, `tessellateSegment(s, chordTol = 0.01): Vec2[]`, `tessellatePath(path, chordTol = 0.01): Vec2[]`, `pathsToPoints(paths, chordTol = 0.01): Float32Array` (xyz triples with z = 0)
   - `interface Affine2D { a; b; c; d; e; f }` (x' = a·x + c·y + e, y' = b·x + d·y + f), `AFFINE_IDENTITY`, `affineMultiply(m, n)` (applies **n first**), `affineApply(m, p)`, `affineTranslate(tx, ty)`, `affineRotate(radians)`, `affineScale(sx, sy)`, `affineDeterminant(m)`, `isSimilarity(m)`
   - `lineToPath(a, b)`, `arcToPath(center, radius, startAngle, endAngle)`, `circleToPath(center, radius)`, `bulgeSegment(p1, p2, bulge)`, `polylineToPath(vertices, closed)`, `transformSegment(s, m, chordTol)`, `transformPath(path, m, chordTol)`
+  - `handlers.ts`: `interface XYZ { x; y; z }`, `interface DxfGroup { code: number; value: string | number | boolean }`, `entityHandler(name, create, read)`, `interface CircleData { type: 'CIRCLE'; layer; inPaperSpace; center: XYZ; radius; extrusionDirection: XYZ }`, `registerSponHandlers(parser: DxfParser): void` (Task 7 adds the SPLINE handler to this same function)
   - `interface DrawingLayer { name: string; color: number; paths: Path2D[] }`, `interface Drawing { layers: DrawingLayer[] }`, `interface DxfImport { drawing: Drawing; detectedUnits: LengthUnit | null; warnings: string[] }`, `class DxfParseError`, `SUPPORTED_DXF_ENTITIES`, `DEFAULT_CHORD_TOLERANCE = 0.01`, `countEntityTypes(text): Map<string, number>`, `parseDxf(text, chordTol = 0.01): DxfImport`
 
 - [ ] **Step 1: Write the failing path/affine/entity tests**
@@ -1644,8 +1647,9 @@ export const arc = (layer: string, cx: number, cy: number, r: number, startDeg: 
   ...opt(extrusionZ !== undefined, [210, 0], [220, 0], [230, extrusionZ ?? 1]),
 ];
 
-export const circle = (layer: string, cx: number, cy: number, r: number): Entity => [
+export const circle = (layer: string, cx: number, cy: number, r: number, extrusionZ?: number): Entity => [
   [0, 'CIRCLE'], [8, layer], [10, cx], [20, cy], [30, 0], [40, r],
+  ...opt(extrusionZ !== undefined, [210, 0], [220, 0], [230, extrusionZ ?? 1]),
 ];
 
 export type PolyVertex = [x: number, y: number, bulge?: number];
@@ -1675,10 +1679,12 @@ export const ellipse = (layer: string, cx: number, cy: number, mx: number, my: n
   [0, 'ELLIPSE'], [8, layer], [10, cx], [20, cy], [30, 0], [11, mx], [21, my], [31, 0], [40, ratio], [41, start], [42, end],
 ];
 
-export const spline = (layer: string, degree: number, knots: number[], ctrl: [number, number][]): Entity => [
-  [0, 'SPLINE'], [8, layer], [210, 0], [220, 0], [230, 1], [70, 8], [71, degree], [72, knots.length], [73, ctrl.length], [74, 0],
+/** Control-point spline; passing `weights` makes it rational (flag 4) and writes group 41 per control point. */
+export const spline = (layer: string, degree: number, knots: number[], ctrl: [number, number][], weights?: number[]): Entity => [
+  [0, 'SPLINE'], [8, layer], [210, 0], [220, 0], [230, 1], [70, weights ? 12 : 8], [71, degree], [72, knots.length], [73, ctrl.length], [74, 0],
   ...knots.map((k): Group => [40, k]),
   ...ctrl.flatMap(([x, y]): Group[] => [[10, x], [20, y], [30, 0]]),
+  ...(weights ?? []).map((w): Group => [41, w]),
 ];
 
 export const splineFit = (layer: string, degree: number, fit: [number, number][]): Entity => [
@@ -1694,7 +1700,7 @@ export const splineFit = (layer: string, degree: number, fit: [number, number][]
 import { describe, expect, it } from 'vitest';
 import { type ArcSegment, type LineSegment, segmentEnd, segmentStart, type Vec2 } from '../src/geometry/path2d';
 import { countEntityTypes, DxfParseError, parseDxf } from '../src/import/dxf/dxf';
-import { arc, circle, dxfText, hatch, insert, line, lwpolyline, polyline, text } from './fixtures/dxfBuilder';
+import { arc, circle, dxfText, type Entity, hatch, insert, line, lwpolyline, polyline, text } from './fixtures/dxfBuilder';
 
 const near = (a: Vec2, b: Vec2, eps = 1e-9) => Math.abs(a.x - b.x) <= eps && Math.abs(a.y - b.y) <= eps;
 const layer = (result: ReturnType<typeof parseDxf>, name: string) => {
@@ -1745,6 +1751,20 @@ describe('parseDxf: entities', () => {
     const seg = layer(parseDxf(dxfText({ entities: [arc('A', 1, 2, 3, 0, 90, -1)] })), 'A').paths[0].segments[0] as ArcSegment;
     expect(near(seg.center, { x: -1, y: 2 })).toBe(true);
     expect(seg.sweep).toBeCloseTo(-Math.PI / 2, 12);
+  });
+
+  it('mirrors CIRCLE with extrusion (0, 0, -1), which the built-in dxf-parser handler would drop', () => {
+    const r = parseDxf(dxfText({ entities: [circle('HOLES', 1, 2, 3, -1)] }));
+    const seg = layer(r, 'HOLES').paths[0].segments[0] as ArcSegment;
+    expect(near(seg.center, { x: -1, y: 2 })).toBe(true);
+    expect(seg.radius).toBeCloseTo(3, 12);
+  });
+
+  it('keeps CIRCLE on its layer and skips paper-space circles', () => {
+    const paper: Entity = [...circle('P', 0, 0, 1), [67, 1]];
+    const r = parseDxf(dxfText({ entities: [circle('HOLES', 0, 0, 1), paper] }));
+    expect(r.drawing.layers.map((l) => l.name)).toEqual(['HOLES']);
+    expect(r.warnings).toContain('Ignored 1 paper-space entity');
   });
 });
 
@@ -1829,13 +1849,96 @@ describe('parseDxf: metadata and warnings', () => {
 Run: `pnpm --filter @sponcam/core test dxf`
 Expected: FAIL, because `../src/import/dxf/dxf` cannot be resolved.
 
-- [ ] **Step 7: Implement `dxf.ts`**
+- [ ] **Step 7: Implement the custom entity handlers**
+
+dxf-parser's built-in CIRCLE handler drops group codes 210/220/230 (extrusion), so a circle in a mirrored OCS would land at the wrong X. dxf-parser lets us replace an entity handler through its public `registerEntityHandler`. A handler receives a scanner positioned on the entity's `0/TYPE` group, reads groups until the next code-0 group, and returns the entity; it must **not** rewind the scanner.
+
+`packages/core/src/import/dxf/handlers.ts`:
+```ts
+import type DxfParser from 'dxf-parser';
+
+export interface XYZ {
+  x: number;
+  y: number;
+  z: number;
+}
+
+/** One group-code/value pair as delivered by dxf-parser's scanner (values are already typed by group code). */
+export interface DxfGroup {
+  code: number;
+  value: string | number | boolean;
+}
+
+interface DxfScanner {
+  next(): DxfGroup;
+  isEOF(): boolean;
+}
+
+type HandlerClass = Parameters<DxfParser['registerEntityHandler']>[0];
+
+interface CommonData {
+  type: string;
+  layer: string;
+  inPaperSpace: boolean;
+}
+
+/** Builds a dxf-parser entity handler that passes every group of one entity to `read`. */
+export function entityHandler<T extends CommonData>(name: string, create: () => T, read: (entity: T, group: DxfGroup) => void): HandlerClass {
+  class Handler {
+    ForEntityName = name;
+    parseEntity(scanner: DxfScanner): T {
+      const entity = create();
+      let group = scanner.next();
+      while (!scanner.isEOF() && group.code !== 0) {
+        if (group.code === 8) entity.layer = String(group.value);
+        else if (group.code === 67) entity.inPaperSpace = group.value !== 0;
+        else read(entity, group);
+        group = scanner.next();
+      }
+      return entity; // the scanner is left on the next code-0 group, as dxf-parser expects
+    }
+  }
+  return Handler as unknown as HandlerClass;
+}
+
+const num = (group: DxfGroup) => Number(group.value);
+
+export interface CircleData extends CommonData {
+  type: 'CIRCLE';
+  center: XYZ;
+  radius: number;
+  extrusionDirection: XYZ;
+}
+
+const CircleHandler = entityHandler<CircleData>(
+  'CIRCLE',
+  () => ({ type: 'CIRCLE', layer: '0', inPaperSpace: false, center: { x: 0, y: 0, z: 0 }, radius: 0, extrusionDirection: { x: 0, y: 0, z: 1 } }),
+  (e, g) => {
+    switch (g.code) {
+      case 10: e.center.x = num(g); break;
+      case 20: e.center.y = num(g); break;
+      case 30: e.center.z = num(g); break;
+      case 40: e.radius = num(g); break;
+      case 210: e.extrusionDirection.x = num(g); break;
+      case 220: e.extrusionDirection.y = num(g); break;
+      case 230: e.extrusionDirection.z = num(g); break;
+    }
+  },
+);
+
+/** Replaces dxf-parser handlers that drop data Spon needs. */
+export function registerSponHandlers(parser: DxfParser): void {
+  parser.registerEntityHandler(CircleHandler);
+}
+```
+
+- [ ] **Step 8: Implement `dxf.ts`**
 
 `packages/core/src/import/dxf/dxf.ts`:
 ```ts
 import DxfParser from 'dxf-parser';
 import type {
-  IArcEntity, ICircleEntity, IDxf, IEntity, IInsertEntity, ILineEntity, ILwpolylineEntity, IPoint, IPolylineEntity,
+  IArcEntity, IDxf, IEntity, IInsertEntity, ILineEntity, ILwpolylineEntity, IPoint, IPolylineEntity,
 } from 'dxf-parser';
 import type { Path2D } from '../../geometry/path2d';
 import type { LengthUnit } from '../../units/units';
@@ -1843,6 +1946,7 @@ import {
   AFFINE_IDENTITY, type Affine2D, affineMultiply, affineRotate, affineScale, affineTranslate,
 } from './affine2d';
 import { arcToPath, circleToPath, lineToPath, polylineToPath, transformPath } from './entities';
+import { type CircleData, registerSponHandlers } from './handlers';
 
 export interface DrawingLayer {
   name: string;
@@ -1872,7 +1976,8 @@ const SUB_ENTITIES: ReadonlySet<string> = new Set(['VERTEX', 'SEQEND', 'ATTRIB']
 export const DEFAULT_CHORD_TOLERANCE = 0.01;
 const MAX_BLOCK_DEPTH = 16;
 
-type ExtrudedEntity = IEntity & {
+/** Any entity that may carry an extrusion direction, in either of dxf-parser's two spellings. */
+type ExtrudedEntity = {
   extrusionDirection?: IPoint;
   extrusionDirectionX?: number;
   extrusionDirectionY?: number;
@@ -1914,7 +2019,9 @@ export function countEntityTypes(text: string): Map<string, number> {
 export function parseDxf(text: string, chordTol = DEFAULT_CHORD_TOLERANCE): DxfImport {
   let dxf: IDxf | null;
   try {
-    dxf = new DxfParser().parseSync(text);
+    const parser = new DxfParser();
+    registerSponHandlers(parser);
+    dxf = parser.parseSync(text);
   } catch (err) {
     throw new DxfParseError(`Could not parse DXF: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -2010,7 +2117,7 @@ function processEntity(ctx: Context, entity: IEntity, m: Affine2D, inheritedLaye
       return;
     }
     case 'CIRCLE': {
-      const e = entity as ICircleEntity;
+      const e = entity as unknown as CircleData; // produced by our handler in handlers.ts
       if (hasZ(e.center.z)) ctx.nonZeroZ++;
       emit(ctx, layer, circleToPath(e.center, e.radius), affineMultiply(m, ocsTransform(ctx, e)));
       return;
@@ -2078,17 +2185,18 @@ Append to `packages/core/src/index.ts`:
 export * from './geometry/path2d';
 export * from './import/dxf/affine2d';
 export * from './import/dxf/entities';
+export * from './import/dxf/handlers';
 export * from './import/dxf/dxf';
 ```
 
-- [ ] **Step 8: Run tests and typecheck**
+- [ ] **Step 9: Run tests and typecheck**
 
 Run: `pnpm --filter @sponcam/core test && pnpm --filter @sponcam/core typecheck`
 Expected: all tests pass.
 
 If `countEntityTypes` returns counts in a different order, the `toEqual(new Map(...))` assertion still holds because Vitest compares Map contents without regard to order.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
 git add packages/core
@@ -2101,17 +2209,19 @@ git commit -m "feat(core): import DXF lines, arcs, circles, polylines and blocks
 
 **Files:**
 - Create: `packages/core/src/import/dxf/curves.ts`
+- Modify: `packages/core/src/import/dxf/handlers.ts` (add the SPLINE handler)
 - Modify: `packages/core/src/import/dxf/dxf.ts` (add ELLIPSE and SPLINE cases)
 - Modify: `packages/core/src/index.ts`
 - Test: `packages/core/test/curves.test.ts`
 
 **Interfaces:**
-- Consumes: `Vec2`, `Path2D` (Task 6), `ctx`/`emit`/`hasZ` inside `dxf.ts` (Task 6)
+- Consumes: `Vec2`, `Path2D` (Task 6), `ctx`/`emit`/`hasZ` inside `dxf.ts` (Task 6), `entityHandler`/`XYZ`/`registerSponHandlers` in `handlers.ts` (Task 6)
 - Produces:
   - `flattenCurve(evaluate: (t: number) => Vec2, t0: number, t1: number, tol: number, minSegments = 4): Vec2[]`
-  - `evalBSpline(degree: number, knots: readonly number[], ctrl: readonly Vec2[], t: number): Vec2`
+  - `evalBSpline(degree: number, knots: readonly number[], ctrl: readonly Vec2[], t: number, weights?: readonly number[] | null): Vec2` (rational when `weights` is given)
   - `ellipseToPath(center: Vec2, majorAxis: Vec2, ratio: number, startParam: number, endParam: number, tol: number): Path2D`
-  - `splineToPath(degree, knots, ctrl, fitPoints, tol): { path: Path2D | null; note: string | null }`
+  - `splineToPath(degree, knots, ctrl, fitPoints, tol, weights?: readonly number[] | null): { path: Path2D | null; note: string | null }`
+  - `interface SplineData { type: 'SPLINE'; layer; inPaperSpace; degree: number; flags: number; knots: number[]; controlPoints: XYZ[]; fitPoints: XYZ[]; weights: number[] }` (produced by the new SPLINE handler)
   - `pointsToPath(points: Vec2[]): Path2D` (lines; `closed` is true when the first and last points coincide)
 
 - [ ] **Step 1: Write the failing tests**
@@ -2155,6 +2265,18 @@ describe('evalBSpline', () => {
   it('passes through the control points of a degree-1 spline', () => {
     const p = evalBSpline(1, [0, 0, 1, 2, 2], ctrl, 1);
     expect(p).toEqual({ x: 5, y: 10 });
+  });
+
+  it('evaluates a rational quadratic quarter circle exactly', () => {
+    const arc = [{ x: 10, y: 0 }, { x: 10, y: 10 }, { x: 0, y: 10 }];
+    const weights = [1, Math.SQRT1_2, 1];
+    for (const t of [0, 0.1, 0.33, 0.5, 0.77, 1]) {
+      const p = evalBSpline(2, [0, 0, 0, 1, 1, 1], arc, t, weights);
+      expect(Math.hypot(p.x, p.y)).toBeCloseTo(10, 12);
+    }
+    // without weights the same control polygon is a parabola that bulges outside the circle
+    const p = evalBSpline(2, [0, 0, 0, 1, 1, 1], arc, 0.5);
+    expect(Math.hypot(p.x, p.y)).toBeGreaterThan(10.5);
   });
 });
 
@@ -2200,6 +2322,16 @@ describe('parseDxf: curves', () => {
     expect(sPoints[0]).toEqual({ x: 0, y: 0 });
     expect(sPoints.at(-1)).toEqual({ x: 10, y: 0 });
     expect(r.warnings.some((w) => w.includes('fit points'))).toBe(true);
+  });
+
+  it('reads SPLINE weights (dropped by the built-in handler) and keeps rational arcs on their circle', () => {
+    const r = parseDxf(dxfText({
+      entities: [spline('R', 2, [0, 0, 0, 1, 1, 1], [[10, 0], [10, 10], [0, 10]], [1, Math.SQRT1_2, 1])],
+    }));
+    const pts = tessellatePath(r.drawing.layers[0].paths[0]);
+    expect(pts.length).toBeGreaterThan(8);
+    for (const p of pts) expect(Math.hypot(p.x, p.y)).toBeCloseTo(10, 9);
+    expect(r.warnings).toEqual([]);
   });
 });
 ```
@@ -2273,21 +2405,33 @@ export function ellipseToPath(center: Vec2, majorAxis: Vec2, ratio: number, star
   return pointsToPath(flattenCurve(evaluate, startParam, end, tol, 8));
 }
 
-/** De Boor evaluation of a non-rational B-spline. `knots.length` must equal `ctrl.length + degree + 1`. */
-export function evalBSpline(degree: number, knots: readonly number[], ctrl: readonly Vec2[], t: number): Vec2 {
+/**
+ * De Boor evaluation of a B-spline; `knots.length` must equal `ctrl.length + degree + 1`.
+ * With `weights` (one per control point) the curve is a NURBS, evaluated in homogeneous coordinates.
+ */
+export function evalBSpline(degree: number, knots: readonly number[], ctrl: readonly Vec2[], t: number, weights?: readonly number[] | null): Vec2 {
   const n = ctrl.length;
   let k = degree;
   while (k < n - 1 && knots[k + 1] <= t) k++;
-  const d = Array.from({ length: degree + 1 }, (_, j) => ({ ...ctrl[j + k - degree] }));
+  const d = Array.from({ length: degree + 1 }, (_, j) => {
+    const p = ctrl[j + k - degree];
+    const w = weights ? weights[j + k - degree] : 1;
+    return { x: p.x * w, y: p.y * w, w };
+  });
   for (let r = 1; r <= degree; r++) {
     for (let j = degree; j >= r; j--) {
       const lo = knots[j + k - degree];
       const hi = knots[j + 1 + k - r];
       const alpha = hi === lo ? 0 : (t - lo) / (hi - lo);
-      d[j] = { x: (1 - alpha) * d[j - 1].x + alpha * d[j].x, y: (1 - alpha) * d[j - 1].y + alpha * d[j].y };
+      d[j] = {
+        x: (1 - alpha) * d[j - 1].x + alpha * d[j].x,
+        y: (1 - alpha) * d[j - 1].y + alpha * d[j].y,
+        w: (1 - alpha) * d[j - 1].w + alpha * d[j].w,
+      };
     }
   }
-  return d[degree];
+  const { x, y, w } = d[degree];
+  return w === 1 ? { x, y } : { x: x / w, y: y / w };
 }
 
 export function splineToPath(
@@ -2296,6 +2440,7 @@ export function splineToPath(
   ctrl: readonly Vec2[],
   fitPoints: readonly Vec2[],
   tol: number,
+  weights?: readonly number[] | null,
 ): { path: Path2D | null; note: string | null } {
   if (ctrl.length > degree && knots.length === ctrl.length + degree + 1) {
     const start = knots[degree];
@@ -2303,7 +2448,7 @@ export function splineToPath(
     const breaks = [...new Set(knots.filter((k) => k >= start && k <= end))].sort((a, b) => a - b);
     const points: Vec2[] = [];
     for (let i = 1; i < breaks.length; i++) {
-      const span = flattenCurve((t) => evalBSpline(degree, knots, ctrl, t), breaks[i - 1], breaks[i], tol);
+      const span = flattenCurve((t) => evalBSpline(degree, knots, ctrl, t, weights), breaks[i - 1], breaks[i], tol);
       points.push(...(points.length ? span.slice(1) : span));
     }
     return { path: pointsToPath(points), note: null };
@@ -2315,18 +2460,61 @@ export function splineToPath(
 }
 ```
 
-- [ ] **Step 4: Add the ELLIPSE and SPLINE cases to `dxf.ts`**
+- [ ] **Step 4: Add the SPLINE handler**
 
-In `packages/core/src/import/dxf/dxf.ts`, extend the type import from `dxf-parser` to include `IEllipseEntity` and `ISplineEntity`:
+dxf-parser's built-in SPLINE handler drops the weights (group 41), so rational splines (arcs and conics exported as NURBS) would come out as the wrong curve. In `packages/core/src/import/dxf/handlers.ts`, add this below the circle handler:
+```ts
+export interface SplineData extends CommonData {
+  type: 'SPLINE';
+  degree: number;
+  /** Bit flags: 1 closed, 2 periodic, 4 rational, 8 planar, 16 linear. */
+  flags: number;
+  knots: number[];
+  controlPoints: XYZ[];
+  fitPoints: XYZ[];
+  weights: number[];
+}
+
+const SplineHandler = entityHandler<SplineData>(
+  'SPLINE',
+  () => ({ type: 'SPLINE', layer: '0', inPaperSpace: false, degree: 3, flags: 0, knots: [], controlPoints: [], fitPoints: [], weights: [] }),
+  (e, g) => {
+    switch (g.code) {
+      case 70: e.flags = num(g); break;
+      case 71: e.degree = num(g); break;
+      case 40: e.knots.push(num(g)); break;
+      case 41: e.weights.push(num(g)); break;
+      // a point starts at its X group; the Y and Z groups that follow belong to the most recent point
+      case 10: e.controlPoints.push({ x: num(g), y: 0, z: 0 }); break;
+      case 20: if (e.controlPoints.length) e.controlPoints[e.controlPoints.length - 1].y = num(g); break;
+      case 30: if (e.controlPoints.length) e.controlPoints[e.controlPoints.length - 1].z = num(g); break;
+      case 11: e.fitPoints.push({ x: num(g), y: 0, z: 0 }); break;
+      case 21: if (e.fitPoints.length) e.fitPoints[e.fitPoints.length - 1].y = num(g); break;
+      case 31: if (e.fitPoints.length) e.fitPoints[e.fitPoints.length - 1].z = num(g); break;
+    }
+  },
+);
+```
+and register it in `registerSponHandlers`:
+```ts
+export function registerSponHandlers(parser: DxfParser): void {
+  parser.registerEntityHandler(CircleHandler);
+  parser.registerEntityHandler(SplineHandler);
+}
+```
+
+- [ ] **Step 5: Add the ELLIPSE and SPLINE cases to `dxf.ts`**
+
+In `packages/core/src/import/dxf/dxf.ts`, add `IEllipseEntity` to the type import from `dxf-parser`:
 ```ts
 import type {
-  IArcEntity, ICircleEntity, IDxf, IEllipseEntity, IEntity, IInsertEntity, ILineEntity, ILwpolylineEntity, IPoint,
-  IPolylineEntity, ISplineEntity,
+  IArcEntity, IDxf, IEllipseEntity, IEntity, IInsertEntity, ILineEntity, ILwpolylineEntity, IPoint, IPolylineEntity,
 } from 'dxf-parser';
 ```
-Add this import below the `./entities` import:
+Change the `./handlers` import and add the `./curves` import:
 ```ts
 import { ellipseToPath, splineToPath } from './curves';
+import { type CircleData, registerSponHandlers, type SplineData } from './handlers';
 ```
 Insert these cases immediately before `case 'INSERT': {`. ELLIPSE and SPLINE use world coordinates, so no OCS transform is applied:
 ```ts
@@ -2337,12 +2525,14 @@ Insert these cases immediately before `case 'INSERT': {`. ELLIPSE and SPLINE use
       return;
     }
     case 'SPLINE': {
-      const e = entity as ISplineEntity;
-      const ctrl = e.controlPoints ?? [];
-      const fit = e.fitPoints ?? [];
-      if (hasZ(...ctrl.map((p) => p.z), ...fit.map((p) => p.z))) ctx.nonZeroZ++;
-      if (e.rational) ctx.notes.add('Rational SPLINE weights are not supported; those splines were approximated');
-      const { path, note } = splineToPath(e.degreeOfSplineCurve ?? 3, e.knotValues ?? [], ctrl, fit, ctx.chordTol);
+      const e = entity as unknown as SplineData; // produced by our handler in handlers.ts
+      if (hasZ(...e.controlPoints.map((p) => p.z), ...e.fitPoints.map((p) => p.z))) ctx.nonZeroZ++;
+      let weights: number[] | null = e.weights.length ? e.weights : null;
+      if (weights && weights.length !== e.controlPoints.length) {
+        ctx.notes.add('Some SPLINE weights did not match their control points and were ignored');
+        weights = null;
+      }
+      const { path, note } = splineToPath(e.degree, e.knots, e.controlPoints, e.fitPoints, ctx.chordTol, weights);
       if (note) ctx.notes.add(note);
       if (path) emit(ctx, layer, path, m);
       return;
@@ -2354,16 +2544,16 @@ Append to `packages/core/src/index.ts`:
 export * from './import/dxf/curves';
 ```
 
-- [ ] **Step 5: Run tests and typecheck**
+- [ ] **Step 6: Run tests and typecheck**
 
 Run: `pnpm --filter @sponcam/core test && pnpm --filter @sponcam/core typecheck`
-Expected: all tests pass.
+Expected: all tests pass, including the rational quarter-circle cases (every flattened point at radius 10 within 1e-9) and Task 6's DXF tests, which now run through the custom SPLINE handler too.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add packages/core
-git commit -m "feat(core): flatten DXF ellipses and splines" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git commit -m "feat(core): flatten DXF ellipses and (rational) splines" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
 ---
