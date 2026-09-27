@@ -21,7 +21,7 @@
 - No GPL dependencies.
 - Defaults for a new job: `displayUnits: 'mm'`, stock `auto { xy: 5, zTop: 1, zBottom: 0 }`, WCS `{ anchor: { x: 'min', y: 'min', z: 'top' }, offset: (0,0,0), workOffset: 'G54' }`, transform `{ base: identity, zDeg: 0 }`.
 - STL weld tolerance 1e-4 mm. Planar region: normals within 1°, vertices within 0.01 mm of the seed plane. DXF chord tolerance 0.01 mm. Soft import size limit 200 MB. Undo cap 100. Autosave debounce 1 s.
-- Every commit message ends with a blank line and then `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
+- Every commit message ends with a `Co-Authored-By: Claude … <noreply@anthropic.com>` trailer naming the model that wrote it (amended during execution; earlier text required a fixed model name).
 
 ## Clarifications to the spec (decided while planning)
 
