@@ -35,6 +35,13 @@ export function affineRotate(radians: number): Affine2D {
 
 export const affineDeterminant = (m: Affine2D): number => m.a * m.d - m.b * m.c;
 
+/** Largest singular value of the 2×2 linear part: the true maximum stretch factor, regardless of scale/rotation order. */
+export function affineMaxStretch(m: Affine2D): number {
+  const s = m.a * m.a + m.b * m.b + m.c * m.c + m.d * m.d;
+  const det = affineDeterminant(m);
+  return Math.sqrt((s + Math.sqrt(Math.max(0, s * s - 4 * det * det))) / 2);
+}
+
 /** True when the transform is rotation + uniform scale (optionally mirrored), so circles stay circles. */
 export function isSimilarity(m: Affine2D, eps = 1e-9): boolean {
   const lenX = m.a * m.a + m.b * m.b;

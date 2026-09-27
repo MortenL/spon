@@ -3,7 +3,7 @@ import {
   type ArcSegment, arcStepCount, pathsToPoints, segmentEnd, segmentStart, tessellatePath, tessellateSegment,
 } from '../src/geometry/path2d';
 import {
-  AFFINE_IDENTITY, affineApply, affineMultiply, affineRotate, affineScale, affineTranslate, isSimilarity,
+  AFFINE_IDENTITY, affineApply, affineMaxStretch, affineMultiply, affineRotate, affineScale, affineTranslate, isSimilarity,
 } from '../src/import/dxf/affine2d';
 import { bulgeSegment, polylineToPath, transformSegment } from '../src/import/dxf/entities';
 
@@ -49,6 +49,15 @@ describe('affine2d', () => {
     expect(isSimilarity(affineMultiply(affineRotate(0.3), affineScale(2, 2)))).toBe(true);
     expect(isSimilarity(affineScale(-1, 1))).toBe(true);
     expect(isSimilarity(affineScale(2, 1))).toBe(false);
+  });
+
+  it('computes the exact maximum stretch (largest singular value)', () => {
+    expect(affineMaxStretch(AFFINE_IDENTITY)).toBeCloseTo(1, 12);
+    expect(affineMaxStretch(affineScale(2, 1))).toBeCloseTo(2, 12);
+    expect(affineMaxStretch(affineMultiply(affineRotate(Math.PI / 4), affineScale(2, 1)))).toBeCloseTo(2, 12);
+    expect(affineMaxStretch(affineMultiply(affineScale(2, 1), affineRotate(Math.PI / 4)))).toBeCloseTo(2, 12);
+    expect(affineMaxStretch(affineMultiply(affineRotate(0.3), affineScale(3, 3)))).toBeCloseTo(3, 12);
+    expect(affineMaxStretch(affineScale(-1, 0.5))).toBeCloseTo(1, 12);
   });
 });
 

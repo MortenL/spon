@@ -1,5 +1,5 @@
 import { arcPoint, type Path2D, type Segment, tessellateSegment, type Vec2 } from '../../geometry/path2d';
-import { affineApply, affineDeterminant, type Affine2D, isSimilarity } from './affine2d';
+import { affineApply, affineDeterminant, affineMaxStretch, type Affine2D, isSimilarity } from './affine2d';
 
 const TAU = 2 * Math.PI;
 
@@ -64,7 +64,7 @@ export function transformSegment(s: Segment, m: Affine2D, chordTol: number): Seg
     }];
   }
   // Non-uniform scale: the arc becomes part of an ellipse, so flatten it (tolerance measured after stretching).
-  const stretch = Math.max(Math.hypot(m.a, m.b), Math.hypot(m.c, m.d));
+  const stretch = affineMaxStretch(m);
   const pts = tessellateSegment(s, chordTol / stretch).map((p) => affineApply(m, p));
   const out: Segment[] = [];
   for (let i = 1; i < pts.length; i++) out.push({ kind: 'line', from: pts[i - 1], to: pts[i] });
