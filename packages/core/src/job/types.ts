@@ -1,3 +1,4 @@
+import type { MachineProfile } from './machine';
 import type { Quat } from '../geometry/quat';
 import type { Vec3 } from '../geometry/vec3';
 import type { ModelKind } from '../import/importFile';
@@ -43,13 +44,26 @@ export interface Wcs {
   workOffset: WorkOffset;
 }
 
+export interface ProgramRef {
+  id: string;
+  /** Original file name. */
+  name: string;
+  /** Key of the program bytes (programs/<blobId>.nc in .spon, IndexedDB blobs). */
+  blobId: string;
+  /** Included in the combined back-to-back timeline. */
+  inTimeline: boolean;
+}
+
 /** All lengths in mm, angles in degrees. */
 export interface Job {
-  schemaVersion: 1;
+  schemaVersion: 2;
   id: string;
   name: string;
   displayUnits: LengthUnit;
   model: ModelRef | null;
   stock: Stock;
   wcs: Wcs;
+  machine: MachineProfile;
+  /** List order is playback order. */
+  programs: ProgramRef[];
 }

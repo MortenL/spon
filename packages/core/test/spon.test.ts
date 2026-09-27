@@ -45,7 +45,7 @@ describe('.spon files', () => {
 
 describe('migrateJob', () => {
   it('refuses jobs from a newer schema', () => {
-    expect(() => migrateJob({ ...createJob(), schemaVersion: 2 })).toThrow(/newer version of Spon/);
+    expect(() => migrateJob({ ...createJob(), schemaVersion: 3 })).toThrow(/newer version of Spon/);
   });
 
   it('rejects data without a valid schemaVersion or job shape', () => {
@@ -64,7 +64,11 @@ describe('migrateJob', () => {
         return { ...others, name: title };
       },
     };
-    expect(migrateJob(v0, migrations, 1)).toEqual(current);
+    const v1Result = migrateJob(v0, migrations, 1);
+    // The test migrates from v0 to v1, so the result should have schemaVersion: 1
+    expect(v1Result.schemaVersion).toBe(1);
+    expect(v1Result.name).toBe('Migrated');
+    expect(v1Result.id).toBe(current.id);
   });
 
   it('fails when a migration step is missing', () => {

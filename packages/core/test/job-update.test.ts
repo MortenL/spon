@@ -19,7 +19,7 @@ describe('createJob', () => {
   it('uses the spec defaults', () => {
     const job = createJob();
     expect(job).toMatchObject({
-      schemaVersion: 1, name: 'Untitled', displayUnits: 'mm', model: null,
+      schemaVersion: 2, name: 'Untitled', displayUnits: 'mm', model: null,
       stock: { mode: 'auto', margin: { xy: 5, zTop: 1, zBottom: 0 } },
       wcs: { anchor: { x: 'min', y: 'min', z: 'top' }, offset: { x: 0, y: 0, z: 0 }, workOffset: 'G54' },
     });

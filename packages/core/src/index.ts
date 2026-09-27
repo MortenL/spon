@@ -22,3 +22,5 @@ export * from './job/derive';
 export * from './io/errors';
 export * from './io/migrations';
 export * from './io/spon';
+export * from './job/machine';
+export * from './job/programs';

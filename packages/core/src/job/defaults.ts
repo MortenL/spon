@@ -1,3 +1,4 @@
+import { DEFAULT_MACHINE_PRESET, machinePreset } from './machine';
 import { QUAT_IDENTITY } from '../geometry/quat';
 import type { AutoStock, Job, ModelTransform, Wcs } from './types';
 
@@ -15,12 +16,14 @@ export function identityTransform(): ModelTransform {
 
 export function createJob(name = 'Untitled'): Job {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: crypto.randomUUID(),
     name,
     displayUnits: 'mm',
     model: null,
     stock: structuredClone(DEFAULT_AUTO_STOCK) as AutoStock,
     wcs: structuredClone(DEFAULT_WCS) as Wcs,
+    machine: machinePreset(DEFAULT_MACHINE_PRESET),
+    programs: [],
   };
 }

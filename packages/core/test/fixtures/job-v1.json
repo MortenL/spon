@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "0f8e2c1a-5b7d-4c3e-9a1f-2d6b8e4c7a90",
+  "name": "Bracket",
+  "displayUnits": "mm",
+  "model": {
+    "sourceName": "bracket.stl",
+    "blobId": "b1",
+    "kind": "mesh",
+    "importUnits": "mm",
+    "transform": { "base": { "x": 0, "y": 0, "z": 0, "w": 1 }, "zDeg": 0 }
+  },
+  "stock": { "mode": "auto", "margin": { "xy": 5, "zTop": 1, "zBottom": 0 } },
+  "wcs": { "anchor": { "x": "min", "y": "min", "z": "top" }, "offset": { "x": 0, "y": 0, "z": 0 }, "workOffset": "G54" }
+}
