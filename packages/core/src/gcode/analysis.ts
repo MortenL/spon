@@ -78,6 +78,7 @@ export function analyzeTable(table: MotionTable, lineFlags: Uint8Array, ctx: Ana
   let cut = 0, rapid = 0, plunge = 0;
   let feedMin = Infinity, feedMax = -Infinity;
   let moves = 0;
+  let prevMachineCoords = false; // previous row was a G53 machine-coordinate move: this row's start is unknown too
 
   for (let i = 0; i < table.count; i++) {
     const kind = table.kind[i];
@@ -91,7 +92,12 @@ export function analyzeTable(table: MotionTable, lineFlags: Uint8Array, ctx: Ana
 
     moves++;
     const flags = table.flags[i];
-    const unknownStart = (flags & RowFlag.UnknownStart) !== 0;
+    const machineCoords = (flags & RowFlag.MachineCoords) !== 0;
+    // G53 targets are machine coordinates, not program coordinates: neither the G53 move itself
+    // nor the move right after it (whose start is really that machine-coordinate end point) can be
+    // meaningfully checked against the (program-coordinate) stock box.
+    const unknownStart = (flags & RowFlag.UnknownStart) !== 0 || prevMachineCoords;
+    prevMachineCoords = machineCoords;
     rowStart(table, i, s);
     for (let j = 0; j < 3; j++) {
       e[j] = table.end[i * 3 + j];
@@ -111,7 +117,7 @@ export function analyzeTable(table: MotionTable, lineFlags: Uint8Array, ctx: Ana
       if (rowMax[j] > max[j]) max[j] = rowMax[j];
     }
 
-    if (unknownStart) continue;
+    if (unknownStart || machineCoords) continue;
 
     if (kind === MoveKind.Rapid) {
       rapid += k.length;

@@ -54,6 +54,16 @@ describe('analyzeTable: stock checks', () => {
     expect(codes(analyse('G1 Z-7 F300\nG0 Z5\n'))).toEqual(['below-stock-bottom@3']);
   });
 
+  it('ignores G53 (machine-coordinate) moves and the move directly after one, checked in program coordinates', () => {
+    // G53 targets are machine coordinates, not program coordinates, so checking them (or the very
+    // next move, whose start is really the machine-coordinate end point) against the program's
+    // stock box is meaningless and gives false positives.
+    expect(codes(analyse('G53 G0 Z-2\n'))).toEqual([]);
+    expect(codes(analyse('G53 G0 Z-2\nG0 X10\n'))).toEqual([]);
+    // but checks resume normally for the move after that
+    expect(codes(analyse('G53 G0 Z-2\nG0 X10\nG1 X15 Z-7 F300\n'))).toEqual(['below-stock-bottom@5']);
+  });
+
   it('falls back to "below Z 0" without stock', () => {
     const x = analyse('G0 Z-1\nG0 Z5\n', null);
     expect(codes(x)).toEqual(['rapid-into-stock@3']);
