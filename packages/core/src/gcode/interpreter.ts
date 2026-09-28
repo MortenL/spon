@@ -27,7 +27,7 @@ export interface InterpretResult {
 const L = (c: string) => c.charCodeAt(0);
 const LETTER = { F: L('F'), G: L('G'), H: L('H'), I: L('I'), J: L('J'), K: L('K'), M: L('M'), P: L('P'), Q: L('Q'), R: L('R'), S: L('S'), T: L('T'), X: L('X'), Y: L('Y'), Z: L('Z'), D: L('D') };
 const WORK_OFFSET_CODES: Record<string, WorkOffset> = { '54': 'G54', '55': 'G55', '56': 'G56', '57': 'G57', '58': 'G58', '59': 'G59' };
-const IGNORED_G = new Set([40, 49, 61, 64, 94]);
+const IGNORED_G = new Set([40, 49, 61, 64]);
 const IGNORED_M = new Set([7, 8, 9, 2, 30]);
 
 class BudgetExceeded extends Error {}
@@ -58,12 +58,14 @@ export function interpretProgram(text: string, opts: InterpretOptions): Interpre
   let cycleR = NaN, cycleZ = NaN, cycleQ = 0, cycleP = 0, cycleInitialZ = NaN;
   let usesInch = false;
   let usesG43 = false;
+  let inverseTime = false; // G93: F means minutes/feed-length rather than mm/min; not simulated
   let pendingG43Line = -1; // tool change still waiting for G43 before a Z move
   const missingG43: number[] = [];
   const pos = [0, 0, 0];
   const known = [false, false, false];
 
   let line = 0;
+  let inverseTimeFlaggedThisLine = false;
   const addRow = (kind: number, x: number, y: number, z: number, cx: number, cy: number, cz: number, pl: number, f: number, param: number, flags: number) => {
     if (builder.count >= maxRows) throw new BudgetExceeded();
     if (firstMoveOfLine[line] < 0) firstMoveOfLine[line] = builder.count;
@@ -78,6 +80,10 @@ export function interpretProgram(text: string, opts: InterpretOptions): Interpre
   const checkFeed = () => {
     if (feed === null) diag('feed-no-f', 'error', 'Feed move before any F word');
     if (!spindleOn) diag('feed-spindle-off', 'error', 'Feed move with the spindle stopped');
+    if (inverseTime && !inverseTimeFlaggedThisLine) {
+      inverseTimeFlaggedThisLine = true;
+      notSimulated('Inverse-time feed (G93) is not simulated');
+    }
   };
   const noteZMove = (z: number) => {
     if (pendingG43Line >= 0 && Math.abs(z - pos[2]) > 1e-9) {
@@ -136,7 +142,7 @@ export function interpretProgram(text: string, opts: InterpretOptions): Interpre
       let dwell = false;
       let home = false;
       let cycleCode: CycleCode | null = null;
-      let skipMotion = false;
+      inverseTimeFlaggedThisLine = false;
       for (const code of g) {
         if (code === 20 || code === 21) continue;
         if (code === 0 || code === 1 || code === 2 || code === 3) motion = code;
@@ -156,9 +162,11 @@ export function interpretProgram(text: string, opts: InterpretOptions): Interpre
         } else if (code === 98 || code === 99) retract = code;
         else if (code === 41 || code === 42) notSimulated('Cutter compensation is not simulated; path drawn without it');
         else if (code === 93) {
+          inverseTime = true;
+          inverseTimeFlaggedThisLine = true;
           notSimulated('Inverse-time feed (G93) is not simulated');
-          skipMotion = true;
-        } else if (String(code) in WORK_OFFSET_CODES) {
+        } else if (code === 94) inverseTime = false;
+        else if (String(code) in WORK_OFFSET_CODES) {
           workOffset = WORK_OFFSET_CODES[String(code)];
           if (workOffset !== opts.jobWorkOffset) diag('other-work-offset', 'warning', `Program uses ${workOffset}; drawn at the job's ${opts.jobWorkOffset} origin`);
         } else if (code === 54.1) notSimulated('Extended work offsets (G54.1) are not simulated');
@@ -180,8 +188,6 @@ export function interpretProgram(text: string, opts: InterpretOptions): Interpre
         else if (code === 98 || code === 99) notSimulated(`M${code} subprograms are not simulated`);
         else if (!IGNORED_M.has(code)) notSimulated(`M${code} is not simulated`);
       }
-      if (skipMotion) continue;
-
       if (dwell) {
         const seconds = !Number.isNaN(p) ? p : !Number.isNaN(x) ? x : 0;
         addRow(MoveKind.Dwell, pos[0], pos[1], pos[2], 0, 0, 0, 0, 0, seconds, 0);

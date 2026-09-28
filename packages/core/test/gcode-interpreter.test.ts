@@ -80,6 +80,18 @@ describe('interpretProgram: motion and modal state', () => {
     expect(r.table.count).toBe(1);
   });
 
+  it('flags feed moves under G93 (inverse-time feed) as not simulated, until G94 cancels it', () => {
+    const r = run(`${HEADER}G0 X0 Y0 Z0\nG93\nG1 X1 F2\nG1 X2 F2\nG94\nG1 X3 F100\n`);
+    // lines: 0/1 header, 2 G0, 3 G93, 4/5 the two G1s under G93, 6 G94, 7 the G1 after G94
+    expect(r.lineFlags[4] & LineFlag.NotSimulated).toBeTruthy();
+    expect(r.lineFlags[5] & LineFlag.NotSimulated).toBeTruthy();
+    expect(r.lineFlags[7] & LineFlag.NotSimulated).toBeFalsy();
+    expect(codes(r)).toEqual(expect.arrayContaining(['not-simulated@3', 'not-simulated@4', 'not-simulated@5']));
+    expect(codes(r).filter((c) => c === 'not-simulated@7')).toEqual([]);
+    // the rows are still drawn and timed, same as any other not-simulated construct
+    expect(kinds(r)).toEqual([MoveKind.Rapid, MoveKind.Feed, MoveKind.Feed, MoveKind.Feed]);
+  });
+
   it('warns about other work offsets and G53', () => {
     const r = run(`${HEADER}G55 G0 X1 Y1 Z1\nG53 G0 Z0\n`);
     expect(codes(r)).toEqual(expect.arrayContaining(['other-work-offset@2', 'other-work-offset@3']));
