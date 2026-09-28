@@ -55,4 +55,33 @@ describe('timeline', () => {
     // A's last move (row 1) starts at program-local time 2, so global time is 0 + 2 = 2
     expect(stepTime(tl, all, 5, -1)).toBe(2);
   });
+
+  it('steps forward repeatedly without sticking on a row boundary', () => {
+    // three dwells: row ends at t = [2, 5, 9]; repeated forward steps must advance through each,
+    // then stay at the program's end (there is nothing after it).
+    const progs = [prog('C', 'c')];
+    const allC = { c: data('G4 P2\nG4 P3\nG4 P4\n') };
+    const tl = buildTimeline(progs, allC);
+    let t = 0;
+    const times: number[] = [];
+    for (let n = 0; n < 4; n++) {
+      t = stepTime(tl, allC, t, 1);
+      times.push(t);
+    }
+    expect(times).toEqual([2, 5, 9, 9]);
+  });
+
+  it('steps forward across into the next program', () => {
+    const progs = [prog('A3', 'a3'), prog('B3', 'b3')];
+    const all3 = { a3: data('G4 P2\nG4 P3\n'), b3: data('G4 P10\n') };
+    const tl = buildTimeline(progs, all3);
+    let t = 0;
+    const times: number[] = [];
+    for (let n = 0; n < 3; n++) {
+      t = stepTime(tl, all3, t, 1);
+      times.push(t);
+    }
+    expect(times).toEqual([2, 5, 15]);
+    expect(locate(tl, t)?.entry.programId).toBe('B3');
+  });
 });

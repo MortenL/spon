@@ -54,7 +54,14 @@ export function stepTime(tl: Timeline, data: Readonly<Record<string, ProgramData
   if (!table || table.count === 0) return at.entry.start;
   const row = rowAtTime(table, at.local);
   const rowStart = rowStartTime(table, row);
-  if (direction === 1) return at.entry.start + table.t[row]; // start of the next move = end of this one
+  if (direction === 1) {
+    // Skip forward past any row (including zero-duration ones) whose end is not strictly after
+    // the playhead, so landing exactly on a row boundary doesn't stick there.
+    let r = row;
+    while (r < table.count && table.t[r] <= at.local + 1e-9) r++;
+    if (r < table.count) return at.entry.start + table.t[r];
+    return at.entry.start + at.entry.duration; // no move left in this program: the next program's start
+  }
   if (at.local - rowStart > 1e-9) return at.entry.start + rowStart; // inside a move: back to its start
   if (row > 0) return at.entry.start + rowStartTime(table, row - 1); // previous move in this program
   // At row 0: step back to the last move of the previous program if it exists
