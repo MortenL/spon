@@ -77,7 +77,7 @@ function platePocketTriangles() {
   const rect = (x0, y0, x1, y1, ccw) => (ccw ? [[x0, y0], [x1, y0], [x1, y1], [x0, y1]] : [[x0, y0], [x0, y1], [x1, y1], [x1, y0]]);
   const outer = rect(0, 0, 80, 50, true);
   const pocket = rect(10, 15, 40, 35, false);
-  const blind = circle(30, 30, 3, false);
+  const blind = circle(25, 25, 3, false);
   const thru1 = circle(60, 15, 4, false);
   const thru2 = circle(60, 35, 4, false);
   const tris = [];
@@ -98,8 +98,43 @@ function platePocketTriangles() {
       tris.push([ax, ay, z0, bx, by, z0, bx, by, z1], [ax, ay, z0, bx, by, z1, ax, ay, z1]);
     }
   };
+  // A rectangle with one interior circular hole (the pocket floor's blind hole), triangulated by hand.
+  // clipper2-ts's triangulate() silently mis-triangulates this "outer + interior hole" shape for many
+  // hole positions (it loses area and can merge part of the hole boundary into the outer boundary)
+  // unless the hole sits close to an outer edge; verified directly against its raw output for a range
+  // of centres. This sidesteps the bug: fan out from each hole vertex to the point where its ray from
+  // the centre meets the rectangle, threading in the rectangle's own corners wherever a ray would
+  // otherwise skip over one, for an exact triangulation with no third-party triangulator involved.
+  const annulus = (x0, y0, x1, y1, cx, cy, holeCcw, z, up) => {
+    const norm = (a) => (a < 0 ? a + 2 * Math.PI : a);
+    const hole = holeCcw.map(([x, y]) => ({ x, y, a: norm(Math.atan2(y - cy, x - cx)) }));
+    const project = (dx, dy) => {
+      const ts = [];
+      if (dx > 0) ts.push((x1 - cx) / dx);
+      if (dx < 0) ts.push((x0 - cx) / dx);
+      if (dy > 0) ts.push((y1 - cy) / dy);
+      if (dy < 0) ts.push((y0 - cy) / dy);
+      const t = Math.min(...ts);
+      return { x: round(cx + dx * t), y: round(cy + dy * t) };
+    };
+    const proj = hole.map((h) => project(h.x - cx, h.y - cy));
+    const corners = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map(([x, y]) => ({ x, y, a: norm(Math.atan2(y - cy, x - cx)) }));
+    const n = hole.length;
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      const aEnd = j === 0 ? 2 * Math.PI : hole[j].a;
+      const between = corners.filter((c) => c.a > hole[i].a && c.a < aEnd).sort((p, q) => p.a - q.a).reverse();
+      const poly = [hole[j], proj[j], ...between, proj[i]];
+      for (let k = 0; k < poly.length - 1; k++) {
+        let [a, b, c] = [hole[i], poly[k], poly[k + 1]].map((p) => [p.x, p.y, z]);
+        const cross = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+        if ((cross > 0) !== up) [b, c] = [c, b];
+        tris.push([...a, ...b, ...c]);
+      }
+    }
+  };
   face([outer, pocket, thru1, thru2], 10, true); // top
-  face([rect(10, 15, 40, 35, true), blind], 6, true); // pocket floor
+  annulus(10, 15, 40, 35, 25, 25, circle(25, 25, 3, true), 6, true); // pocket floor
   face([circle(25, 25, 3, true)], 3, true); // blind hole bottom
   face([outer, thru1, thru2], 0, false); // bottom
   walls(outer, 0, 10);
