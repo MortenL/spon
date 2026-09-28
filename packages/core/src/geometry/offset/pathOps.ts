@@ -15,8 +15,15 @@ export function pathLength(p: Path2D): number {
   return total;
 }
 
-export const pathStart = (p: Path2D): Vec2 => segmentStart(p.segments[0]);
-export const pathEnd = (p: Path2D): Vec2 => segmentEnd(p.segments[p.segments.length - 1]);
+export function pathStart(p: Path2D): Vec2 {
+  if (p.segments.length === 0) throw new Error('Path has no segments');
+  return segmentStart(p.segments[0]);
+}
+
+export function pathEnd(p: Path2D): Vec2 {
+  if (p.segments.length === 0) throw new Error('Path has no segments');
+  return segmentEnd(p.segments[p.segments.length - 1]);
+}
 
 /** Point and unit tangent (direction of travel) at distance `d` from the segment start, clamped to the segment. */
 export function segmentPointAt(s: Segment, d: number): { point: Vec2; tangent: Vec2 } {

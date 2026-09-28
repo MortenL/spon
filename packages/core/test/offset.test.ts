@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  type ArcSegment, nearestS, offsetPolys, pathArea, pathFromPoints, pathLength, pointAt, pointInPolys, type Poly, polysArea,
+  type ArcSegment, cornerDistances, fitArcs, nearestS, offsetPolys, orientPath, pathArea, pathEnd, pathFromPoints, pathLength, pathStart, pointAt, pointInPolys, type Poly, polysArea,
   polysToRegions, reversePath, rotateStart, segmentInside, subPath, sweepPolylines, unionPolys, v2,
 } from '../src';
 
@@ -74,5 +74,50 @@ describe('path operations', () => {
     const n = nearestS({ segments: [arc], closed: false }, v2(0, 5));
     expect(n.s).toBeCloseTo(Math.PI, 9);
     expect(n.distance).toBeCloseTo(3, 9);
+  });
+
+  it('gets start and end points of paths', () => {
+    expect(pathStart(square)).toEqual({ x: 0, y: 0 });
+    expect(pathEnd(square)).toEqual({ x: 0, y: 0 });
+    const openArc = { segments: [arc], closed: false };
+    expect(pathStart(openArc)).toEqual({ x: 2, y: 0 });
+    expect(pathEnd(openArc).x).toBeCloseTo(-2, 9);
+    expect(pathEnd(openArc).y).toBeCloseTo(0, 9);
+  });
+
+  it('throws clear error for pathStart/pathEnd on empty paths', () => {
+    const empty = { segments: [], closed: false };
+    expect(() => pathStart(empty)).toThrow('Path has no segments');
+    expect(() => pathEnd(empty)).toThrow('Path has no segments');
+  });
+
+  it('orients paths to counter-clockwise or clockwise', () => {
+    const ccwSquare = orientPath(square, true);
+    expect(pathArea(ccwSquare)).toBeCloseTo(100, 9);
+    const cwSquare = orientPath(square, false);
+    expect(pathArea(cwSquare)).toBeCloseTo(-100, 9);
+    const reversed = reversePath(square);
+    expect(orientPath(reversed, true)).toEqual(square);
+    const zeroArea = { segments: [], closed: false };
+    expect(orientPath(zeroArea, true)).toEqual(zeroArea);
+  });
+
+  it('finds corner distances where direction turns sharply', () => {
+    const corners = cornerDistances(square, 30);
+    expect(corners).toEqual([0, 10, 20, 30]);
+  });
+
+  it('finds no corners in tangent-joined rounded rectangle', () => {
+    const [poly] = offsetPolys([[v2(0, 0), v2(20, 0), v2(20, 10), v2(0, 10)]], 3, 0.002);
+    const rounded = fitArcs(poly, true, 0.002);
+    expect(cornerDistances(rounded, 30)).toEqual([]);
+  });
+
+  it('finds corner at joint in L-shaped open path', () => {
+    const l = { segments: [
+      { kind: 'line' as const, from: v2(0, 0), to: v2(10, 0) },
+      { kind: 'line' as const, from: v2(10, 0), to: v2(10, 10) }
+    ], closed: false };
+    expect(cornerDistances(l, 30)).toEqual([10]);
   });
 });
