@@ -111,7 +111,7 @@ function upFacingCentroids(ctx: CamContext): { x: number; y: number; z: number }
 export function holeBottom(ctx: CamContext, center: Vec2, radius: number, top: number): { bottom: number; through: boolean } {
   let best = -Infinity;
   for (const c of upFacingCentroids(ctx)) {
-    if (c.z < top - 1e-6 && Math.hypot(c.x - center.x, c.y - center.y) <= radius && c.z > best) best = c.z;
+    if (c.z < top - 1e-6 && Math.hypot(c.x - center.x, c.y - center.y) < radius * 0.999 && c.z > best) best = c.z;
   }
   return best > -Infinity ? { bottom: best, through: false } : { bottom: ctx.model?.min.z ?? top, through: true };
 }

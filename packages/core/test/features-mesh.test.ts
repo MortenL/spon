@@ -1,6 +1,17 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { applyCommand, camContext, type CamGeometry, circleOf, describeGeometry, layFlat, pathArea, resolveFaceRef, resolveGeometry, vec3 } from '../src';
+import { applyCommand, camContext, type CamGeometry, circleOf, describeGeometry, importFile, layFlat, pathArea, resolveFaceRef, resolveGeometry, vec3 } from '../src';
 import { faceAt, plateSetup } from './fixtures/camSetup';
+
+describe('plate-pocket.stl', () => {
+  it('imports as a closed, manifold mesh', () => {
+    const r = importFile('plate-pocket.stl', readFileSync(new URL('./fixtures/plate-pocket.stl', import.meta.url)));
+    if (!r.ok || r.kind !== 'mesh') throw new Error('fixture did not import');
+    expect(r.warnings).toEqual([]);
+    expect(r.adjacency.openEdges).toBe(0);
+    expect(r.adjacency.nonManifoldEdges).toBe(0);
+  });
+});
 
 describe('mesh faces', () => {
   it('resolves the top face with its outer loop, pocket rim and two round holes', () => {

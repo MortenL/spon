@@ -3,7 +3,6 @@
 import { writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { triangulate } from 'clipper2-ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -68,6 +67,14 @@ function camPartDxf() {
 
 // 80 × 50 × 10 plate: blind pocket (x 10–40, y 15–35, floor z 6) with a blind Ø6 hole (centre 25,25, bottom z 3),
 // and two through holes Ø8 at (60,15) and (60,35). All holes are 16-gons; coordinates are on a 0.001 mm grid.
+//
+// Every flat face is triangulated by hand (no third-party triangulator): clipper2-ts's triangulate()
+// (v2.0.1-18, a beta release) silently mis-triangulates a polygon with an interior hole for many hole
+// placements - it loses area, and can merge part of a hole's boundary into the outer boundary - unless
+// the hole happens to sit close to an outer edge; verified directly against its raw output for a range
+// of hole centres, radii, segment counts and loop windings. Every face here keeps its outer loop and
+// hole loops exactly as the vertex-for-vertex loops `walls()` uses for the same boundary, so every seam
+// between a face and its walls shares vertices and the mesh closes without open or non-manifold edges.
 function platePocketTriangles() {
   const round = (v) => Math.round(v * 1000) / 1000;
   const circle = (cx, cy, r, ccw) => {
@@ -81,16 +88,6 @@ function platePocketTriangles() {
   const thru1 = circle(60, 15, 4, false);
   const thru2 = circle(60, 35, 4, false);
   const tris = [];
-  // triangulated flat face at height z; up = normal +Z (else -Z)
-  const face = (loops, z, up) => {
-    const { solution } = triangulate(loops.map((l) => l.map(([x, y]) => ({ x: Math.round(x * 1000), y: Math.round(y * 1000) }))));
-    for (const t of solution) {
-      let [a, b, c] = t.map((p) => [p.x / 1000, p.y / 1000, z]);
-      const cross = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
-      if ((cross > 0) !== up) [b, c] = [c, b];
-      tris.push([...a, ...b, ...c]);
-    }
-  };
   // vertical walls along a loop from z0 to z1; normal is to the right of travel
   const walls = (loop, z0, z1) => {
     for (let i = 0; i < loop.length; i++) {
@@ -98,45 +95,97 @@ function platePocketTriangles() {
       tris.push([ax, ay, z0, bx, by, z0, bx, by, z1], [ax, ay, z0, bx, by, z1, ax, ay, z1]);
     }
   };
-  // A rectangle with one interior circular hole (the pocket floor's blind hole), triangulated by hand.
-  // clipper2-ts's triangulate() silently mis-triangulates this "outer + interior hole" shape for many
-  // hole positions (it loses area and can merge part of the hole boundary into the outer boundary)
-  // unless the hole sits close to an outer edge; verified directly against its raw output for a range
-  // of centres. This sidesteps the bug: fan out from each hole vertex to the point where its ray from
-  // the centre meets the rectangle, threading in the rectangle's own corners wherever a ray would
-  // otherwise skip over one, for an exact triangulation with no third-party triangulator involved.
-  const annulus = (x0, y0, x1, y1, cx, cy, holeCcw, z, up) => {
-    const norm = (a) => (a < 0 ? a + 2 * Math.PI : a);
-    const hole = holeCcw.map(([x, y]) => ({ x, y, a: norm(Math.atan2(y - cy, x - cx)) }));
-    const project = (dx, dy) => {
-      const ts = [];
-      if (dx > 0) ts.push((x1 - cx) / dx);
-      if (dx < 0) ts.push((x0 - cx) / dx);
-      if (dy > 0) ts.push((y1 - cy) / dy);
-      if (dy < 0) ts.push((y0 - cy) / dy);
-      const t = Math.min(...ts);
-      return { x: round(cx + dx * t), y: round(cy + dy * t) };
-    };
-    const proj = hole.map((h) => project(h.x - cx, h.y - cy));
-    const corners = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map(([x, y]) => ({ x, y, a: norm(Math.atan2(y - cy, x - cx)) }));
-    const n = hole.length;
-    for (let i = 0; i < n; i++) {
-      const j = (i + 1) % n;
-      const aEnd = j === 0 ? 2 * Math.PI : hole[j].a;
-      const between = corners.filter((c) => c.a > hole[i].a && c.a < aEnd).sort((p, q) => p.a - q.a).reverse();
-      const poly = [hole[j], proj[j], ...between, proj[i]];
-      for (let k = 0; k < poly.length - 1; k++) {
-        let [a, b, c] = [hole[i], poly[k], poly[k + 1]].map((p) => [p.x, p.y, z]);
-        const cross = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
-        if ((cross > 0) !== up) [b, c] = [c, b];
-        tris.push([...a, ...b, ...c]);
+  const dist2 = (a, b) => (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2;
+  const orient = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  const samePt = (a, b) => Math.abs(a[0] - b[0]) < 1e-9 && Math.abs(a[1] - b[1]) < 1e-9;
+  const edgesOf = (poly) => poly.map((p, i) => [p, poly[(i + 1) % poly.length]]);
+  // Splices `hole` (CW) into `polygon` (CCW) as a single simple polygon, bridging from the vertex of
+  // `polygon` at `anchor` to hole's nearest vertex (the classic "keyhole" construction: the bridge is
+  // walked forward then back, so it cancels out as an internal edge once triangulated). The bridge's
+  // "return" pair is nudged a hairline off the true points - collapsing them exactly would leave a
+  // zero-width slit that standard ear-clipping can't find a valid ear next to - and then mapped back to
+  // the exact original coordinates before any triangle is emitted, via `nudgeMap`.
+  const bridgeHole = (polygon, anchor, hole, nudgeMap) => {
+    const i = polygon.findIndex((p) => samePt(p, anchor));
+    const p = polygon[i];
+    let j = 0, best = Infinity;
+    for (let k = 0; k < hole.length; k++) { const d = dist2(p, hole[k]); if (d < best) { best = d; j = k; } }
+    const h = hole[j];
+    const allEdges = [...edgesOf(polygon), ...edgesOf(hole)];
+    for (const [e1, e2] of allEdges) {
+      if (samePt(p, e1) || samePt(p, e2) || samePt(h, e1) || samePt(h, e2)) continue;
+      const d1 = orient(e1, e2, p), d2 = orient(e1, e2, h), d3 = orient(p, h, e1), d4 = orient(p, h, e2);
+      if (((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0))) throw new Error(`bridge ${p}->${h} crosses ${e1}-${e2}`);
+    }
+    const holeSeq = hole.slice(j).concat(hole.slice(0, j));
+    const dx = h[0] - p[0], dy = h[1] - p[1];
+    const len = Math.hypot(dx, dy) || 1;
+    const eps = 1e-4;
+    const nx = (dy / len) * eps, ny = (-dx / len) * eps;
+    const hReturn = [h[0] + nx, h[1] + ny];
+    const pReturn = [p[0] + nx, p[1] + ny];
+    nudgeMap.set(hReturn, h);
+    nudgeMap.set(pReturn, p);
+    const result = [];
+    for (let k = 0; k < polygon.length; k++) {
+      result.push(polygon[k]);
+      if (k === i) result.push(...holeSeq, hReturn, pReturn);
+    }
+    return result;
+  };
+  // Standard O(n^2) ear-clipping triangulation of a simple CCW polygon.
+  const earClip = (polyIn) => {
+    const verts = polyIn.slice();
+    const out = [];
+    let guard = 0;
+    while (verts.length > 3) {
+      if (++guard > 100000) throw new Error('ear clip: too many iterations');
+      let cut = false;
+      for (let i = 0; i < verts.length; i++) {
+        const n = verts.length;
+        const a = verts[(i - 1 + n) % n], b = verts[i], c = verts[(i + 1) % n];
+        if (orient(a, b, c) <= 1e-7) continue;
+        let blocked = false;
+        for (let k = 0; k < n; k++) {
+          if (k === (i - 1 + n) % n || k === i || k === (i + 1) % n) continue;
+          const pt = verts[k];
+          const d1 = orient(a, b, pt), d2 = orient(b, c, pt), d3 = orient(c, a, pt);
+          const hasNeg = d1 < -1e-9 || d2 < -1e-9 || d3 < -1e-9;
+          const hasPos = d1 > 1e-9 || d2 > 1e-9 || d3 > 1e-9;
+          if (!(hasNeg && hasPos)) { blocked = true; break; }
+        }
+        if (blocked) continue;
+        out.push([a, b, c]);
+        verts.splice(i, 1);
+        cut = true;
+        break;
       }
+      if (!cut) throw new Error(`ear clip: stuck with ${verts.length} vertices left`);
+    }
+    out.push(verts);
+    return out;
+  };
+  // Triangulates `outerCcw` minus each hole in `holes` (each `{ anchor, loop }`, loop in CW order,
+  // bridged from the outer/prior vertex at `anchor`), and pushes the result at height z (+Z normal iff
+  // `up`) into `tris`.
+  const faceWithHoles = (outerCcw, holes, z, up) => {
+    const nudgeMap = new Map();
+    let poly = outerCcw;
+    for (const { anchor, loop } of holes) poly = bridgeHole(poly, anchor, loop, nudgeMap);
+    const orig = (p) => nudgeMap.get(p) ?? p;
+    for (let [a, b, c] of earClip(poly)) {
+      a = orig(a); b = orig(b); c = orig(c);
+      let pa = [a[0], a[1], z], pb = [b[0], b[1], z], pc = [c[0], c[1], z];
+      if (Math.abs((pb[0] - pa[0]) * (pc[1] - pa[1]) - (pc[0] - pa[0]) * (pb[1] - pa[1])) < 1e-9) continue; // a nudge-slit collapsed to zero area
+      const cross = (pb[0] - pa[0]) * (pc[1] - pa[1]) - (pb[1] - pa[1]) * (pc[0] - pa[0]);
+      if ((cross > 0) !== up) [pb, pc] = [pc, pb];
+      tris.push([...pa, ...pb, ...pc]);
     }
   };
-  face([outer, pocket, thru1, thru2], 10, true); // top
-  annulus(10, 15, 40, 35, 25, 25, circle(25, 25, 3, true), 6, true); // pocket floor
-  face([circle(25, 25, 3, true)], 3, true); // blind hole bottom
-  face([outer, thru1, thru2], 0, false); // bottom
+  faceWithHoles(outer, [{ anchor: [0, 0], loop: pocket }, { anchor: [80, 0], loop: thru1 }, { anchor: [80, 50], loop: thru2 }], 10, true); // top
+  faceWithHoles(rect(10, 15, 40, 35, true), [{ anchor: [10, 15], loop: blind }], 6, true); // pocket floor
+  faceWithHoles(circle(25, 25, 3, true), [], 3, true); // blind hole bottom (no holes: earClip alone)
+  faceWithHoles(outer, [{ anchor: [80, 0], loop: thru1 }, { anchor: [80, 50], loop: thru2 }], 0, false); // bottom
   walls(outer, 0, 10);
   walls(pocket, 6, 10);
   walls(blind, 3, 6);
