@@ -2,7 +2,7 @@ import { bboxSize, type ParsedProgram, type ProgramRef } from '@sponcam/core';
 import { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { splitVertex, usePlaybackCursor, useTimeline } from '@/gcode/playback';
-import { buildToolpathBuffers } from '@/gcode/toolpath';
+import { buildToolpathBuffers, toolpathGeometryKey } from '@/gcode/toolpath';
 import { programOrigin } from '@/state/programContext';
 import { useStockBox } from '@/state/selectors';
 import { useApp } from '@/state/store';
@@ -26,7 +26,11 @@ export function Toolpaths() {
 }
 
 function ProgramToolpath({ program, parsed, showRapids }: { program: ProgramRef; parsed: ParsedProgram; showRapids: boolean }) {
-  const buffers = useMemo(() => buildToolpathBuffers(parsed.table, { showRapids }), [parsed.table, showRapids]);
+  // keyed on the geometry buildToolpathBuffers actually reads, not on `parsed.table` itself:
+  // reanalyzeAll replaces the table wrapper (a new `t` for timing) on every re-analysis while
+  // reusing these arrays, so keying on `parsed.table` would rebuild and re-upload every buffer then.
+  const geometryKey = toolpathGeometryKey(parsed.table);
+  const buffers = useMemo(() => buildToolpathBuffers(parsed.table, { showRapids }), [...geometryKey, showRapids]);
   // two geometries share the same attributes (one GPU upload); each has its own draw range
   const [done, todo] = useMemo(() => {
     const position = new THREE.BufferAttribute(buffers.positions, 3);

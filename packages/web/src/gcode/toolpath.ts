@@ -17,6 +17,17 @@ export interface ToolpathBuffers {
 
 const isArc = (kind: number) => kind === MoveKind.ArcCW || kind === MoveKind.ArcCCW;
 
+/**
+ * Stable identity for the geometry buildToolpathBuffers reads from a MotionTable (everything
+ * except `t`, timing): a memo keyed on these stays put across reanalyzeAll's `{...table, t}`
+ * re-timing pass, which shares these arrays but replaces the table wrapper itself, unlike a memo
+ * keyed on `table` directly, which would rebuild and re-upload every toolpath buffer on every
+ * re-analysis.
+ */
+export function toolpathGeometryKey(table: MotionTable): readonly unknown[] {
+  return [table.kind, table.end, table.arc, table.plane, table.start, table.count];
+}
+
 export function buildToolpathBuffers(table: MotionTable, opts: { showRapids: boolean; chordTol?: number }): ToolpathBuffers {
   const tol = opts.chordTol ?? 0.01;
   const s = [0, 0, 0];

@@ -1,6 +1,6 @@
 import { interpretProgram } from '@sponcam/core';
 import { describe, expect, it } from 'vitest';
-import { buildToolpathBuffers, TOOLPATH_COLORS } from './toolpath';
+import { buildToolpathBuffers, toolpathGeometryKey, TOOLPATH_COLORS } from './toolpath';
 
 const table = interpretProgram('G21 G90 G17\nS1 M3\nG0 X0 Y0 Z5\nG1 Z0 F100\nG1 X10\nG3 X-10 Y0 I-10 J0\nG4 P1\n', { jobWorkOffset: 'G54' }).table;
 
@@ -22,5 +22,24 @@ describe('buildToolpathBuffers', () => {
     const b = buildToolpathBuffers(table, { showRapids: false });
     expect(b.rowVertexEnd[0]).toBe(0);
     expect(b.rowVertexEnd[1]).toBe(2);
+  });
+});
+
+describe('toolpathGeometryKey', () => {
+  it('stays reference-stable across the {...table, t} spread reanalyzeAll uses (only `t` differs)', () => {
+    // simulate reanalyzeAll (packages/web/src/state/programs.ts): a fresh table wrapper sharing
+    // every geometry array, only `t` replaced after re-timing.
+    const reanalyzed = { ...table, t: new Float64Array(table.t.length) };
+    const before = toolpathGeometryKey(table);
+    const after = toolpathGeometryKey(reanalyzed);
+    expect(before.length).toBe(after.length);
+    for (let i = 0; i < before.length; i++) expect(after[i]).toBe(before[i]); // Object.is, not deep equality
+  });
+
+  it('changes when the actual geometry changes', () => {
+    const other = interpretProgram('G21 G90 G17\nS1 M3\nG0 X1 Y1 Z1\n', { jobWorkOffset: 'G54' }).table;
+    const key = toolpathGeometryKey(table);
+    const otherKey = toolpathGeometryKey(other);
+    expect(otherKey.some((v, i) => v !== key[i])).toBe(true);
   });
 });
