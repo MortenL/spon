@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyCommand, CommandError, createJob, defaultHeights, type Job, type JobCommand, newOperation, type Tool } from '../src';
+import { addProgram, applyCommand, CommandError, createJob, defaultHeights, setModel, type Job, type JobCommand, newOperation, type Tool } from '../src';
 
 const tool: Tool = {
   id: 't6', name: '6 mm flat', type: 'flat', number: 2, diameter: 6, cornerRadius: 0, tipAngleDeg: 0,
@@ -105,6 +105,66 @@ describe('applyCommand', () => {
     ];
     const direct = run(createJob(), ...commands);
     const viaJson = run(createJob(), ...(JSON.parse(JSON.stringify(commands)) as JobCommand[]));
+    expect({ ...viaJson, id: direct.id }).toEqual(direct);
+  });
+
+  it('survives a JSON round trip for every JobCommand variant', () => {
+    // Start with a job that has a model and programs (set up outside the command sequence)
+    let setupJob = setModel(createJob(), { sourceName: 'a.stl', blobId: 'm', kind: 'mesh', importUnits: 'mm' });
+    setupJob = addProgram(setupJob, { name: 'prog1', blobId: 'prog1' });
+    setupJob = addProgram(setupJob, { name: 'prog2', blobId: 'prog2' });
+    const [progId1, progId2] = setupJob.programs.map((p) => p.id);
+
+    // Build a sequence with one of every JobCommand variant (25 total)
+    const commands: JobCommand[] = [
+      // Milestone 1/2 commands (14)
+      { type: 'renameJob', name: 'Test Job' },
+      { type: 'setDisplayUnits', unit: 'in' },
+      { type: 'setImportUnits', unit: 'in' },
+      { type: 'rotateQuarter', axis: 'x', direction: 1 },
+      { type: 'layFlat', rawNormal: { x: 0, y: 0, z: 1 } },
+      { type: 'setZSpin', degrees: 45 },
+      { type: 'resetOrientation' },
+      { type: 'setStock', stock: { mode: 'fixed', size: { x: 100, y: 100, z: 50 }, modelOffset: { x: 0, y: 0, z: 0 } } },
+      { type: 'setWcs', patch: { workOffset: 'G55' } },
+      { type: 'setMachineProfile', patch: { maxFeed: 5000 } },
+      { type: 'applyMachinePreset', name: 'Hobby GRBL router' },
+      { type: 'moveProgram', id: progId1, delta: 1 },
+      { type: 'setProgramInTimeline', id: progId2, inTimeline: false },
+      { type: 'removeProgram', id: progId2 },
+      // Milestone 3 commands (11)
+      { type: 'addTool', tool },
+      { type: 'addOperation', opType: 'profile', toolId: 't6', id: 'op1' },
+      { type: 'updateOperation', id: 'op1', patch: { side: 'inside' } },
+      { type: 'addOperation', opType: 'pocket', toolId: 't6', id: 'op2' },
+      { type: 'moveOperation', id: 'op2', delta: -1 },
+      { type: 'duplicateOperation', id: 'op1', newId: 'op3' },
+      { type: 'setOperationEnabled', id: 'op3', enabled: false },
+      { type: 'updateTool', id: 't6', patch: { number: 5 } },
+      { type: 'removeOperation', id: 'op2' },
+      { type: 'setPost', patch: { dialect: 'fanuc' } },
+      { type: 'updateOperation', id: 'op1', patch: { toolId: null } },
+      { type: 'updateOperation', id: 'op3', patch: { toolId: null } },
+      { type: 'removeTool', id: 't6' },
+      { type: 'setTolerance', tolerance: 0.005 },
+    ];
+
+    // Exhaustiveness guard: ensure all 25 variants are covered
+    const covered = {
+      renameJob: 1, setDisplayUnits: 1, setImportUnits: 1, rotateQuarter: 1, layFlat: 1, setZSpin: 1,
+      resetOrientation: 1, setStock: 1, setWcs: 1, setMachineProfile: 1, applyMachinePreset: 1,
+      moveProgram: 1, setProgramInTimeline: 1, removeProgram: 1, addOperation: 1, updateOperation: 1,
+      removeOperation: 1, duplicateOperation: 1, moveOperation: 1, setOperationEnabled: 1, addTool: 1,
+      updateTool: 1, removeTool: 1, setPost: 1, setTolerance: 1,
+    } satisfies Record<JobCommand['type'], 1>;
+    const commandTypes = new Set(commands.map((c) => c.type));
+    const coveredTypes = Object.keys(covered);
+    expect(commandTypes.size).toBe(coveredTypes.length);
+    expect(Array.from(commandTypes).sort()).toEqual(coveredTypes.sort());
+
+    // Apply directly and via JSON round-trip, comparing with normalized ids
+    const direct = run(setupJob, ...commands);
+    const viaJson = run(setupJob, ...(JSON.parse(JSON.stringify(commands)) as JobCommand[]));
     expect({ ...viaJson, id: direct.id }).toEqual(direct);
   });
 });
