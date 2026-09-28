@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
+    "clipper2-ts": "2.0.1-18",
     "dxf-parser": "^1.1.2",
     "fflate": "^0.8.3"
   },
