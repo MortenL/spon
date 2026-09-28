@@ -3,6 +3,7 @@
 import { writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { triangulate } from 'clipper2-ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -19,9 +20,9 @@ function boxTriangles(sx, sy, sz) {
   ];
 }
 
-function binaryStl(tris) {
+function binaryStl(tris, header = 'Spon fixture: 20 x 10 x 5 mm box') {
   const bytes = new Uint8Array(84 + 50 * tris.length);
-  bytes.set(new TextEncoder().encode('Spon fixture: 20 x 10 x 5 mm box'));
+  bytes.set(new TextEncoder().encode(header));
   const view = new DataView(bytes.buffer);
   view.setUint32(80, tris.length, true);
   tris.forEach((t, i) => t.forEach((v, k) => view.setFloat32(84 + i * 50 + 12 + k * 4, v, true)));
@@ -65,7 +66,52 @@ function camPartDxf() {
   return groups.map(([code, value]) => `${code}\n${value}`).join('\n') + '\n';
 }
 
+// 80 × 50 × 10 plate: blind pocket (x 10–40, y 15–35, floor z 6) with a blind Ø6 hole (centre 25,25, bottom z 3),
+// and two through holes Ø8 at (60,15) and (60,35). All holes are 16-gons; coordinates are on a 0.001 mm grid.
+function platePocketTriangles() {
+  const round = (v) => Math.round(v * 1000) / 1000;
+  const circle = (cx, cy, r, ccw) => {
+    const pts = Array.from({ length: 16 }, (_, i) => [round(cx + r * Math.cos((2 * Math.PI * i) / 16)), round(cy + r * Math.sin((2 * Math.PI * i) / 16))]);
+    return ccw ? pts : pts.reverse();
+  };
+  const rect = (x0, y0, x1, y1, ccw) => (ccw ? [[x0, y0], [x1, y0], [x1, y1], [x0, y1]] : [[x0, y0], [x0, y1], [x1, y1], [x1, y0]]);
+  const outer = rect(0, 0, 80, 50, true);
+  const pocket = rect(10, 15, 40, 35, false);
+  const blind = circle(30, 30, 3, false);
+  const thru1 = circle(60, 15, 4, false);
+  const thru2 = circle(60, 35, 4, false);
+  const tris = [];
+  // triangulated flat face at height z; up = normal +Z (else -Z)
+  const face = (loops, z, up) => {
+    const { solution } = triangulate(loops.map((l) => l.map(([x, y]) => ({ x: Math.round(x * 1000), y: Math.round(y * 1000) }))));
+    for (const t of solution) {
+      let [a, b, c] = t.map((p) => [p.x / 1000, p.y / 1000, z]);
+      const cross = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+      if ((cross > 0) !== up) [b, c] = [c, b];
+      tris.push([...a, ...b, ...c]);
+    }
+  };
+  // vertical walls along a loop from z0 to z1; normal is to the right of travel
+  const walls = (loop, z0, z1) => {
+    for (let i = 0; i < loop.length; i++) {
+      const [ax, ay] = loop[i], [bx, by] = loop[(i + 1) % loop.length];
+      tris.push([ax, ay, z0, bx, by, z0, bx, by, z1], [ax, ay, z0, bx, by, z1, ax, ay, z1]);
+    }
+  };
+  face([outer, pocket, thru1, thru2], 10, true); // top
+  face([rect(10, 15, 40, 35, true), blind], 6, true); // pocket floor
+  face([circle(25, 25, 3, true)], 3, true); // blind hole bottom
+  face([outer, thru1, thru2], 0, false); // bottom
+  walls(outer, 0, 10);
+  walls(pocket, 6, 10);
+  walls(blind, 3, 6);
+  walls(thru1, 0, 10);
+  walls(thru2, 0, 10);
+  return tris;
+}
+
 writeFileSync(join(here, 'box-20x10x5.stl'), binaryStl(boxTriangles(20, 10, 5)));
+writeFileSync(join(here, 'plate-pocket.stl'), binaryStl(platePocketTriangles(), 'Spon fixture: plate with pocket and holes'));
 writeFileSync(join(here, 'plate-mm.dxf'), plateDxf());
 writeFileSync(join(here, 'cam-part.dxf'), camPartDxf());
-console.log('Wrote box-20x10x5.stl, plate-mm.dxf and cam-part.dxf');
+console.log('Wrote box-20x10x5.stl, plate-pocket.stl, plate-mm.dxf and cam-part.dxf');
