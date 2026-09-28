@@ -1,7 +1,7 @@
 import { formatLength } from '@sponcam/core';
 import { Pause, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { usePlaybackCursor, useTimeline } from '@/gcode/playback';
+import { movePlayhead, usePlaybackCursor, useTimeline } from '@/gcode/playback';
 import { formatDuration } from '@/panels/format';
 import { appStore, useApp } from '@/state/store';
 
@@ -19,7 +19,7 @@ export function TimelineBar() {
 
   const togglePlay = () => {
     const s = appStore.getState();
-    if (!s.playing && s.playhead >= tl.total) s.setPlayhead(0);
+    if (!s.playing && s.playhead >= tl.total) movePlayhead(0);
     s.setPlaying(!s.playing);
   };
 
@@ -39,9 +39,8 @@ export function TimelineBar() {
           type="range" min={0} max={1000} step={1} value={value} data-testid="timeline-scrubber" className="w-full accent-primary"
           disabled={tl.total <= 0}
           onChange={(e) => {
-            const s = appStore.getState();
-            s.setPlaying(false);
-            s.setPlayhead((Number(e.target.value) / 1000) * tl.total);
+            appStore.getState().setPlaying(false);
+            movePlayhead((Number(e.target.value) / 1000) * tl.total);
           }}
         />
         {tl.entries.slice(1).map((e) => (

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { appStore, useApp } from '../state/store';
-import { buildTimeline, locate } from './timeline';
+import { movePlayhead } from './playback';
+import { buildTimeline } from './timeline';
 
 /** Advances the playhead while playing; the active program follows the playhead. */
 export function usePlaybackLoop(): void {
@@ -17,13 +18,11 @@ export function usePlaybackLoop(): void {
       const next = s.playhead + (dt / 1000) * s.speed;
       last = now;
       if (tl.total <= 0 || next >= tl.total) {
-        s.setPlayhead(tl.total);
+        movePlayhead(tl.total);
         s.setPlaying(false);
         return;
       }
-      s.setPlayhead(next);
-      const at = locate(tl, next);
-      if (at && at.entry.programId !== s.activeProgramId) s.setActiveProgram(at.entry.programId);
+      movePlayhead(next);
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);

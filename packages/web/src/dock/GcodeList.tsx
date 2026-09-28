@@ -13,6 +13,7 @@ export function GcodeList() {
   const program = useApp((s) => s.job.programs.find((p) => p.id === s.activeProgramId) ?? null);
   const data = useApp((s) => (program ? s.programData[program.blobId] : undefined));
   const selectedLine = useApp((s) => s.selectedLine);
+  const playing = useApp((s) => s.playing);
   const cursor = usePlaybackCursor();
   const currentLine = cursor && cursor.program.id === activeId ? cursor.line : null;
   const ref = useRef<HTMLDivElement>(null);
@@ -37,8 +38,8 @@ export function GcodeList() {
   }, [parsed]);
   const errorLines = useMemo(() => new Set(parsed ? allDiagnostics(parsed).filter((d) => d.severity === 'error').map((d) => d.line) : []), [parsed]);
 
-  // keep the selected (or, while playing, the current) line in view
-  const follow = selectedLine ?? currentLine;
+  // keep the current line in view while playing; once paused, prefer a selected line (e.g. from a diagnostic)
+  const follow = playing ? currentLine : (selectedLine ?? currentLine);
   useEffect(() => {
     const el = ref.current;
     if (!el || follow === null) return;

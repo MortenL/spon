@@ -50,6 +50,15 @@ export function usePlaybackCursor(): PlaybackCursor | null {
   return useMemo(() => playbackCursor(job, data, tl, playhead), [job, data, tl, playhead]);
 }
 
+/** Moves the playhead and keeps the active program in sync with whichever program now owns that time. */
+export function movePlayhead(seconds: number): void {
+  const s = appStore.getState();
+  s.setPlayhead(seconds);
+  const tl = buildTimeline(s.job.programs, s.programData);
+  const at = locate(tl, seconds);
+  if (at && at.entry.programId !== s.activeProgramId) s.setActiveProgram(at.entry.programId);
+}
+
 /** Makes a program active; if it is in the timeline, the playhead jumps to its start. */
 export function activateProgram(programId: string): void {
   const s = appStore.getState();

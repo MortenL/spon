@@ -68,3 +68,52 @@ test('G-code without a model: rapids below Z 0 are reported and the machine prof
   await page.getByTestId('machine-preset').selectOption('Generic VMC');
   await expect(time).not.toHaveText(before!); // 5 s tool change instead of 30 s
 });
+
+// No M6 tool change (its fixed cost would dwarf everything else here): just modal setup plus many
+// small moves, so playback time is driven by the moves themselves and stays easy to reason about.
+function smallMoves(name: string, count: number): { name: string; mimeType: string; buffer: Buffer } {
+  const lines = ['G21 G90 G17 G54', 'S9000 M3', 'G0 Z5', 'G0 X0 Y0', 'G1 Z-1 F300'];
+  for (let i = 1; i <= count; i++) lines.push(`G1 X${(i * 0.5).toFixed(1)} Y0 F3000`);
+  lines.push('G0 Z5', 'M5', 'M30');
+  return { name, mimeType: 'text/plain', buffer: Buffer.from(lines.join('\n')) };
+}
+
+test('G-code list follows the current line during playback even after a diagnostic (or any line) was selected', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('open-input').setInputFiles(smallMoves('follow-test.nc', 150));
+  await expect(page.getByTestId('program-follow-test.nc')).toBeVisible();
+  await page.getByTestId('dock-tab-gcode').click();
+
+  // select a line near the top, as clicking a diagnostic would (both call seekToLine)
+  await page.locator('[data-testid="gcode-line"][data-line="5"]').click();
+  await expect(page.locator('[data-testid="gcode-line"][data-selected="true"]')).toHaveAttribute('data-line', '5');
+  await expect(page.locator('[data-testid="gcode-line"][data-current="true"]')).toHaveCount(1); // paused: still visible near the selection
+
+  // play forward well past the selected line and the ~25-row rendered window around it, while
+  // staying comfortably short of the ~11 s total (so it's still playing, not paused-at-the-end,
+  // when read below: paused correctly reverts to following the selected line, not the current one)
+  await page.getByTestId('speed').selectOption('5');
+  await page.getByTestId('play').click();
+  await page.waitForTimeout(600);
+
+  // the previously selected line (5) must not still be pinning the view: the current line should
+  // have advanced well past it and still be rendered (i.e. the list scrolled to follow it)
+  const current = page.locator('[data-testid="gcode-line"][data-current="true"]');
+  await expect(current).toHaveCount(1);
+  expect(Number(await current.getAttribute('data-line'))).toBeGreaterThan(24);
+});
+
+test('the active program (and its G-code list) follows the playhead across a program boundary when scrubbing', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('open-input').setInputFiles(smallMoves('prog-a.nc', 20));
+  await expect(page.getByTestId('program-prog-a.nc')).toBeVisible();
+  await page.getByTestId('open-input').setInputFiles(smallMoves('prog-b.nc', 20));
+  await expect(page.getByTestId('program-prog-b.nc')).toBeVisible();
+
+  // prog-b is active (most recently loaded); scrub to the middle of the combined timeline,
+  // which falls inside prog-a's segment (prog-a plays first, in list order)
+  await page.getByTestId('timeline-scrubber').fill('250');
+  await expect(page.getByTestId('program-prog-a.nc')).toHaveAttribute('data-active', 'true');
+  await page.getByTestId('dock-tab-gcode').click();
+  await expect(page.locator('[data-testid="gcode-line"][data-current="true"]')).toHaveCount(1);
+});
