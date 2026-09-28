@@ -12,7 +12,9 @@ export function usePlaybackLoop(): void {
     const tick = (now: number) => {
       const s = appStore.getState();
       const tl = buildTimeline(s.job.programs, s.programData);
-      const next = s.playhead + ((now - last) / 1000) * s.speed;
+      // rAF is throttled in background tabs; on refocus one tick can carry a huge dt, so cap it.
+      const dt = Math.min(now - last, 100);
+      const next = s.playhead + (dt / 1000) * s.speed;
       last = now;
       if (tl.total <= 0 || next >= tl.total) {
         s.setPlayhead(tl.total);

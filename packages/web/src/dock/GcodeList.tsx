@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { seekToLine, usePlaybackCursor } from '@/gcode/playback';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/state/store';
+import { isScaled, lineToScrollTop, scrollTopToFirstLine, spacerHeight } from './virtualScroll';
 
 const ROW = 20;
 const OVERSCAN = 10;
@@ -28,6 +29,7 @@ export function GcodeList() {
   }, []);
 
   const parsed = data?.parsed ?? null;
+  const count = parsed?.lineStarts.length ?? 0;
   const messages = useMemo(() => {
     const map = new Map<number, string>();
     if (parsed) for (const d of allDiagnostics(parsed)) map.set(d.line, map.has(d.line) ? `${map.get(d.line)}\n${d.message}` : d.message);
@@ -40,9 +42,17 @@ export function GcodeList() {
   useEffect(() => {
     const el = ref.current;
     if (!el || follow === null) return;
+    if (isScaled(count, ROW)) {
+      const visibleRows = Math.floor(el.clientHeight / ROW);
+      const currentFirst = scrollTopToFirstLine(el.scrollTop, el.clientHeight, count, ROW);
+      if (follow < currentFirst || follow >= currentFirst + visibleRows) {
+        el.scrollTop = lineToScrollTop(Math.max(0, follow - Math.floor(visibleRows / 2)), el.clientHeight, count, ROW);
+      }
+      return;
+    }
     const top = follow * ROW;
     if (top < el.scrollTop || top + ROW > el.scrollTop + el.clientHeight) el.scrollTop = Math.max(0, top - el.clientHeight / 2);
-  }, [follow]);
+  }, [follow, count]);
 
   if (!program) return <p className="p-3 text-sm text-muted-foreground">Select a program.</p>;
   if (!data || data.status === 'parsing') return <p className="p-3 text-sm text-muted-foreground">Parsing {program.name}…</p>;
@@ -50,9 +60,14 @@ export function GcodeList() {
 
   const { lineStarts, lineFlags } = parsed;
   const text = data.text;
-  const count = lineStarts.length;
-  const first = Math.max(0, Math.floor(scrollTop / ROW) - OVERSCAN);
-  const last = Math.min(count, Math.ceil((scrollTop + height) / ROW) + OVERSCAN);
+  const scaled = isScaled(count, ROW);
+  // scaled: rows are positioned relative to the current scrollTop (its own pixel range is capped),
+  // rather than at their absolute i * ROW, which could exceed the browser's element-height limit.
+  const firstVisible = scaled ? scrollTopToFirstLine(scrollTop, height, count, ROW) : Math.floor(scrollTop / ROW);
+  const first = Math.max(0, firstVisible - OVERSCAN);
+  const last = scaled
+    ? Math.min(count, firstVisible + Math.ceil(height / ROW) + 1 + OVERSCAN)
+    : Math.min(count, Math.ceil((scrollTop + height) / ROW) + OVERSCAN);
   const rows = [];
   for (let i = first; i < last; i++) {
     const end = i + 1 < count ? lineStarts[i + 1] : text.length;
@@ -70,7 +85,7 @@ export function GcodeList() {
           errorLines.has(i) && 'text-destructive',
           notSimulated && 'text-muted-foreground line-through',
         )}
-        style={{ top: i * ROW, height: ROW }}
+        style={{ top: scaled ? scrollTop + (i - firstVisible) * ROW : i * ROW, height: ROW }}
       >
         <span className="w-12 shrink-0 select-none text-right text-muted-foreground">{i + 1}</span>
         <span className="whitespace-pre">{content}</span>
@@ -80,7 +95,7 @@ export function GcodeList() {
 
   return (
     <div ref={ref} onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)} className="h-full overflow-auto font-mono text-xs">
-      <div className="relative" style={{ height: count * ROW }}>{rows}</div>
+      <div className="relative" style={{ height: spacerHeight(count, ROW) }}>{rows}</div>
     </div>
   );
 }
