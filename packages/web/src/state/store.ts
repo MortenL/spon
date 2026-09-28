@@ -99,6 +99,12 @@ export interface AppState {
   setDockTab(tab: DockTab): void;
 }
 
+/** Keeps `activeProgramId` if `job` still has it, otherwise falls back to the first program, or null. */
+function activeProgramIdFor(job: Job, activeProgramId: string | null): string | null {
+  if (activeProgramId !== null && job.programs.some((p) => p.id === activeProgramId)) return activeProgramId;
+  return job.programs[0]?.id ?? null;
+}
+
 export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState> {
   return createStore<AppState>()((set, get) => ({
     job: initialJob,
@@ -133,16 +139,22 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
       set({ job: next, past: [...past, job].slice(-UNDO_LIMIT), future: [], dirty: true });
     },
     undo() {
-      const { job, past, future } = get();
+      const { job, past, future, activeProgramId } = get();
       const previous = past.at(-1);
       if (!previous) return;
-      set({ job: previous, past: past.slice(0, -1), future: [job, ...future], dirty: true });
+      set({
+        job: previous, past: past.slice(0, -1), future: [job, ...future], dirty: true,
+        activeProgramId: activeProgramIdFor(previous, activeProgramId),
+      });
     },
     redo() {
-      const { job, past, future } = get();
+      const { job, past, future, activeProgramId } = get();
       const [next, ...rest] = future;
       if (!next) return;
-      set({ job: next, past: [...past, job].slice(-UNDO_LIMIT), future: rest, dirty: true });
+      set({
+        job: next, past: [...past, job].slice(-UNDO_LIMIT), future: rest, dirty: true,
+        activeProgramId: activeProgramIdFor(next, activeProgramId),
+      });
     },
     loadDocument(doc) {
       set({

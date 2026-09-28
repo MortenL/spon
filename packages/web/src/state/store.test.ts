@@ -1,4 +1,4 @@
-import { createJob, type Job, renameJob } from '@sponcam/core';
+import { addProgram, createJob, type Job, renameJob } from '@sponcam/core';
 import { describe, expect, it } from 'vitest';
 import { createAppStore, type ModelGeometry, UNDO_LIMIT } from './store';
 
@@ -95,6 +95,31 @@ describe('program and playback state', () => {
     expect(s().programBytes).toEqual({ p2: new Uint8Array([2]) });
     expect(s().programData).toEqual({});
     expect([s().activeProgramId, s().playhead, s().playing, s().selectedLine]).toEqual([null, 0, false, null]);
+  });
+
+  it('falls back the active program after undo/redo leaves it out of the job', () => {
+    const store = createAppStore(createJob('A'));
+    const s = () => store.getState();
+    s().commit((job) => addProgram(job, { name: 'a.nc', blobId: 'a' }));
+    const p1 = s().job.programs[0].id;
+    s().setActiveProgram(p1);
+    s().commit((job) => addProgram(job, { name: 'b.nc', blobId: 'b' }));
+    const p2 = s().job.programs[1].id;
+    s().setActiveProgram(p2);
+    expect(s().activeProgramId).toBe(p2);
+
+    s().undo(); // back to [p1] only: p2 (currently active) no longer exists
+    expect(s().job.programs.map((p) => p.id)).toEqual([p1]);
+    expect(s().activeProgramId).toBe(p1); // falls back to the first (only) remaining program
+
+    s().redo(); // forward again to [p1, p2]: p1 is still a valid program, so it's left alone
+    expect(s().job.programs.map((p) => p.id)).toEqual([p1, p2]);
+    expect(s().activeProgramId).toBe(p1);
+
+    s().undo();
+    s().undo(); // back to no programs at all
+    expect(s().job.programs).toEqual([]);
+    expect(s().activeProgramId).toBeNull();
   });
 
   it('prunes program bytes and data for blobs no longer referenced', () => {
