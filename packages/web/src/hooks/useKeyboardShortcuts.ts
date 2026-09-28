@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { movePlayhead } from '@/gcode/playback';
+import { movePlayhead, togglePlaying } from '@/gcode/playback';
 import { buildTimeline, stepTime } from '@/gcode/timeline';
 import { openViaPicker, saveDocument } from '@/state/documents';
 import { appStore } from '@/state/store';
@@ -32,8 +32,7 @@ export function useKeyboardShortcuts(): void {
         if (key === ' ') {
           if (e.target instanceof HTMLButtonElement) return; // a focused button handles Space itself
           e.preventDefault();
-          if (!s.playing && s.playhead >= tl.total) movePlayhead(0);
-          s.setPlaying(!s.playing);
+          togglePlaying(tl);
           return;
         }
         e.preventDefault();

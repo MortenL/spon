@@ -50,13 +50,28 @@ export function usePlaybackCursor(): PlaybackCursor | null {
   return useMemo(() => playbackCursor(job, data, tl, playhead), [job, data, tl, playhead]);
 }
 
-/** Moves the playhead and keeps the active program in sync with whichever program now owns that time. */
+/**
+ * Moves the playhead (playback controls, scrubbing, keyboard jumps) and keeps the active program in
+ * sync with whichever program now owns that time. Clears any line selection so the G-code list
+ * follows this new position rather than a stale selected line (e.g. from a diagnostic).
+ */
 export function movePlayhead(seconds: number): void {
   const s = appStore.getState();
   s.setPlayhead(seconds);
+  s.setSelectedLine(null);
   const tl = buildTimeline(s.job.programs, s.programData);
   const at = locate(tl, seconds);
   if (at && at.entry.programId !== s.activeProgramId) s.setActiveProgram(at.entry.programId);
+}
+
+/** Toggles play/pause; starting playback (from the end or elsewhere) clears any line selection. */
+export function togglePlaying(tl: Timeline): void {
+  const s = appStore.getState();
+  if (!s.playing) {
+    if (s.playhead >= tl.total) movePlayhead(0);
+    s.setSelectedLine(null);
+  }
+  s.setPlaying(!s.playing);
 }
 
 /** Makes a program active; if it is in the timeline, the playhead jumps to its start. */

@@ -78,7 +78,7 @@ function smallMoves(name: string, count: number): { name: string; mimeType: stri
   return { name, mimeType: 'text/plain', buffer: Buffer.from(lines.join('\n')) };
 }
 
-test('G-code list follows the current line during playback even after a diagnostic (or any line) was selected', async ({ page }) => {
+test('G-code list follows the current line during and after playback, even after a diagnostic (or any line) was selected', async ({ page }) => {
   await page.goto('/');
   await page.getByTestId('open-input').setInputFiles(smallMoves('follow-test.nc', 150));
   await expect(page.getByTestId('program-follow-test.nc')).toBeVisible();
@@ -90,8 +90,7 @@ test('G-code list follows the current line during playback even after a diagnost
   await expect(page.locator('[data-testid="gcode-line"][data-current="true"]')).toHaveCount(1); // paused: still visible near the selection
 
   // play forward well past the selected line and the ~25-row rendered window around it, while
-  // staying comfortably short of the ~11 s total (so it's still playing, not paused-at-the-end,
-  // when read below: paused correctly reverts to following the selected line, not the current one)
+  // staying comfortably short of the ~11 s total (so it's still playing, not paused-at-the-end)
   await page.getByTestId('speed').selectOption('5');
   await page.getByTestId('play').click();
   await page.waitForTimeout(600);
@@ -100,7 +99,17 @@ test('G-code list follows the current line during playback even after a diagnost
   // have advanced well past it and still be rendered (i.e. the list scrolled to follow it)
   const current = page.locator('[data-testid="gcode-line"][data-current="true"]');
   await expect(current).toHaveCount(1);
-  expect(Number(await current.getAttribute('data-line'))).toBeGreaterThan(24);
+  const whilePlaying = Number(await current.getAttribute('data-line'));
+  expect(whilePlaying).toBeGreaterThan(24);
+
+  // pausing must keep following the current line too, not revert to the stale line-5 selection
+  await page.getByTestId('play').click();
+  await expect(current).toHaveCount(1);
+  expect(Number(await current.getAttribute('data-line'))).toBeGreaterThanOrEqual(whilePlaying);
+
+  // scrubbing back near the top also keeps the (now different) current line rendered in the viewport
+  await page.getByTestId('timeline-scrubber').fill('50');
+  await expect(current).toHaveCount(1);
 });
 
 test('the active program (and its G-code list) follows the playhead across a program boundary when scrubbing', async ({ page }) => {

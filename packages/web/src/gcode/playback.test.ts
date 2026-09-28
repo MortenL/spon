@@ -1,7 +1,7 @@
 import { addProgram, computeTiming, createJob, interpretProgram, type ParsedProgram } from '@sponcam/core';
 import { describe, expect, it } from 'vitest';
-import type { ProgramData } from '../state/store';
-import { playbackCursor, splitVertex } from './playback';
+import { appStore, type ProgramData } from '../state/store';
+import { movePlayhead, playbackCursor, splitVertex, togglePlaying } from './playback';
 import { buildTimeline } from './timeline';
 import { buildToolpathBuffers } from './toolpath';
 
@@ -41,5 +41,24 @@ describe('playback', () => {
     expect(splitVertex(entry, t.t[1] - 0.001, t, buffers.rowVertexEnd)).toBe(buffers.rowVertexEnd[0]);
     expect(splitVertex(entry, tl.total + 1, t, buffers.rowVertexEnd)).toBe(buffers.rowVertexEnd[t.count - 1]);
     expect(splitVertex(undefined, 5, t, buffers.rowVertexEnd)).toBe(0);
+  });
+
+  it('movePlayhead clears a stale line selection so the G-code list follows the playhead', () => {
+    appStore.setState({ job, programData: data, activeProgramId: job.programs[0].id, selectedLine: 3, playhead: 0, playing: false });
+    movePlayhead(1);
+    expect(appStore.getState().selectedLine).toBeNull();
+    expect(appStore.getState().playhead).toBe(1);
+  });
+
+  it('togglePlaying clears a stale line selection when starting playback, but not when pausing', () => {
+    appStore.setState({ job, programData: data, activeProgramId: job.programs[0].id, selectedLine: 3, playhead: 0, playing: false });
+    togglePlaying(tl);
+    expect(appStore.getState().playing).toBe(true);
+    expect(appStore.getState().selectedLine).toBeNull();
+
+    appStore.setState({ selectedLine: 3 }); // simulate a diagnostic click while playing
+    togglePlaying(tl); // pause: must not clear the selection just from pausing
+    expect(appStore.getState().playing).toBe(false);
+    expect(appStore.getState().selectedLine).toBe(3);
   });
 });

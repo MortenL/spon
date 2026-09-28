@@ -1,7 +1,7 @@
 import { formatLength } from '@sponcam/core';
 import { Pause, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { movePlayhead, usePlaybackCursor, useTimeline } from '@/gcode/playback';
+import { movePlayhead, togglePlaying, usePlaybackCursor, useTimeline } from '@/gcode/playback';
 import { formatDuration } from '@/panels/format';
 import { appStore, useApp } from '@/state/store';
 
@@ -17,15 +17,9 @@ export function TimelineBar() {
   const cursor = usePlaybackCursor();
   const value = tl.total > 0 ? Math.round((Math.min(playhead, tl.total) / tl.total) * 1000) : 0;
 
-  const togglePlay = () => {
-    const s = appStore.getState();
-    if (!s.playing && s.playhead >= tl.total) movePlayhead(0);
-    s.setPlaying(!s.playing);
-  };
-
   return (
     <div className="flex items-center gap-3 border-b px-3 py-1.5 text-xs">
-      <Button size="sm" variant="secondary" data-testid="play" disabled={tl.total <= 0} onClick={togglePlay} title={playing ? 'Pause (Space)' : 'Play (Space)'}>
+      <Button size="sm" variant="secondary" data-testid="play" disabled={tl.total <= 0} onClick={() => togglePlaying(tl)} title={playing ? 'Pause (Space)' : 'Play (Space)'}>
         {playing ? <Pause className="size-4" /> : <Play className="size-4" />}
       </Button>
       <select
