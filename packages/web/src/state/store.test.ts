@@ -97,6 +97,18 @@ describe('program and playback state', () => {
     expect([s().activeProgramId, s().playhead, s().playing, s().selectedLine]).toEqual([null, 0, false, null]);
   });
 
+  it('prunes program bytes and data for blobs no longer referenced', () => {
+    const store = createAppStore(createJob('A'));
+    const s = () => store.getState();
+    s().setProgramBytes('p1', new Uint8Array([1]));
+    s().setProgramBytes('p2', new Uint8Array([2]));
+    s().setProgramData('p1', { status: 'ready', text: 'G0', parsed: null, error: null });
+    s().setProgramData('p2', { status: 'ready', text: 'G1', parsed: null, error: null });
+    s().pruneProgramData(['p2']);
+    expect(s().programBytes).toEqual({ p2: new Uint8Array([2]) });
+    expect(s().programData).toEqual({ p2: { status: 'ready', text: 'G1', parsed: null, error: null } });
+  });
+
   it('toggles visibility, speed and dock tab', () => {
     const store = createAppStore(createJob('A'));
     const s = () => store.getState();

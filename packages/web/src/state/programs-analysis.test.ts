@@ -96,6 +96,23 @@ describe('reanalyzeAll — overlapping runs', () => {
   });
 });
 
+describe('reanalyzeAll — unreferenced blobs', () => {
+  it('does not re-analyse programData entries no longer referenced by the job or its undo/redo history', async () => {
+    const referenced = 'kept';
+    const orphan = 'orphan'; // still in programData (e.g. pruneBlobs hasn't run), but not in the job or its history
+    appStore.getState().setProgramBytes(referenced, new Uint8Array([1]));
+    appStore.getState().commit((job) => addProgram(job, { name: 'a.nc', blobId: referenced }));
+    appStore.getState().setProgramData(referenced, { status: 'ready', text: 'a', parsed: fakeParsedProgram(), error: null });
+    appStore.getState().setProgramData(orphan, { status: 'ready', text: 'b', parsed: fakeParsedProgram(), error: null });
+
+    vi.mocked(analyzeInWorker).mockResolvedValue({ analysis: fakeAnalysis(5), t: Float64Array.from([5]) });
+    await reanalyzeAll();
+
+    expect(analyzeInWorker).toHaveBeenCalledTimes(1); // only for `referenced`
+    expect(appStore.getState().programData[orphan]?.parsed?.analysis.summary.totalSeconds).toBe(0); // untouched
+  });
+});
+
 describe('loadPrograms / parseBlob — overlapping loads of the same blob', () => {
   it('keeps the newer parse even when the older load resolves last', async () => {
     const blobId = 'p1';

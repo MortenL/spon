@@ -39,8 +39,12 @@ export async function storeBlob(id: string, bytes: Uint8Array): Promise<void> {
 
 export async function pruneBlobs(): Promise<void> {
   const { job, past, future } = state();
+  const keep = referencedBlobIds(job, past, future);
+  state().pruneProgramData(keep);
+  const keepSet = new Set(keep);
+  for (const id of [...parseTokens.keys()]) if (!keepSet.has(id)) parseTokens.delete(id);
   try {
-    await removeOrphanBlobs(referencedBlobIds(job, past, future));
+    await removeOrphanBlobs(keep);
   } catch (err) {
     console.error('Could not clean up autosave data', err);
   }
@@ -90,8 +94,11 @@ export async function loadPrograms(): Promise<void> {
 /** Re-times and re-analyses every parsed program for the current machine, stock and WCS. */
 export async function reanalyzeAll(): Promise<void> {
   const generation = ++analysisGeneration;
-  const ctx = programContext(state().job, state().geometry);
+  const { job, past, future, geometry } = state();
+  const keep = new Set(referencedBlobIds(job, past, future));
+  const ctx = programContext(job, geometry);
   for (const [blobId, data] of Object.entries(state().programData)) {
+    if (!keep.has(blobId)) continue; // no longer referenced by the job or its undo/redo history
     if (data.status !== 'ready' || !data.parsed) continue;
     try {
       const { analysis, t } = await analyzeInWorker(data.parsed.table, data.parsed.lineFlags, ctx);

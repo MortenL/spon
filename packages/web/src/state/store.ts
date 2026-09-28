@@ -88,6 +88,8 @@ export interface AppState {
   setBusy(message: string | null): void;
   setProgramBytes(blobId: string, bytes: Uint8Array): void;
   setProgramData(blobId: string, data: ProgramData): void;
+  /** Drops programBytes/programData entries for blobs no longer referenced (see referencedBlobIds). */
+  pruneProgramData(keepIds: readonly string[]): void;
   setActiveProgram(id: string | null): void;
   setSelectedLine(line: number | null): void;
   setPlayhead(seconds: number): void;
@@ -182,6 +184,14 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
     },
     setProgramData(blobId, data) {
       set({ programData: { ...get().programData, [blobId]: data } });
+    },
+    pruneProgramData(keepIds) {
+      const keep = new Set(keepIds);
+      const { programBytes, programData } = get();
+      set({
+        programBytes: Object.fromEntries(Object.entries(programBytes).filter(([id]) => keep.has(id))),
+        programData: Object.fromEntries(Object.entries(programData).filter(([id]) => keep.has(id))),
+      });
     },
     setActiveProgram(activeProgramId) {
       set({ activeProgramId, selectedLine: null });
