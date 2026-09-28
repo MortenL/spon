@@ -112,6 +112,40 @@ test('G-code list follows the current line during and after playback, even after
   await expect(current).toHaveCount(1);
 });
 
+test('playback keys still work after dragging the scrubber or picking a speed', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('open-input').setInputFiles(smallMoves('keys-test.nc', 150));
+  await expect(page.getByTestId('program-keys-test.nc')).toBeVisible();
+
+  const move = page.getByTestId('timeline-move');
+  const currentLine = async () => {
+    const text = (await move.textContent()) ?? '';
+    const m = /line (\d+)/.exec(text);
+    if (!m) throw new Error(`no "line N" in "${text}"`);
+    return Number(m[1]);
+  };
+
+  // dragging/clicking the scrubber must not stop the arrow keys from working as playback keys
+  await page.getByTestId('timeline-scrubber').fill('300');
+  await page.keyboard.press('ArrowRight');
+  const afterFirst = await currentLine();
+  await page.keyboard.press('ArrowRight');
+  const afterSecond = await currentLine();
+  expect(afterSecond).toBe(afterFirst + 1); // exactly one move advanced, not stuck (also covers I1)
+
+  // same for the speed <select>
+  await page.getByTestId('speed').selectOption('2');
+  await page.keyboard.press('ArrowRight');
+  const afterThird = await currentLine();
+  expect(afterThird).toBe(afterSecond + 1);
+
+  // a real text input must still block the playback keys
+  await page.getByRole('button', { name: 'Machine' }).click(); // expand the collapsed panel
+  await page.getByTestId('machine-tool-change').click();
+  await page.keyboard.press('ArrowRight');
+  await expect(move).toHaveText(new RegExp(`line ${afterThird}\\b`)); // unchanged: the keypress was blocked
+});
+
 test('the active program (and its G-code list) follows the playhead across a program boundary when scrubbing', async ({ page }) => {
   await page.goto('/');
   await page.getByTestId('open-input').setInputFiles(smallMoves('prog-a.nc', 20));
