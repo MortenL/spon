@@ -489,6 +489,49 @@ interface PostSettings {
 
 **Keyboard:** `Delete` removes the selected operation (undoable), and `Ctrl+D` duplicates it. Milestone 2's keys are unchanged.
 
+## 8a. Commands and geometry queries (groundwork for the Milestone 3.5 API)
+
+Every job edit added in Milestone 3 is a **named, JSON-serialisable command**, applied by one pure function in core:
+
+```ts
+type JobCommand =
+  // Milestone 1 and 2 edits, wrapping the existing update functions
+  | { type: 'renameJob'; name: string } | { type: 'setDisplayUnits'; unit: LengthUnit } | { type: 'setImportUnits'; unit: LengthUnit }
+  | { type: 'rotateQuarter'; axis: 'x' | 'y'; direction: 1 | -1 } | { type: 'layFlat'; rawNormal: Vec3 } | { type: 'setZSpin'; degrees: number }
+  | { type: 'resetOrientation' } | { type: 'setStock'; stock: Stock } | { type: 'setWcs'; patch: Partial<Wcs> }
+  | { type: 'setMachineProfile'; patch: MachinePatch } | { type: 'applyMachinePreset'; name: MachinePresetName }
+  | { type: 'moveProgram'; id: string; delta: -1 | 1 } | { type: 'setProgramInTimeline'; id: string; inTimeline: boolean } | { type: 'removeProgram'; id: string }
+  // Milestone 3
+  | { type: 'addOperation'; opType: Operation['type']; toolId: string | null; id?: string; name?: string }
+  | { type: 'updateOperation'; id: string; patch: OperationPatch }       // any parameter, heights, feeds or geometry
+  | { type: 'removeOperation'; id: string } | { type: 'duplicateOperation'; id: string; newId?: string }
+  | { type: 'moveOperation'; id: string; delta: -1 | 1 } | { type: 'setOperationEnabled'; id: string; enabled: boolean }
+  | { type: 'addTool'; tool: Tool } | { type: 'updateTool'; id: string; patch: Partial<Omit<Tool, 'id'>> } | { type: 'removeTool'; id: string }
+  | { type: 'setPost'; patch: Partial<PostSettings> } | { type: 'setTolerance'; tolerance: number };
+
+function applyCommand(job: Job, command: JobCommand): Job;   // throws CommandError on invalid input
+```
+
+- The store gains `dispatch(command)`, which is `commit((job) => applyCommand(job, command))`. All new Milestone 3 UI goes through `dispatch`. The Milestone 1 and 2 panels may keep calling `commit` directly, and move over later.
+- Commands never mint ids nondeterministically if the caller supplies one. `addOperation` and `duplicateOperation` accept an optional `id`, so an API client can refer to what it just created.
+- **Invalid commands** throw `CommandError` with a message. Examples: an unknown id, a tool that is in use by an operation, a negative tolerance.
+
+**Geometry queries**
+Picking also has a form that needs no viewport, so the future API and the tests can choose geometry by description:
+
+```ts
+function describeGeometry(job: Job, geometry: ModelGeometry): GeometryCatalog;
+interface GeometryCatalog {
+  faces: { ref: MeshFaceRef; z: number; area: number; loops: { index: number; kind: 'outer' | 'hole'; length: number; circle: { center: Vec2; diameter: number } | null }[] }[];
+  contours: { ref: DxfPathRef; layer: string; closed: boolean; length: number; bbox: { min: Vec2; max: Vec2 }; circle: { center: Vec2; diameter: number } | null }[];
+  holes: { ref: MeshHoleRef | DxfPathRef; center: Vec2; diameter: number; top: number; bottom: number; through: boolean }[];
+}
+```
+
+- All values are in program coordinates.
+- `faces` lists up-facing horizontal planar faces in the current orientation, ordered from top down.
+- The function lives in core and runs in the worker. The inspector's hole list and the diameter filter use it too.
+
 ## 9. Persistence
 
 - `.spon` and autosave store `tools`, `operations`, `post` and `tolerance`. Generated program text is never stored, because it's regenerated when the job loads.
@@ -540,6 +583,10 @@ interface PostSettings {
   - a Spon library round trip;
   - the starter library validates against the schema.
 - **Migration:** v1 → v3 and v2 → v3.
+- **Commands and queries:**
+  - every command applies and serialises through `JSON.stringify` / `JSON.parse` unchanged;
+  - invalid commands throw `CommandError`;
+  - `describeGeometry` on the plate fixture lists the top face, the pocket floor and the holes with the correct diameters, Zs and through/blind flags.
 
 **Web**
 - Unit tests for the generation pipeline state: generation counter and stale results, the cache, and the generated programs in the store.
@@ -568,6 +615,16 @@ interface PostSettings {
 
 ## 13. Later milestones (recorded)
 
+- **Milestone 3.5: an API so Claude can control Spon.** An MCP server with its own spec. Its tools cover:
+  - new and open jobs;
+  - importing models;
+  - orientation, stock and WCS;
+  - `describeGeometry`, operations, tools and posts;
+  - generating, analysing, exporting and saving.
+
+  The server is built on the §8a commands and queries, in two steps:
+  1. **Headless**: a Node server working on `.spon` files on disk.
+  2. **Live bridge**: a local WebSocket connection that drives the job open in the browser tab. Every command is undoable there.
 - **Milestone 4:**
   - SVG import;
   - facing, engraving/V-carve, slotting/trochoidal, thread milling and chamfer operations;
