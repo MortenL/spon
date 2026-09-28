@@ -3,6 +3,9 @@ import type { Quat } from '../geometry/quat';
 import type { Vec3 } from '../geometry/vec3';
 import type { ModelKind } from '../import/importFile';
 import type { LengthUnit } from '../units/units';
+import type { Operation } from '../cam/types';
+import type { PostSettings } from '../post/types';
+import type { Tool } from '../tools/types';
 
 export type WorkOffset = 'G54' | 'G55' | 'G56' | 'G57' | 'G58' | 'G59';
 export const WORK_OFFSETS: readonly WorkOffset[] = ['G54', 'G55', 'G56', 'G57', 'G58', 'G59'];
@@ -46,17 +49,21 @@ export interface Wcs {
 
 export interface ProgramRef {
   id: string;
-  /** Original file name. */
+  /** Original file name (or generated file name). */
   name: string;
   /** Key of the program bytes (programs/<blobId>.nc in .spon, IndexedDB blobs). */
   blobId: string;
   /** Included in the combined back-to-back timeline. */
   inTimeline: boolean;
+  /** Stored programs are always 'imported'; generated programs exist only in the web store. */
+  source: 'imported' | 'generated';
+  /** Generated programs: the operations that produced them. */
+  operationIds?: string[];
 }
 
 /** All lengths in mm, angles in degrees. */
 export interface Job {
-  schemaVersion: 2;
+  schemaVersion: 3;
   id: string;
   name: string;
   displayUnits: LengthUnit;
@@ -66,4 +73,11 @@ export interface Job {
   machine: MachineProfile;
   /** List order is playback order. */
   programs: ProgramRef[];
+  /** Copies of the library tools this job uses. */
+  tools: Tool[];
+  /** List order is machining order. */
+  operations: Operation[];
+  post: PostSettings;
+  /** Chord / arc-fit tolerance in mm. */
+  tolerance: number;
 }

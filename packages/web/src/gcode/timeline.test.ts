@@ -16,7 +16,7 @@ function data(text: string): ProgramData {
   return { status: 'ready', text, parsed, error: null };
 }
 
-const prog = (id: string, blobId: string, inTimeline = true): ProgramRef => ({ id, name: `${id}.nc`, blobId, inTimeline });
+const prog = (id: string, blobId: string, inTimeline = true): ProgramRef => ({ id, name: `${id}.nc`, blobId, inTimeline, source: 'imported' });
 
 describe('timeline', () => {
   const a = data('G4 P2\nG4 P3\n'); // 5 s, dwell rows on lines 0 and 1

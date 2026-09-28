@@ -1,8 +1,9 @@
 import { DEFAULT_MACHINE_PRESET, machinePreset } from '../job/machine';
 import type { Job } from '../job/types';
+import { defaultPostSettings } from '../post/types';
 import { SponFileError } from './errors';
 
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 
 export type Migration = (job: Record<string, unknown>) => Record<string, unknown>;
 
@@ -10,6 +11,15 @@ export type Migration = (job: Record<string, unknown>) => Record<string, unknown
 export const MIGRATIONS: Readonly<Record<number, Migration>> = {
   // v1 → v2 (Milestone 2): machine profile and program list
   1: (job) => ({ ...job, machine: machinePreset(DEFAULT_MACHINE_PRESET), programs: [] }),
+  // v2 → v3 (Milestone 3): tools, operations, post settings, tolerance; stored programs are imported
+  2: (job) => ({
+    ...job,
+    programs: (Array.isArray(job.programs) ? job.programs : []).map((p) => ({ ...(p as object), source: 'imported' })),
+    tools: [],
+    operations: [],
+    post: defaultPostSettings('grbl'),
+    tolerance: 0.002,
+  }),
 };
 
 export function migrateJob(raw: unknown, migrations: Readonly<Record<number, Migration>> = MIGRATIONS, current = CURRENT_SCHEMA_VERSION): Job {
@@ -42,6 +52,8 @@ function assertJobShape(job: Record<string, unknown>): void {
     (job.model === null || typeof job.model === 'object') &&
     typeof stock === 'object' && stock !== null && (stock.mode === 'auto' || stock.mode === 'fixed') &&
     typeof wcs === 'object' && wcs !== null && typeof wcs.anchor === 'object' && typeof wcs.offset === 'object' &&
-    typeof job.machine === 'object' && job.machine !== null && Array.isArray(job.programs);
+    typeof job.machine === 'object' && job.machine !== null && Array.isArray(job.programs) &&
+    Array.isArray(job.tools) && Array.isArray(job.operations) &&
+    typeof job.post === 'object' && job.post !== null && typeof job.tolerance === 'number';
   if (!ok) throw new SponFileError('job.json is not a valid job');
 }

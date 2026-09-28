@@ -49,7 +49,7 @@ describe('.spon files', () => {
   it('opens Milestone 1 files and migrates them', () => {
     const bytes = zipSync({ 'job.json': strToU8(JSON.stringify(v1Job)), 'models/b1.stl': MODEL });
     const read = readSpon(bytes);
-    expect(read.job.schemaVersion).toBe(2);
+    expect(read.job.schemaVersion).toBe(3);
     expect(read.blobs).toEqual({ b1: MODEL });
   });
 
@@ -65,7 +65,7 @@ describe('.spon files', () => {
 
 describe('migrateJob', () => {
   it('refuses jobs from a newer schema', () => {
-    expect(() => migrateJob({ ...createJob(), schemaVersion: 3 })).toThrow(/newer version of Spon/);
+    expect(() => migrateJob({ ...createJob(), schemaVersion: 4 })).toThrow(/newer version of Spon/);
   });
 
   it('rejects data without a valid schemaVersion or job shape', () => {

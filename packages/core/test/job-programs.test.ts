@@ -36,7 +36,7 @@ describe('machine presets', () => {
 describe('job v2', () => {
   it('creates jobs with the default machine and no programs', () => {
     const job = createJob();
-    expect(job.schemaVersion).toBe(2);
+    expect(job.schemaVersion).toBe(3);
     expect(job.machine).toEqual(machinePreset('Hobby GRBL router'));
     expect(job.programs).toEqual([]);
   });
@@ -72,7 +72,7 @@ describe('job v2', () => {
 describe('migration v1 → v2', () => {
   it('upgrades a Milestone 1 job', () => {
     const job = migrateJob(v1Job);
-    expect(job.schemaVersion).toBe(2);
+    expect(job.schemaVersion).toBe(3);
     expect(job.machine).toEqual(machinePreset('Hobby GRBL router'));
     expect(job.programs).toEqual([]);
     expect(job.model?.blobId).toBe('b1');

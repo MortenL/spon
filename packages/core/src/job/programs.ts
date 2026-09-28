@@ -14,7 +14,7 @@ export interface MachinePatch {
 }
 
 export function addProgram(job: Job, program: NewProgram): Job {
-  return { ...job, programs: [...job.programs, { id: crypto.randomUUID(), name: program.name, blobId: program.blobId, inTimeline: true }] };
+  return { ...job, programs: [...job.programs, { id: crypto.randomUUID(), name: program.name, blobId: program.blobId, inTimeline: true, source: 'imported' }] };
 }
 
 export function removeProgram(job: Job, id: string): Job {
