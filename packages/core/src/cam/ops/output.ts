@@ -1,0 +1,22 @@
+import type { Vec2 } from '../../geometry/path2d';
+import type { ResolvedHeights } from '../heights';
+import type { CamDiagnostic, Toolpath } from '../types';
+
+export interface OpOverlays {
+  /** Tab centres: lap index, fraction of the lap and program XY. */
+  tabs: { refIndex: number; t: number; point: Vec2 }[];
+  /** Tool-centre laps (flattened) that carry tabs, at the tab top Z, for dragging tabs. */
+  laps: { refIndex: number; points: Vec2[]; z: number }[];
+  /** Pocket material the tool cannot reach, at the pocket floor. */
+  unmachined: { polys: Vec2[][]; z: number }[];
+}
+
+export interface OpOutput {
+  toolpath: Toolpath | null;
+  diagnostics: CamDiagnostic[];
+  /** Heights of the first feature (for the heights planes in the viewport). */
+  heights: ResolvedHeights | null;
+  overlays: OpOverlays;
+}
+
+export const emptyOverlays = (): OpOverlays => ({ tabs: [], laps: [], unmachined: [] });

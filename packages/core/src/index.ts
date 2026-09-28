@@ -53,3 +53,5 @@ export * from './geometry/offset/arcFit';
 export * from './cam/ops/writer';
 export * from './cam/ops/leads';
 export * from './cam/ops/tabs';
+export * from './cam/ops/output';
+export * from './cam/ops/profile';

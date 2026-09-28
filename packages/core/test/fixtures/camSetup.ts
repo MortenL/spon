@@ -1,5 +1,8 @@
 import { readFileSync } from 'node:fs';
-import { type CamGeometry, createJob, faceRefFromTriangle, importFile, pathsToPoints, setModel, setStock, type MeshFaceRef } from '../../src';
+import {
+  type CamGeometry, createJob, faceRefFromTriangle, importFile, type Move, pathsToPoints, type Path2D, type ResolvedGeometry, setModel, setStock,
+  type MeshFaceRef, type Tool,
+} from '../../src';
 
 /** The CAM part drawing as a job: auto stock with a 5 mm margin and 6 mm thickness. */
 export function camPartSetup() {
@@ -35,4 +38,24 @@ export function faceAt(mesh: CamGeometry & { kind: 'mesh' }, x: number, y: numbe
     if ((d1 >= 0 && d2 >= 0 && d3 >= 0) || (d1 <= 0 && d2 <= 0 && d3 <= 0)) return faceRefFromTriangle(mesh.mesh, 'm1', t);
   }
   throw new Error(`no face at ${x},${y},${z}`);
+}
+
+export const tool6: Tool = {
+  id: 't6', name: '6 mm flat', type: 'flat', number: 1, diameter: 6, cornerRadius: 0, tipAngleDeg: 0, fluteLength: 20, stickout: 30, flutes: 2,
+  presets: [{ name: 'Softwood', rpm: 18000, feed: 2000, plungeFeed: 600, stepdown: 3, stepoverPct: 45, coolant: 'off' }],
+};
+
+/** A ResolvedGeometry built by hand (contours, shapes or holes in program coordinates). */
+export function geoOf(parts: Partial<Pick<ResolvedGeometry, 'contours' | 'shapes' | 'holes'>>): ResolvedGeometry {
+  return { contours: [], shapes: [], holes: [], diagnostics: [], faceZ: () => null, ...parts };
+}
+
+export type CutMove = Extract<Move, { kind: 'line' | 'arc' }>;
+/** Feed moves (lines and arcs) of a move list. */
+export const cutMoves = (moves: readonly Move[]): CutMove[] => moves.filter((m): m is CutMove => m.kind === 'line' || m.kind === 'arc');
+
+/** Rectangle contour in program coordinates, counter-clockwise. */
+export function rectPath(x0: number, y0: number, x1: number, y1: number): Path2D {
+  const p = [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
+  return { closed: true, segments: p.map((from, i) => ({ kind: 'line' as const, from, to: p[(i + 1) % 4] })) };
 }
