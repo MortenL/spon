@@ -1,7 +1,7 @@
-import { type Job, type MotionTable, type ParsedProgram, positionAt, type ProgramRef, rowAtTime, rowStartTime } from '@sponcam/core';
+import { type Job, type MotionTable, type ParsedProgram, positionAt, type ProgramRef, rowStartTime } from '@sponcam/core';
 import { useMemo } from 'react';
 import { appStore, type ProgramData, useApp } from '../state/store';
-import { buildTimeline, locate, type Timeline, type TimelineEntry, timeOfLine } from './timeline';
+import { buildTimeline, locate, rowStartingAt, type Timeline, type TimelineEntry, timeOfLine } from './timeline';
 
 export interface PlaybackCursor {
   entry: TimelineEntry;
@@ -22,7 +22,7 @@ export function playbackCursor(job: Job, data: Readonly<Record<string, ProgramDa
   const parsed = data[at.entry.blobId]?.parsed;
   if (!program || !parsed || parsed.table.count === 0) return null;
   const table = parsed.table;
-  const row = rowAtTime(table, at.local);
+  const row = rowStartingAt(table, at.local);
   const position: [number, number, number] = [0, 0, 0];
   positionAt(table, job.machine, row, at.local - rowStartTime(table, row), position);
   return { entry: at.entry, program, parsed, row, line: table.line[row], kind: table.kind[row], feed: table.feed[row], position };
@@ -32,7 +32,7 @@ export function playbackCursor(job: Job, data: Readonly<Record<string, ProgramDa
 export function splitVertex(entry: TimelineEntry | undefined, playhead: number, table: MotionTable, rowVertexEnd: Uint32Array): number {
   if (!entry || table.count === 0 || playhead <= entry.start) return 0;
   if (playhead >= entry.start + entry.duration) return rowVertexEnd[table.count - 1];
-  const row = rowAtTime(table, playhead - entry.start);
+  const row = rowStartingAt(table, playhead - entry.start);
   return row > 0 ? rowVertexEnd[row - 1] : 0;
 }
 
@@ -58,7 +58,7 @@ export function usePlaybackCursor(): PlaybackCursor | null {
 export function movePlayhead(seconds: number): void {
   const s = appStore.getState();
   s.setPlayhead(seconds);
-  s.setSelectedLine(null);
+  if (s.selectedLine !== null) s.setSelectedLine(null);
   const tl = buildTimeline(s.job.programs, s.programData);
   const at = locate(tl, seconds);
   if (at && at.entry.programId !== s.activeProgramId) s.setActiveProgram(at.entry.programId);

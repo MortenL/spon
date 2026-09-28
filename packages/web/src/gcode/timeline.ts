@@ -1,4 +1,4 @@
-import { type ParsedProgram, type ProgramRef, rowAtTime, rowStartTime } from '@sponcam/core';
+import { type MotionTable, type ParsedProgram, type ProgramRef, rowAtTime, rowStartTime } from '@sponcam/core';
 import type { ProgramData } from '../state/store';
 
 export interface TimelineEntry {
@@ -46,6 +46,16 @@ export function timeOfLine(parsed: ParsedProgram, line: number): number | null {
   return null;
 }
 
+/**
+ * The move in progress at program-local time `local`. At an exact boundary this is the move starting
+ * there (zero-duration rows skipped), not the one that just finished; at the very end, the last row.
+ */
+export function rowStartingAt(table: MotionTable, local: number): number {
+  let r = rowAtTime(table, local);
+  while (r < table.count - 1 && table.t[r] <= local + 1e-9) r++;
+  return r;
+}
+
 /** Global time of the start of the next (1) or previous (−1) move. */
 export function stepTime(tl: Timeline, data: Readonly<Record<string, ProgramData>>, time: number, direction: 1 | -1): number {
   const at = locate(tl, time);
@@ -55,11 +65,9 @@ export function stepTime(tl: Timeline, data: Readonly<Record<string, ProgramData
   const row = rowAtTime(table, at.local);
   const rowStart = rowStartTime(table, row);
   if (direction === 1) {
-    // Skip forward past any row (including zero-duration ones) whose end is not strictly after
-    // the playhead, so landing exactly on a row boundary doesn't stick there.
-    let r = row;
-    while (r < table.count && table.t[r] <= at.local + 1e-9) r++;
-    if (r < table.count) return at.entry.start + table.t[r];
+    // the end of the move starting here, so landing exactly on a row boundary doesn't stick there
+    const r = rowStartingAt(table, at.local);
+    if (table.t[r] > at.local + 1e-9) return at.entry.start + table.t[r];
     return at.entry.start + at.entry.duration; // no move left in this program: the next program's start
   }
   if (at.local - rowStart > 1e-9) return at.entry.start + rowStart; // inside a move: back to its start

@@ -43,6 +43,19 @@ describe('playback', () => {
     expect(splitVertex(undefined, 5, t, buffers.rowVertexEnd)).toBe(0);
   });
 
+  it('at an exact move boundary shows the move that starts there', () => {
+    const t = data.a.parsed!.table;
+    const buffers = buildToolpathBuffers(t, { showRapids: true });
+    // end of the G1 (row 1): the dwell (row 2, line 4) starts there and the G1 is drawn as done
+    const c = playbackCursor(job, data, tl, t.t[1])!;
+    expect(c.row).toBe(2);
+    expect(c.line).toBe(4);
+    expect(c.position[0]).toBeCloseTo(100, 6);
+    expect(splitVertex(tl.entries[0], t.t[1], t, buffers.rowVertexEnd)).toBe(buffers.rowVertexEnd[1]);
+    expect(playbackCursor(job, data, tl, 0)!.row).toBe(1); // zero-length row 0 is skipped at the start
+    expect(playbackCursor(job, data, tl, tl.total)!.row).toBe(t.count - 1);
+  });
+
   it('movePlayhead clears a stale line selection so the G-code list follows the playhead', () => {
     appStore.setState({ job, programData: data, activeProgramId: job.programs[0].id, selectedLine: 3, playhead: 0, playing: false });
     movePlayhead(1);
