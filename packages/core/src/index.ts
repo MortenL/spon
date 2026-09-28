@@ -40,6 +40,7 @@ export * from './post/types';
 export * from './cam/types';
 export * from './cam/defaults';
 export * from './cam/context';
+export * from './cam/heights';
 export * from './cam/features/chain';
 export * from './cam/features/dxf';
 export * from './cam/features/mesh';
