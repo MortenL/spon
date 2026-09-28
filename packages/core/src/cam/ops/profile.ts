@@ -50,7 +50,6 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
   const tanA = Math.tan((Math.max(0.1, angle) * Math.PI) / 180);
   const w = new MoveWriter();
   let clearance = -Infinity;
-  let lapIndex = 0;
   let plungeWarned = false;
 
   const emitSegs = (segs: Segment[], z0: number, z1: number) => {
@@ -63,13 +62,21 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
     }
   };
 
-  /** Cuts one closed lap at the given levels; the tool travels to it first. */
-  const cutClosed = (lap: Path2D, levels: number[], h: ResolvedHeights, first: boolean) => {
-    const index = lapIndex++;
+  /**
+   * Cuts one closed lap at the given levels; the tool travels to it first. `index` is the contour's index in
+   * `geo.contours` (the refIndex tabs and lead start points key on). `useExplicit` is true for a contour's first
+   * roughing or finish piece, where explicit tab positions and an explicit lead start point apply; a contour whose
+   * offset splits falls back to automatic placement and an automatic start for its later pieces. `recordOverlay`
+   * is true only for a contour's first roughing piece, so overlays are reported once per contour.
+   */
+  const cutClosed = (
+    lap: Path2D, levels: number[], h: ResolvedHeights, first: boolean, index: number, useExplicit: boolean, recordOverlay: boolean,
+  ) => {
     const wantCW = (op.side !== 'inside') === (op.direction === 'climb');
     let path = orientPath(lap, !wantCW);
     const total = pathLength(path);
-    const explicitStart = op.leads.startPoint !== 'auto' && op.leads.startPoint.refIndex === index ? op.leads.startPoint.t * total : null;
+    const explicitStart =
+      useExplicit && op.leads.startPoint !== 'auto' && op.leads.startPoint.refIndex === index ? op.leads.startPoint.t * total : null;
     path = rotateStart(path, explicitStart ?? autoStart(path));
     const P = pathStart(path);
     const T = pointAt(path, 0).tangent;
@@ -81,14 +88,18 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
 
     let tabsAt: (z: number) => TabProfile | null = () => null;
     if (op.tabs.enabled) {
-      const explicit = op.tabs.positions ? op.tabs.positions.filter((p) => p.refIndex === index).map((p) => p.t) : null;
+      const explicit = useExplicit && op.tabs.positions ? op.tabs.positions.filter((p) => p.refIndex === index).map((p) => p.t) : null;
       const { intervals, skipped } = tabIntervals(path, op.tabs, r, explicit);
       if (skipped) diag('warning', 'tab-skipped', `${skipped} tab(s) did not fit and were skipped`);
       const top = h.bottom + op.tabs.height;
       const profile: TabProfile = { top, base: h.bottom, intervals };
       tabsAt = (z) => (intervals.length && z < top - 1e-9 ? profile : null);
-      for (const iv of intervals) out.overlays.tabs.push({ refIndex: index, t: iv.center / total, point: pointAt(path, iv.center).point });
-      if (intervals.length || op.tabs.positions) out.overlays.laps.push({ refIndex: index, points: flattenPath(path, 0.01), z: top });
+      if (recordOverlay) {
+        for (const iv of intervals) out.overlays.tabs.push({ refIndex: index, t: iv.center / total, point: pointAt(path, iv.center).point });
+        if (intervals.length || (useExplicit && op.tabs.positions)) {
+          out.overlays.laps.push({ refIndex: index, points: flattenPath(path, 0.01), z: top });
+        }
+      }
     }
 
     w.travel(S, first ? h.clearance : h.retract, h.feed);
@@ -113,7 +124,6 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
   };
 
   const cutOpen = (lap: Path2D, levels: number[], h: ResolvedHeights, first: boolean) => {
-    lapIndex++;
     if (op.entry.mode !== 'plunge' && !plungeWarned) {
       diag('warning', 'entry-plunge', 'Open contours are entered with a plunge');
       plungeWarned = true;
@@ -129,7 +139,7 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
   };
 
   let first = true;
-  geo.contours.forEach((c) => {
+  geo.contours.forEach((c, index) => {
     const hr = resolveHeights(op.heights, ctx, { contourZ: c.z, holeBottom: null, faceZ: geo.faceZ });
     if (!hr.values) {
       for (const e of hr.errors) diag('error', 'heights-invalid', e, c.ref);
@@ -141,12 +151,14 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
     const laps = centreLaps(c.path, op.side, r + op.stockRadial, tol);
     if (!laps) return diag('error', 'offset-collapsed', 'The tool does not fit inside this contour', c.ref);
     const levels = depthLevels(h.top, h.bottom + op.stockAxial, op.stepdown);
-    for (const lap of laps) {
-      (lap.closed ? cutClosed : cutOpen)(lap, levels, h, first);
+    laps.forEach((lap, i) => {
+      if (lap.closed) cutClosed(lap, levels, h, first, index, i === 0, i === 0);
+      else cutOpen(lap, levels, h, first);
       first = false;
-    }
+    });
     if (op.finishPass && c.path.closed) {
-      for (const lap of centreLaps(c.path, op.side, r, tol) ?? []) cutClosed(lap, [h.bottom], h, false);
+      const finishLaps = centreLaps(c.path, op.side, r, tol) ?? [];
+      finishLaps.forEach((lap, i) => cutClosed(lap, [h.bottom], h, false, index, i === 0, false));
     }
   });
 

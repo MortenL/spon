@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  applyCommand, camContext, newOperation, polyArea, type ProfileOp, profileToolpath, type ResolvedContour, v2,
+  applyCommand, camContext, dist2, newOperation, polyArea, type ProfileOp, profileToolpath, type ResolvedContour, v2,
 } from '../src';
 import { camPartSetup, cutMoves, geoOf, rectPath, tool6 } from './fixtures/camSetup';
 
@@ -67,6 +67,49 @@ describe('profileToolpath', () => {
     expect(atTabTop.length).toBeGreaterThanOrEqual(8); // up + across, for each of 4 tabs on the last level
     expect(out.overlays.tabs).toHaveLength(4);
     expect(out.overlays.laps).toMatchObject([{ refIndex: 0, z: -4.2 }]);
+  });
+
+  it('keys explicit tab positions to the contour index, applying to rough and finish laps alike', () => {
+    const c0: ResolvedContour = { path: rectPath(5, 5, 45, 25), z: 0, ref: 0 };
+    const c1: ResolvedContour = { path: rectPath(55, 5, 95, 25), z: 0, ref: 1 };
+    const tabs = {
+      enabled: true, shape: 'rect' as const, width: 4, height: 2, placement: 'count' as const, count: 4, spacing: 50,
+      positions: [{ refIndex: 1, t: 0.5 }],
+    };
+    const rough = profileToolpath(profile({ tabs }), tool6, ctx, geoOf({ contours: [c0, c1] }));
+    const both = profileToolpath(profile({ tabs, finishPass: true }), tool6, ctx, geoOf({ contours: [c0, c1] }));
+    expect(rough.diagnostics).toEqual([]);
+    expect(both.diagnostics).toEqual([]);
+
+    // contour 0 (refIndex 0) has no matching explicit position, so it gets no tabs
+    expect(rough.overlays.tabs).toHaveLength(1);
+    expect(rough.overlays.tabs[0].refIndex).toBe(1);
+    expect(rough.overlays.laps.map((l) => l.refIndex).sort()).toEqual([0, 1]);
+    const contour0Clips = cutMoves(rough.toolpath!.moves).filter((m) => m.to.x < 50 && Math.abs(m.to.z + 4.2) < 1e-6);
+    expect(contour0Clips).toHaveLength(0);
+
+    // both the roughing laps and the finish lap of contour 1 ride up over the tab (at z = tab top, -4.2); the tab's
+    // rising/falling edges sit tool-width + half tab width from its centre, so search within that radius
+    const tabPoint = rough.overlays.tabs[0].point;
+    const clipsNearTab = (o: typeof rough) =>
+      cutMoves(o.toolpath!.moves).filter((m) => dist2(v2(m.to.x, m.to.y), tabPoint) < 6 && Math.abs(m.to.z + 4.2) < 1e-6).length;
+    expect(clipsNearTab(rough)).toBeGreaterThan(0);
+    expect(clipsNearTab(both)).toBeGreaterThan(clipsNearTab(rough));
+  });
+
+  it('keys the explicit lead start point to the contour index, leaving other contours on the automatic start', () => {
+    const c0: ResolvedContour = { path: rectPath(5, 5, 45, 25), z: 0, ref: 0 };
+    const c1: ResolvedContour = { path: rectPath(55, 5, 95, 25), z: 0, ref: 1 };
+    const tabs = { enabled: true, shape: 'rect' as const, width: 4, height: 2, placement: 'count' as const, count: 2, spacing: 50, positions: null };
+    const auto = profileToolpath(
+      profile({ tabs, leads: { mode: 'none', length: 0, startPoint: 'auto' } }), tool6, ctx, geoOf({ contours: [c0, c1] }),
+    );
+    const explicit = profileToolpath(
+      profile({ tabs, leads: { mode: 'none', length: 0, startPoint: { refIndex: 1, t: 0.25 } } }), tool6, ctx, geoOf({ contours: [c0, c1] }),
+    );
+    const start = (o: typeof auto, refIndex: number) => o.overlays.laps.find((l) => l.refIndex === refIndex)!.points[0];
+    expect(start(explicit, 0)).toEqual(start(auto, 0)); // contour 0 stays on the automatic start
+    expect(start(explicit, 1)).not.toEqual(start(auto, 1)); // contour 1 starts at t = 0.25 instead
   });
 
   it('profiles open chains on the line with plunges and a warning', () => {
