@@ -313,7 +313,7 @@ interface Toolpath { operationId: string; toolId: string; rpm: number; coolant: 
    - Rings are ordered inside-out within each area, and each area is finished before the next.
    - Ring direction is set by `direction`.
 3. **Linking:** consecutive rings are joined by a straight move where it stays inside the cleared area. Otherwise the tool lifts to feed height.
-4. **Unreachable material:** the region minus the Minkowski sweep of the tool along all rings (a Clipper offset of the ring union by +r). Areas larger than π·tolerance² (i.e. π × tolerance squared) produce the warning `unmachined-area`, and the polygon is drawn in the viewport.
+4. **Unreachable material:** the region minus the Minkowski sweep of the tool along all rings (a Clipper offset of the ring union by +r). Any leftover area that is at least 0.05 mm wide produces the warning `unmachined-area`, and the polygon is drawn in the viewport. The width test is an inward offset by 0.025 mm that must leave something behind, which filters out rounding slivers.
 5. **Finish:**
    - walls: a profile pass on the region boundaries, with stock = 0;
    - floor: one extra ring set at the final depth when `stockAxial > 0`.
