@@ -38,3 +38,5 @@ export * from './gcode/program';
 export * from './tools/types';
 export * from './post/types';
 export * from './cam/types';
+export * from './cam/defaults';
+export * from './job/commands';
