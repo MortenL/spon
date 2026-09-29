@@ -7,7 +7,7 @@ export const SPON_EXTENSION = '.spon';
 export const SPON_MIME = 'application/x-spon+zip';
 
 export function modelFilePath(model: ModelRef): string {
-  return `models/${model.blobId}.${model.kind === 'mesh' ? 'stl' : 'dxf'}`;
+  return `models/${model.blobId}.${model.format ?? (model.kind === 'mesh' ? 'stl' : 'dxf')}`;
 }
 
 /** Blob bytes keyed by blobId. */

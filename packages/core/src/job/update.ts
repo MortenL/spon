@@ -11,6 +11,8 @@ export interface NewModel {
   blobId: string;
   kind: ModelKind;
   importUnits: LengthUnit;
+  format?: 'stl' | 'step' | 'iges';
+  body?: number;
 }
 
 export function renameJob(job: Job, name: string): Job {

@@ -61,6 +61,18 @@ describe('.spon files', () => {
     const missing = zipSync({ 'job.json': strToU8(JSON.stringify(job)), 'models/abc.stl': MODEL, 'programs/p1.nc': P1 });
     expect(() => readSpon(missing)).toThrow('programs/p2.nc is missing from the job file');
   });
+
+  it('stores STEP and IGES models under their own extension and keeps format and body', () => {
+    const job = setModel(createJob('Bracket'), { sourceName: 'b.stp', blobId: 'cad', kind: 'mesh', importUnits: 'mm', format: 'step', body: 2 });
+    expect(modelFilePath(job.model!)).toBe('models/cad.step');
+    expect(modelFilePath({ ...job.model!, format: 'iges' })).toBe('models/cad.iges');
+    expect(modelFilePath({ sourceName: 'b.stl', blobId: 'cad', kind: 'mesh', importUnits: 'mm', transform: job.model!.transform })).toBe('models/cad.stl');
+    const bytes = writeSpon(job, { cad: MODEL });
+    expect(Object.keys(unzipSync(bytes)).sort()).toEqual(['job.json', 'models/cad.step']);
+    const back = readSpon(bytes);
+    expect(back.job.model).toMatchObject({ format: 'step', body: 2, importUnits: 'mm' });
+    expect(back.blobs.cad).toEqual(MODEL);
+  });
 });
 
 describe('migrateJob', () => {

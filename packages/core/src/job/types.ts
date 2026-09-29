@@ -25,6 +25,10 @@ export interface ModelRef {
   kind: ModelKind;
   importUnits: LengthUnit;
   transform: ModelTransform;
+  /** Source format when it is not implied by `kind` (missing: STL for meshes, DXF for drawings). */
+  format?: 'stl' | 'step' | 'iges';
+  /** STEP/IGES: which body of the file (0-based) is the model. */
+  body?: number;
 }
 
 export interface AutoStock {
