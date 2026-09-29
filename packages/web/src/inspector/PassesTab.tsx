@@ -182,7 +182,7 @@ function PocketPasses({ op }: { op: PocketOp }) {
         Finish floor
       </label>
 
-      <EntryFields entry={op.entry} showAngles={false} onPatch={(p) => patch({ entry: { ...op.entry, ...p } })} />
+      <EntryFields entry={op.entry} showAngles onPatch={(p) => patch({ entry: { ...op.entry, ...p } })} />
     </div>
   );
 }
