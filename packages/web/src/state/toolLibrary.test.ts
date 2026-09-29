@@ -37,10 +37,31 @@ describe('tool library', () => {
   it('imports Spon and Fusion files', async () => {
     await loadToolLibrary();
     const spon = new File([exportToolLibrary([{ ...starterLibrary()[0], id: 'imported', number: 30 }])], 'lib.json');
-    expect(await importLibraryFile(spon)).toEqual({ added: 1, updated: 0, skipped: [] });
-    expect(await importLibraryFile(spon)).toEqual({ added: 0, updated: 1, skipped: [] });
+    expect(await importLibraryFile(spon)).toEqual({ added: 1, updated: 0, skipped: [], notes: [] });
+    expect(await importLibraryFile(spon)).toEqual({ added: 0, updated: 1, skipped: [], notes: [] });
     const fusion = new File([JSON.stringify({ data: [{ type: 'probe', description: 'Probe' }] })], 'f.json');
-    expect(await importLibraryFile(fusion)).toEqual({ added: 0, updated: 0, skipped: [{ name: 'Probe', reason: 'Unsupported tool type "probe"' }] });
+    expect(await importLibraryFile(fusion)).toEqual({ added: 0, updated: 0, skipped: [{ name: 'Probe', reason: 'Unsupported tool type "probe"' }], notes: [] });
+  });
+
+  it('refuses to save a tool with a T number another library tool has', async () => {
+    await loadToolLibrary();
+    const flat3 = tools().find((t) => t.id === 'starter-flat-3')!;
+    await expect(saveLibraryTool({ ...flat3, id: 'dup', name: 'Dup', number: 2 })).rejects.toThrow(/T2/);
+    expect(tools().some((t) => t.id === 'dup')).toBe(false);
+    await saveLibraryTool({ ...flat3, name: 'Renamed 3 mm' }); // saving a tool over itself keeps its number
+    expect(tools().find((t) => t.id === 'starter-flat-3')?.name).toBe('Renamed 3 mm');
+  });
+
+  it('renumbers imported tools whose T number is taken, and says so', async () => {
+    await loadToolLibrary();
+    const a = { ...starterLibrary()[0], id: 'imp-a', name: 'Imported A', number: 2 }; // T2 is the starter 6 mm flat
+    const b = { ...starterLibrary()[0], id: 'imp-b', name: 'Imported B', number: 2 };
+    const res = await importLibraryFile(new File([exportToolLibrary([a, b])], 'lib.json'));
+    expect(res.added).toBe(2);
+    const numbers = tools().map((t) => t.number);
+    expect(new Set(numbers).size).toBe(numbers.length);
+    expect(res.notes).toHaveLength(2);
+    expect(res.notes[0]).toMatch(/Imported A.*T2.*T\d+/);
   });
 
   it('picks default tools per operation type', () => {

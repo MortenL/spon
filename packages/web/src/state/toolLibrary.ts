@@ -43,9 +43,17 @@ export async function loadToolLibrary(): Promise<void> {
   await refresh();
 }
 
+/** Thrown when a saved tool's T number belongs to another library tool. */
+export class ToolNumberTakenError extends Error {
+  override name = 'ToolNumberTakenError';
+}
+
 export async function saveLibraryTool(tool: Tool): Promise<void> {
   if (!validateTool(tool)) throw new Error('The tool has invalid values');
-  await (await db()).put('tools', tool, tool.id);
+  const d = await db();
+  const other = (await d.getAll('tools')).find((t) => t.id !== tool.id && t.number === tool.number);
+  if (other) throw new ToolNumberTakenError(`T${tool.number} is already used by "${other.name}"`);
+  await d.put('tools', tool, tool.id);
   await refresh();
 }
 
@@ -64,19 +72,32 @@ export async function resetStarterLibrary(): Promise<void> {
 
 export async function importLibraryFile(
   file: File,
-): Promise<{ added: number; updated: number; skipped: { name: string; reason: string }[] }> {
+): Promise<{ added: number; updated: number; skipped: { name: string; reason: string }[]; notes: string[] }> {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const text = new TextDecoder().decode(bytes);
   const isSpon = !file.name.toLowerCase().endsWith('.tools') && text.includes('"spon-tools"');
   const result = isSpon ? { tools: importToolLibrary(text), skipped: [] } : importFusionLibrary(bytes, file.name);
   const d = await db();
-  const existingIds = new Set(await d.getAllKeys('tools'));
+  const existing = await d.getAll('tools');
+  const existingIds = new Set(existing.map((t) => t.id));
+  // T numbers stay unique: an imported tool whose number is taken gets the next free one
+  const importedIds = new Set(result.tools.map((t) => t.id));
+  const taken = new Set(existing.filter((t) => !importedIds.has(t.id)).map((t) => t.number));
+  const notes: string[] = [];
+  const tools = result.tools.map((t) => {
+    let number = t.number;
+    while (taken.has(number)) number++;
+    taken.add(number);
+    if (number === t.number) return t;
+    notes.push(`${t.name}: T${t.number} was taken, renumbered to T${number}`);
+    return { ...t, number };
+  });
   const tx = d.transaction('tools', 'readwrite');
-  for (const t of result.tools) await tx.store.put(t, t.id);
+  for (const t of tools) await tx.store.put(t, t.id);
   await tx.done;
   await refresh();
-  const updated = result.tools.filter((t) => existingIds.has(t.id)).length;
-  return { added: result.tools.length - updated, updated, skipped: result.skipped };
+  const updated = tools.filter((t) => existingIds.has(t.id)).length;
+  return { added: tools.length - updated, updated, skipped: result.skipped, notes };
 }
 
 export function exportLibraryFile(): void {

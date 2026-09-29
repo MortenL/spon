@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { LengthField, NumericField } from '@/panels/NumericField';
 import {
-  deleteLibraryTool, exportLibraryFile, importLibraryFile, resetStarterLibrary, saveLibraryTool, useToolLibrary,
+  deleteLibraryTool, exportLibraryFile, importLibraryFile, resetStarterLibrary, saveLibraryTool, ToolNumberTakenError, useToolLibrary,
 } from '@/state/toolLibrary';
 import { useApp } from '@/state/store';
 import { ToolSketch } from './ToolSketch';
@@ -73,6 +73,10 @@ export function ToolLibraryDialog() {
       await saveLibraryTool(draft);
       closeForm();
     } catch (err) {
+      if (err instanceof ToolNumberTakenError) {
+        toast.error(`${err.message}; choose another tool number`);
+        return;
+      }
       console.error('Could not save the tool', err);
       toast.error('Check the tool values');
     }
@@ -100,11 +104,12 @@ export function ToolLibraryDialog() {
 
   const handleImport = async (file: File) => {
     try {
-      const { added, updated, skipped } = await importLibraryFile(file);
+      const { added, updated, skipped, notes } = await importLibraryFile(file);
       const total = added + updated;
       const updatedPart = updated > 0 ? ` (${updated} updated)` : '';
+      const details = [...skipped.map((s) => `${s.name}: ${s.reason}`), ...notes];
       toast.success(`Imported ${total} tool${total === 1 ? '' : 's'}${updatedPart}; ${skipped.length} skipped`, {
-        description: skipped.length ? skipped.map((s) => `${s.name}: ${s.reason}`).join('\n') : undefined,
+        description: details.length ? details.join('\n') : undefined,
       });
     } catch (err) {
       console.error('Could not import the tool library', err);
