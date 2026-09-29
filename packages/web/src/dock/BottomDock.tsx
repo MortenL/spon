@@ -21,9 +21,10 @@ function initialHeight(): number {
 
 export function BottomDock() {
   const hasPrograms = useApp((s) => allPrograms(s).length > 0);
+  const hasOperations = useApp((s) => s.job.operations.length > 0);
   const tab = useApp((s) => s.dockTab);
   const [height, setHeight] = useState(initialHeight);
-  if (!hasPrograms) return null;
+  if (!hasPrograms && !hasOperations) return null;
 
   const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
     const startY = e.clientY;
@@ -58,7 +59,9 @@ export function BottomDock() {
           <ToggleGroupItem value="analysis" data-testid="dock-tab-analysis">Analysis</ToggleGroupItem>
         </ToggleGroup>
       </div>
-      <div className="min-h-0 flex-1">{tab === 'gcode' ? <GcodeList /> : <AnalysisView />}</div>
+      {/* Nothing to show in the G-code tab without a program (e.g. every operation errored): fall back to Analysis, which
+          always has the Operations diagnostics group. */}
+      <div className="min-h-0 flex-1">{tab === 'gcode' && hasPrograms ? <GcodeList /> : <AnalysisView />}</div>
     </section>
   );
 }

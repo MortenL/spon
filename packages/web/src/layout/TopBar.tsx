@@ -1,10 +1,12 @@
 import { type LengthUnit, renameJob, setDisplayUnits } from '@sponcam/core';
-import { FilePlus, FolderOpen, type LucideIcon, Redo2, Save, SaveAll, Undo2 } from 'lucide-react';
+import { Download, FilePlus, FolderOpen, type LucideIcon, Redo2, Save, SaveAll, Undo2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { useExportConfirm } from '@/layout/ExportDialog';
+import { exportGcode } from '@/state/export';
 import { newDocument, openFile, openViaPicker, registerOpenFallback, saveDocument } from '@/state/documents';
 import { appStore, useApp } from '@/state/store';
 import { ToolLibraryDialog } from '@/tools/ToolLibraryDialog';
@@ -23,8 +25,10 @@ export function TopBar() {
   const units = useApp((s) => s.job.displayUnits);
   const canUndo = useApp((s) => s.past.length > 0);
   const canRedo = useApp((s) => s.future.length > 0);
+  const canExport = useApp((s) => s.job.operations.length > 0 || s.generatedPrograms.length > 0);
   const [draft, setDraft] = useState(name);
   const fileInput = useRef<HTMLInputElement>(null);
+  const { confirm, dialog: exportDialog } = useExportConfirm();
 
   useEffect(() => setDraft(name), [name]);
   useEffect(() => {
@@ -55,6 +59,8 @@ export function TopBar() {
       <ToolButton label="Redo" icon={Redo2} onClick={redo} disabled={!canRedo} testId="redo" />
       <Separator orientation="vertical" className="mx-2 h-6" />
       <ToolLibraryDialog />
+      <Separator orientation="vertical" className="mx-2 h-6" />
+      <ToolButton label="Export G-code" icon={Download} onClick={() => void exportGcode(confirm)} disabled={!canExport} testId="export-gcode" />
       <div className="ml-auto" />
       <ToggleGroup type="single" size="sm" variant="outline" value={units} onValueChange={(v) => v && commit((j) => setDisplayUnits(j, v as LengthUnit))}>
         <ToggleGroupItem value="mm" data-testid="units-toggle-mm">mm</ToggleGroupItem>
@@ -68,6 +74,7 @@ export function TopBar() {
           if (file) void openFile(file, null);
         }}
       />
+      {exportDialog}
     </header>
   );
 }
