@@ -56,3 +56,5 @@ export * from './cam/ops/tabs';
 export * from './cam/ops/output';
 export * from './cam/ops/profile';
 export * from './cam/ops/pocket';
+export * from './cam/ops/drill';
+export * from './cam/generate';
