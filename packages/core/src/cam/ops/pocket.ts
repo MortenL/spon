@@ -16,6 +16,7 @@ interface Ring { k: number; path: Path2D; poly: Poly }
 interface Area { polys: Poly[]; rings: Ring[] }
 
 const LIFT = 1; // mm above the previous level for moves inside the pocket
+const COVERAGE_TOL = 0.05; // mm; floor for the unmachined-area sweep's tolerance (see below)
 
 export function pocketToolpath(op: PocketOp, tool: Tool, ctx: CamContext, geo: ResolvedGeometry): OpOutput {
   const out: OpOutput = { toolpath: null, diagnostics: [], heights: null, overlays: emptyOverlays() };
@@ -106,11 +107,20 @@ export function pocketToolpath(op: PocketOp, tool: Tool, ctx: CamContext, geo: R
       flattenPath(orientPath(sh.shape.outer, true), tol),
       ...sh.shape.islands.map((i) => flattenPath(orientPath(i, false), tol)),
     ];
+    // Each ring is offset from the previous ring by `stepover`, not from the original region by a growing
+    // delta: erosion by a disc is associative (eroding by a then by b equals eroding by a+b), and chaining
+    // keeps every offsetPolys call's delta small and constant, which matters for round joins on a jagged
+    // boundary — inflating by a large radius in one step tessellates every corner at that radius.
     const ringLevels: Poly[][] = [];
+    let prevPolys = region;
+    let prevDelta = 0;
     for (let k = 0; k < 100000; k++) {
-      const off = offsetPolys(region, -(r + op.stockRadial + k * stepover), tol);
+      const delta = r + op.stockRadial + k * stepover;
+      const off = offsetPolys(prevPolys, -(delta - prevDelta), tol);
       if (!off.length) break;
       ringLevels.push(off);
+      prevPolys = off;
+      prevDelta = delta;
     }
     if (!ringLevels.length) return diag('error', 'offset-collapsed', 'The tool does not fit in this pocket', sh.ref);
     const areas: Area[] = polysToRegions(ringLevels[0]).map((reg) => ({ polys: regionPolys(reg), rings: [] }));
@@ -121,9 +131,14 @@ export function pocketToolpath(op: PocketOp, tool: Tool, ctx: CamContext, geo: R
       }
     });
 
-    // material the tool cannot reach
+    // material the tool cannot reach: sweeping a disc of radius r along every ring and unioning the bands is
+    // a lot of Clipper work when there are many rings on a fine contour, so the rings feed it as their
+    // already arc-fitted path re-flattened at a coarser tolerance — this check only needs to place a gap to
+    // within a fraction of the tool radius, not to the operation's cutting tolerance.
     const target = op.stockRadial > 0 ? offsetPolys(region, -op.stockRadial, tol) : region;
-    const swept = sweepPolylines(areas.flatMap((a) => a.rings.map((ring) => ({ points: ring.poly, closed: true }))), r, tol);
+    const coverageTol = Math.max(tol, COVERAGE_TOL);
+    const sweepInput = areas.flatMap((a) => a.rings.map((ring) => ({ points: flattenPath(ring.path, coverageTol), closed: true })));
+    const swept = sweepPolylines(sweepInput, r, coverageTol);
     const left = polysToRegions(differencePolys(target, swept)).filter((reg) => offsetPolys(regionPolys(reg), -0.025, tol).length > 0);
     if (left.length) {
       diag('warning', 'unmachined-area', `The tool cannot reach ${left.length} area(s) of this pocket`, sh.ref);
