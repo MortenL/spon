@@ -1,5 +1,7 @@
+import fs from 'node:fs/promises';
 import path from 'node:path';
 import { expect, type Page, test } from '@playwright/test';
+import { strFromU8, unzipSync } from 'fflate';
 
 const FIXTURES = path.resolve(import.meta.dirname, '../../core/test/fixtures');
 
@@ -47,7 +49,9 @@ test('DXF part: profile with tabs, pocket and drill generate, play and export', 
   await expect(generated).toHaveCount(2);
   await expect(page.getByText(/-01-T2\.nc/)).toBeVisible();
   await expect(page.getByText(/-02-T9\.nc/)).toBeVisible();
-  await expect(page.getByTestId('op-diagnostic').filter({ has: page.locator('[data-code="heights-invalid"]') })).toHaveCount(0);
+  await page.getByTestId('dock-tab-analysis').click();
+  await expect(page.locator('[data-testid="op-diagnostic"][data-code="unmachined-area"]').first()).toBeVisible(); // the pocket's square corners
+  await expect(page.locator('[data-testid="op-diagnostic"][data-code="heights-invalid"]')).toHaveCount(0);
 
   // plays
   await page.getByTestId('play').click();
@@ -61,12 +65,28 @@ test('DXF part: profile with tabs, pocket and drill generate, play and export', 
   await page.getByTestId('post-dialect').selectOption('grbl');
   await expect(generated).toHaveCount(2);
 
-  // export: warnings → confirm → zip download
-  const download = page.waitForEvent('download');
+  // export: warnings → confirm → zip download, containing exactly the two posted files
+  const downloadPromise = page.waitForEvent('download');
   await page.getByTestId('export-gcode').click();
   await expect(page.getByTestId('export-dialog')).toBeVisible();
   await page.getByTestId('export-confirm').click();
-  expect((await download).suggestedFilename()).toMatch(/\.zip$/);
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/\.zip$/);
+
+  const zipPath = await download.path();
+  if (!zipPath) throw new Error('download has no local path');
+  const entries = unzipSync(await fs.readFile(zipPath));
+  const names = Object.keys(entries);
+  expect(names).toHaveLength(2);
+  const flatFile = names.find((n) => n.endsWith('-01-T2.nc'));
+  const drillFile = names.find((n) => n.endsWith('-02-T9.nc'));
+  expect(flatFile, names.join(', ')).toBeTruthy();
+  expect(drillFile, names.join(', ')).toBeTruthy();
+  for (const name of [flatFile!, drillFile!]) {
+    const text = strFromU8(entries[name]);
+    expect(text.length).toBeGreaterThan(0);
+    expect(text).toContain('G21');
+  }
 });
 
 test('errors block export; a face that is no longer horizontal breaks its operation', async ({ page }) => {
