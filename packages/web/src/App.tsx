@@ -4,6 +4,7 @@ import { BottomDock } from '@/dock/BottomDock';
 import { usePlaybackLoop } from '@/gcode/playbackLoop';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import { Inspector } from '@/inspector/Inspector';
 import { DropZone } from '@/layout/DropZone';
 import { LeftPanel } from '@/layout/LeftPanel';
 import { StatusBar } from '@/layout/StatusBar';
@@ -54,6 +55,7 @@ export function App() {
           </div>
           <BottomDock />
         </main>
+        <Inspector />
       </div>
       <StatusBar />
       <UnitsDialog />
