@@ -5,6 +5,7 @@ import { usePlaybackLoop } from '@/gcode/playbackLoop';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { Inspector } from '@/inspector/Inspector';
+import { BodyDialog } from '@/layout/BodyDialog';
 import { DropZone } from '@/layout/DropZone';
 import { LeftPanel } from '@/layout/LeftPanel';
 import { StatusBar } from '@/layout/StatusBar';
@@ -59,6 +60,7 @@ export function App() {
       </div>
       <StatusBar />
       <UnitsDialog />
+      <BodyDialog />
       <Toaster position="bottom-center" richColors />
     </div>
   );

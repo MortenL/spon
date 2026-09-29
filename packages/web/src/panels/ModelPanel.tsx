@@ -1,4 +1,4 @@
-import { bboxSize, type LengthUnit, setImportUnits } from '@sponcam/core';
+import { bboxSize, CAD_LABEL, type LengthUnit, setImportUnits } from '@sponcam/core';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { usePlacement } from '@/state/selectors';
 import { appStore, useApp } from '@/state/store';
@@ -18,10 +18,11 @@ export function ModelPanel() {
   if (!model || !geometry) {
     return (
       <PanelSection title="Model">
-        <p className="text-sm text-muted-foreground">No model loaded. Drop an STL or DXF file on the viewport, or use Open.</p>
+        <p className="text-sm text-muted-foreground">No model loaded. Drop an STL, STEP, IGES or DXF file on the viewport, or use Open.</p>
       </PanelSection>
     );
   }
+  const source = geometry.kind === 'mesh' ? geometry.source : undefined;
 
   const { commit, toggleLayer, toggleEdges } = appStore.getState();
   return (
@@ -30,17 +31,28 @@ export function ModelPanel() {
         <dt className="text-muted-foreground">File</dt>
         <dd className="truncate" title={model.sourceName}>{model.sourceName}</dd>
         <dt className="text-muted-foreground">Type</dt>
-        <dd>{model.kind === 'mesh' ? 'Mesh (STL)' : 'Drawing (DXF)'}</dd>
+        <dd>{model.kind === 'drawing' ? 'Drawing (DXF)' : `Mesh (${source ? CAD_LABEL[source.format] : 'STL'})`}</dd>
         <dt className="text-muted-foreground">Size</dt>
         <dd className="font-mono text-xs" data-testid="model-size">{placement ? formatSize(bboxSize(placement.bbox), units) : '—'}</dd>
-        <dt className="text-muted-foreground">File units</dt>
-        <dd>
-          <ToggleGroup type="single" size="sm" variant="outline" value={model.importUnits}
-            onValueChange={(v) => v && commit((j) => setImportUnits(j, v as LengthUnit))}>
-            <ToggleGroupItem value="mm" data-testid="import-units-mm">mm</ToggleGroupItem>
-            <ToggleGroupItem value="in" data-testid="import-units-in">in</ToggleGroupItem>
-          </ToggleGroup>
-        </dd>
+        {source ? (
+          <>
+            <dt className="text-muted-foreground">Source</dt>
+            <dd className="truncate" data-testid="model-source" title={source.name}>
+              {`${CAD_LABEL[source.format]} · body ${source.body + 1} of ${source.bodies} · ${source.name}`}
+            </dd>
+          </>
+        ) : (
+          <>
+            <dt className="text-muted-foreground">File units</dt>
+            <dd>
+              <ToggleGroup type="single" size="sm" variant="outline" value={model.importUnits}
+                onValueChange={(v) => v && commit((j) => setImportUnits(j, v as LengthUnit))}>
+                <ToggleGroupItem value="mm" data-testid="import-units-mm">mm</ToggleGroupItem>
+                <ToggleGroupItem value="in" data-testid="import-units-in">in</ToggleGroupItem>
+              </ToggleGroup>
+            </dd>
+          </>
+        )}
         {geometry.kind === 'mesh' && (
           <>
             <dt className="text-muted-foreground">Triangles</dt>

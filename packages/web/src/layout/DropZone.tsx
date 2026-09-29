@@ -23,7 +23,7 @@ export function DropZone({ children }: { children: ReactNode }) {
       {children}
       {over && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center border-2 border-dashed border-primary bg-primary/10 text-sm font-medium">
-          Drop an STL, DXF, G-code or .spon file
+          Drop an STL, STEP, IGES, DXF, G-code or .spon file
         </div>
       )}
     </div>

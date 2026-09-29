@@ -1,12 +1,14 @@
 import {
   type BlobMap,
-  createJob, fileKind, type Job, type LengthUnit, MAX_SOFT_IMPORT_BYTES, migrateJob, modelFilePath, type ModelRef, readSpon, SPON_EXTENSION, writeSpon,
+  CAD_LABEL, cadFormat, createJob, fileKind, type ImportResult, type Job, type LengthUnit, MAX_SOFT_IMPORT_BYTES, migrateJob, modelFilePath,
+  type ModelRef, readSpon, SPON_EXTENSION, writeSpon,
 } from '@sponcam/core';
 import { toast } from 'sonner';
-import { importInWorker } from '../workers/importClient';
+import { cadReaderLoaded, importInWorker, loadCadReaderInWorker } from '../workers/importClient';
 import { getBlob, loadCurrentJob } from './autosave';
 import { downloadBytes, pickOpenFile, pickSaveHandle, safeFileName, supportsFsAccess, writeToHandle } from './fileio';
 import { suggestedUnits, toModelGeometry } from './geometry';
+import { importStep } from './importFlow';
 import { importProgramBytes, isProgramFile, loadPrograms, pruneBlobs, storeBlob } from './programs';
 import { appStore, type ModelGeometry, type PendingImport } from './store';
 
@@ -14,9 +16,10 @@ const state = () => appStore.getState();
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 async function geometryForModel(model: ModelRef, bytes: Uint8Array): Promise<{ geometry: ModelGeometry; warnings: string[] }> {
-  // the stored name decides the parser, so derive it from the model kind rather than trusting sourceName
-  const result = await importInWorker(modelFilePath(model), bytes);
+  // the stored name decides the parser, so derive it from the model kind/format rather than trusting sourceName
+  const result = await importInWorker(modelFilePath(model), bytes, model.body);
   if (!result.ok) throw new Error(result.error);
+  if (result.kind === 'bodies') throw new Error('The file has several bodies and the job does not say which one');
   return { geometry: toModelGeometry(result), warnings: result.warnings };
 }
 
@@ -42,7 +45,7 @@ export async function newDocument(): Promise<void> {
   await persistModelBlob(null, null);
 }
 
-/** Opens a .spon job, or imports an STL/DXF into the current job. */
+/** Opens a .spon job, or imports an STL/STEP/IGES/DXF model into the current job. */
 export async function openFile(file: File, handle: FileSystemFileHandle | null = null): Promise<void> {
   if (isProgramFile(file.name)) {
     if (file.size > MAX_SOFT_IMPORT_BYTES && !window.confirm(`${file.name} is ${Math.round(file.size / 1048576)} MB and may take a while to load. Continue?`)) return;
@@ -51,7 +54,7 @@ export async function openFile(file: File, handle: FileSystemFileHandle | null =
   }
   const isJob = file.name.toLowerCase().endsWith(SPON_EXTENSION);
   if (!isJob && !fileKind(file.name)) {
-    toast.error(`Unsupported file type: ${file.name} (open .spon, .stl, .dxf or G-code)`);
+    toast.error(`Unsupported file type: ${file.name} (open .spon, .stl, .step, .iges, .dxf or G-code)`);
     return;
   }
   if (file.size > MAX_SOFT_IMPORT_BYTES && !window.confirm(`${file.name} is ${Math.round(file.size / 1048576)} MB and may take a while to load. Continue?`)) {
@@ -64,37 +67,63 @@ export async function openFile(file: File, handle: FileSystemFileHandle | null =
   else await importModelBytes(file.name, bytes);
 }
 
-export async function importModelBytes(fileName: string, bytes: Uint8Array): Promise<void> {
-  state().setBusy(`Importing ${fileName}…`);
-  let result;
+export async function importModelBytes(fileName: string, bytes: Uint8Array, body?: number): Promise<void> {
+  const cad = cadFormat(fileName);
+  let result: ImportResult;
   try {
-    result = await importInWorker(fileName, bytes);
+    if (cad && !cadReaderLoaded()) {
+      state().setBusy(`Loading ${CAD_LABEL[cad]} reader…`);
+      await loadCadReaderInWorker();
+    }
+    state().setBusy(cad ? `Reading ${CAD_LABEL[cad]} file…` : `Importing ${fileName}…`);
+    result = await importInWorker(fileName, bytes, body);
   } catch (err) {
     toast.error(`Could not import ${fileName}: ${message(err)}`);
     return;
   } finally {
     state().setBusy(null);
   }
-  if (!result.ok) {
-    toast.error(`Could not import ${fileName}: ${result.error}`);
+  const step = importStep(result);
+  if (step.kind === 'error') {
+    toast.error(`Could not import ${fileName}: ${step.error}`);
+    return;
+  }
+  if (step.kind === 'chooseBody') {
+    state().setPendingBodies({ fileName, bytes, format: step.format, bodies: step.bodies });
     return;
   }
   const pending: PendingImport = {
     fileName,
     bytes,
-    geometry: toModelGeometry(result),
-    warnings: result.warnings,
-    suggestedUnits: suggestedUnits(result),
+    geometry: toModelGeometry(step.result),
+    warnings: step.result.warnings,
+    suggestedUnits: suggestedUnits(step.result),
   };
-  if (result.detectedUnits) await finishImport(pending, result.detectedUnits);
+  if (step.units) await finishImport(pending, step.units);
   else state().setPendingImport(pending);
+}
+
+/** Imports the body picked in the body dialog (re-reads the file with that body). */
+export async function importPendingBody(body: number): Promise<void> {
+  const pending = state().pendingBodies;
+  if (!pending) return;
+  state().setPendingBodies(null);
+  await importModelBytes(pending.fileName, pending.bytes, body);
+}
+
+export function cancelPendingBodies(): void {
+  state().setPendingBodies(null);
 }
 
 export async function finishImport(pending: PendingImport, units: LengthUnit): Promise<void> {
   const blobId = crypto.randomUUID();
+  const source = pending.geometry.kind === 'mesh' ? pending.geometry.source : undefined;
   state().setPendingImport(null);
   state().applyImportedModel(
-    { sourceName: pending.fileName, blobId, kind: pending.geometry.kind, importUnits: units },
+    {
+      sourceName: pending.fileName, blobId, kind: pending.geometry.kind, importUnits: units,
+      ...(source ? { format: source.format, body: source.body } : {}),
+    },
     pending.geometry,
     pending.bytes,
     pending.warnings,

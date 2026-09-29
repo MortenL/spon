@@ -16,6 +16,7 @@ const INCH_DXF = encode([
 function imported(name: string, bytes: Uint8Array) {
   const result = importFile(name, bytes);
   if (!result.ok) throw new Error(result.error);
+  if (result.kind === 'bodies') throw new Error('unexpected bodies result'); // importFile is STL/DXF only
   return result;
 }
 

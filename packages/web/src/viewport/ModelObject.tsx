@@ -1,5 +1,5 @@
 import {
-  alignEdgeToX, camContext, type LengthUnit, layFlat, nearestTriangleEdge, planarRegion, regionNormal, unitScale, type Vec3,
+  alignEdgeToX, camContext, faceRegion, type LengthUnit, layFlat, nearestTriangleEdge, regionNormal, unitScale, type Vec3,
 } from '@sponcam/core';
 import { Edges, Line } from '@react-three/drei';
 import type { ThreeEvent } from '@react-three/fiber';
@@ -51,7 +51,7 @@ function ModelMesh({ geometry, importUnits }: { geometry: MeshGeometry; importUn
   }, [pickMode, camPick]);
 
   // 0.01 mm plane tolerance, expressed in the mesh's raw units
-  const regionAt = (tri: number) => planarRegion(geometry.mesh, geometry.adjacency, tri, { distanceTol: 0.01 / unitScale(importUnits) });
+  const regionAt = (tri: number) => faceRegion(geometry.mesh, geometry.adjacency, tri, { distanceTol: 0.01 / unitScale(importUnits) });
   const edgeAt = (e: ThreeEvent<PointerEvent | MouseEvent>, tri: number): [Vec3, Vec3] => {
     const local = e.object.worldToLocal(e.point.clone()); // mesh-local = raw model coordinates
     return nearestTriangleEdge(geometry.mesh, tri, { x: local.x, y: local.y, z: local.z });

@@ -2,7 +2,7 @@ import { SPON_MIME } from '@sponcam/core';
 
 const JOB_TYPES: FilePickerAcceptType[] = [{ description: 'Spon job', accept: { [SPON_MIME]: ['.spon'] } }];
 const OPEN_TYPES: FilePickerAcceptType[] = [
-  { description: 'Spon job or model', accept: { 'application/octet-stream': ['.spon', '.stl', '.dxf'] } },
+  { description: 'Spon job or model', accept: { 'application/octet-stream': ['.spon', '.stl', '.step', '.stp', '.iges', '.igs', '.dxf'] } },
 ];
 
 export function safeFileName(name: string): string {
