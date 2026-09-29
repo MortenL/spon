@@ -34,14 +34,16 @@ function compactVertices(
 
 /**
  * Converts a triangle soup into an indexed mesh by snapping vertices to a grid of `tolerance` (a spatial hash).
- * Recomputes per-triangle normals from the winding and drops zero-area triangles.
+ * Recomputes per-triangle normals from the winding and drops zero-area triangles; `kept[i]` is the soup triangle
+ * that output triangle `i` came from.
  */
-export function weldTriangles(soup: Float32Array, tolerance = 1e-4): { mesh: Mesh; degenerateRemoved: number } {
+export function weldTriangles(soup: Float32Array, tolerance = 1e-4): { mesh: Mesh; degenerateRemoved: number; kept: Uint32Array } {
   const inv = 1 / tolerance;
   const lookup = new Map<string, number>();
   const positions: number[] = [];
   const indices: number[] = [];
   const normals: number[] = [];
+  const kept: number[] = [];
   let degenerateRemoved = 0;
   const corner = [0, 0, 0];
 
@@ -72,6 +74,7 @@ export function weldTriangles(soup: Float32Array, tolerance = 1e-4): { mesh: Mes
     }
     indices.push(a, b, c);
     normals.push(nx / len, ny / len, nz / len);
+    kept.push(t / 9);
   }
 
   const [compactedPositions, compactedIndices, compactedNormals] = compactVertices(positions, indices, normals);
@@ -79,5 +82,6 @@ export function weldTriangles(soup: Float32Array, tolerance = 1e-4): { mesh: Mes
   return {
     mesh: { positions: compactedPositions, indices: compactedIndices, normals: compactedNormals },
     degenerateRemoved,
+    kept: Uint32Array.from(kept),
   };
 }

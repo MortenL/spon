@@ -56,9 +56,8 @@ export interface StlImport {
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-export function importStl(bytes: Uint8Array): StlImport {
-  const { mesh, degenerateRemoved } = weldTriangles(parseStlTriangles(bytes));
-  if (mesh.indices.length === 0) throw new StlParseError('STL file contains only degenerate triangles');
+/** Adjacency, diagnostics and warnings for a freshly welded mesh (STL and STEP/IGES imports). */
+export function finishMeshImport(mesh: Mesh, degenerateRemoved: number): StlImport {
   const adjacency = buildAdjacency(mesh);
   const diagnostics: MeshDiagnostics = {
     triangles: mesh.indices.length / 3,
@@ -72,6 +71,12 @@ export function importStl(bytes: Uint8Array): StlImport {
   if (adjacency.openEdges) warnings.push(`Mesh is not closed: ${plural(adjacency.openEdges, 'open edge', 'open edges')}`);
   if (adjacency.nonManifoldEdges) warnings.push(`Mesh has ${plural(adjacency.nonManifoldEdges, 'non-manifold edge', 'non-manifold edges')}`);
   return { mesh, adjacency, diagnostics, warnings };
+}
+
+export function importStl(bytes: Uint8Array): StlImport {
+  const { mesh, degenerateRemoved } = weldTriangles(parseStlTriangles(bytes));
+  if (mesh.indices.length === 0) throw new StlParseError('STL file contains only degenerate triangles');
+  return finishMeshImport(mesh, degenerateRemoved);
 }
 
 /** STL has no units. Parts under 10 units on every axis are probably modelled in inches. */

@@ -4,6 +4,8 @@ export interface Mesh {
   positions: Float32Array; // xyz per vertex
   indices: Uint32Array; // 3 vertex indices per triangle
   normals: Float32Array; // one unit normal per triangle
+  /** STEP/IGES meshes: the source B-rep face of each triangle (dense ids from 0). */
+  faceIds?: Uint32Array;
 }
 
 export interface MeshDiagnostics {
