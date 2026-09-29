@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { allPrograms } from '../state/programList';
 import { appStore, useApp } from '../state/store';
 import { movePlayhead } from './playback';
 import { buildTimeline } from './timeline';
@@ -12,7 +13,7 @@ export function usePlaybackLoop(): void {
     let last = performance.now();
     const tick = (now: number) => {
       const s = appStore.getState();
-      const tl = buildTimeline(s.job.programs, s.programData);
+      const tl = buildTimeline(allPrograms(s), s.programData);
       // rAF is throttled in background tabs; on refocus one tick can carry a huge dt, so cap it.
       const dt = Math.min(now - last, 100);
       const next = s.playhead + (dt / 1000) * s.speed;

@@ -1,6 +1,7 @@
 import type React from 'react';
 import { useState } from 'react';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { allPrograms } from '@/state/programList';
 import { appStore, type DockTab, useApp } from '@/state/store';
 import { AnalysisView } from './AnalysisView';
 import { GcodeList } from './GcodeList';
@@ -19,7 +20,7 @@ function initialHeight(): number {
 }
 
 export function BottomDock() {
-  const hasPrograms = useApp((s) => s.job.programs.length > 0);
+  const hasPrograms = useApp((s) => allPrograms(s).length > 0);
   const tab = useApp((s) => s.dockTab);
   const [height, setHeight] = useState(initialHeight);
   if (!hasPrograms) return null;

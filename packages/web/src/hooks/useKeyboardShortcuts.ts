@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { movePlayhead, togglePlaying } from '@/gcode/playback';
 import { buildTimeline, stepTime } from '@/gcode/timeline';
 import { openViaPicker, saveDocument } from '@/state/documents';
+import { allPrograms } from '@/state/programList';
 import { appStore } from '@/state/store';
 
 const PLAYBACK_KEYS = [' ', 'arrowleft', 'arrowright', 'home', 'end'];
@@ -41,7 +42,7 @@ export function useKeyboardShortcuts(): void {
       const playbackKey = !mod && PLAYBACK_KEYS.includes(key);
       if (playbackKey ? isTypingForPlaybackKeys(e.target) : isTyping(e.target)) return;
       if (playbackKey) {
-        const tl = buildTimeline(s.job.programs, s.programData);
+        const tl = buildTimeline(allPrograms(s), s.programData);
         if (tl.total <= 0) return;
         if (key === ' ') {
           if (e.target instanceof HTMLButtonElement) return; // a focused button handles Space itself

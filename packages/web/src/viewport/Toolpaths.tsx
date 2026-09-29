@@ -3,6 +3,7 @@ import { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { splitVertex, usePlaybackCursor, useTimeline } from '@/gcode/playback';
 import { buildToolpathBuffers, toolpathGeometryKey } from '@/gcode/toolpath';
+import { allPrograms } from '@/state/programList';
 import { programOrigin } from '@/state/programContext';
 import { useStockBox } from '@/state/selectors';
 import { useApp } from '@/state/store';
@@ -13,10 +14,11 @@ export function Toolpaths() {
   const geometry = useApp((s) => s.geometry);
   const data = useApp((s) => s.programData);
   const showRapids = useApp((s) => s.visibility.rapids);
+  const programs = useApp((s) => allPrograms(s));
   const origin = useMemo(() => programOrigin(job, geometry), [job, geometry]);
   return (
     <group position={[origin.x, origin.y, origin.z]}>
-      {job.programs.map((p) => {
+      {programs.map((p) => {
         const parsed = data[p.blobId]?.parsed;
         return parsed ? <ProgramToolpath key={p.id} program={p} parsed={parsed} showRapids={showRapids} /> : null;
       })}

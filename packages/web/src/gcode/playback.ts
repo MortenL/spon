@@ -1,5 +1,6 @@
 import { type Job, type MotionTable, type ParsedProgram, positionAt, type ProgramRef, rowStartTime } from '@sponcam/core';
 import { useMemo } from 'react';
+import { allPrograms, findProgram } from '../state/programList';
 import { appStore, type ProgramData, useApp } from '../state/store';
 import { buildTimeline, locate, rowStartingAt, type Timeline, type TimelineEntry, timeOfLine } from './timeline';
 
@@ -15,10 +16,10 @@ export interface PlaybackCursor {
   position: [number, number, number];
 }
 
-export function playbackCursor(job: Job, data: Readonly<Record<string, ProgramData>>, tl: Timeline, time: number): PlaybackCursor | null {
+export function playbackCursor(job: Job, programs: readonly ProgramRef[], data: Readonly<Record<string, ProgramData>>, tl: Timeline, time: number): PlaybackCursor | null {
   const at = locate(tl, time);
   if (!at) return null;
-  const program = job.programs.find((p) => p.id === at.entry.programId);
+  const program = programs.find((p) => p.id === at.entry.programId);
   const parsed = data[at.entry.blobId]?.parsed;
   if (!program || !parsed || parsed.table.count === 0) return null;
   const table = parsed.table;
@@ -37,17 +38,18 @@ export function splitVertex(entry: TimelineEntry | undefined, playhead: number, 
 }
 
 export function useTimeline(): Timeline {
-  const programs = useApp((s) => s.job.programs);
+  const programs = useApp((s) => allPrograms(s));
   const data = useApp((s) => s.programData);
   return useMemo(() => buildTimeline(programs, data), [programs, data]);
 }
 
 export function usePlaybackCursor(): PlaybackCursor | null {
   const job = useApp((s) => s.job);
+  const programs = useApp((s) => allPrograms(s));
   const data = useApp((s) => s.programData);
   const playhead = useApp((s) => s.playhead);
   const tl = useTimeline();
-  return useMemo(() => playbackCursor(job, data, tl, playhead), [job, data, tl, playhead]);
+  return useMemo(() => playbackCursor(job, programs, data, tl, playhead), [job, programs, data, tl, playhead]);
 }
 
 /**
@@ -59,7 +61,7 @@ export function movePlayhead(seconds: number): void {
   const s = appStore.getState();
   s.setPlayhead(seconds);
   if (s.selectedLine !== null) s.setSelectedLine(null);
-  const tl = buildTimeline(s.job.programs, s.programData);
+  const tl = buildTimeline(allPrograms(s), s.programData);
   const at = locate(tl, seconds);
   if (at && at.entry.programId !== s.activeProgramId) s.setActiveProgram(at.entry.programId);
 }
@@ -78,7 +80,7 @@ export function togglePlaying(tl: Timeline): void {
 export function activateProgram(programId: string): void {
   const s = appStore.getState();
   s.setActiveProgram(programId);
-  const entry = buildTimeline(s.job.programs, s.programData).entries.find((e) => e.programId === programId);
+  const entry = buildTimeline(allPrograms(s), s.programData).entries.find((e) => e.programId === programId);
   if (entry) {
     s.setPlaying(false);
     s.setPlayhead(entry.start);
@@ -90,9 +92,9 @@ export function seekToLine(programId: string, line: number): void {
   const s = appStore.getState();
   if (s.activeProgramId !== programId) s.setActiveProgram(programId);
   s.setSelectedLine(line);
-  const program = s.job.programs.find((p) => p.id === programId);
+  const program = findProgram(s, programId);
   const parsed = program ? s.programData[program.blobId]?.parsed : null;
-  const entry = buildTimeline(s.job.programs, s.programData).entries.find((e) => e.programId === programId);
+  const entry = buildTimeline(allPrograms(s), s.programData).entries.find((e) => e.programId === programId);
   const local = parsed ? timeOfLine(parsed, line) : null;
   if (entry && local !== null) {
     s.setPlaying(false);

@@ -1,5 +1,6 @@
-import type { AnalysisContext, AnalysisResult, ImportResult, MotionTable, ParsedProgram, ProgramContext } from '@sponcam/core';
+import type { AnalysisContext, AnalysisResult, CamGeometry, ImportResult, Job, MotionTable, ParsedProgram, ProgramContext } from '@sponcam/core';
 import * as Comlink from 'comlink';
+import type { CamRun } from '../state/camTypes';
 import type { ImportWorkerApi } from './import.worker';
 import { withTimeout } from './timeout';
 
@@ -45,4 +46,13 @@ export function parseProgramInWorker(bytes: Uint8Array, ctx: ProgramContext): Pr
 /** Re-times and re-analyses a program; the table is copied to the worker, only the new times come back. */
 export function analyzeInWorker(table: MotionTable, lineFlags: Uint8Array, ctx: AnalysisContext): Promise<{ analysis: AnalysisResult; t: Float64Array }> {
   return run((api) => api.analyze(table, lineFlags, ctx), 'Analysing the program timed out');
+}
+
+/** Copies the model into the worker for CAM (the main thread keeps its own). */
+export function setCamModelInWorker(geometry: CamGeometry | null): Promise<void> {
+  return run((api) => api.setCamModel(geometry), 'Sending the model to the CAM worker timed out');
+}
+
+export function generateInWorker(job: Job, ctx: ProgramContext): Promise<CamRun> {
+  return run((api) => api.generate(job, ctx), 'Generating toolpaths timed out');
 }

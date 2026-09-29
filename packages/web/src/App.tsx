@@ -10,7 +10,9 @@ import { StatusBar } from '@/layout/StatusBar';
 import { TopBar } from '@/layout/TopBar';
 import { UnitsDialog } from '@/layout/UnitsDialog';
 import { startAutosave } from '@/state/autosave';
+import { startCamPipeline } from '@/state/cam';
 import { restoreAutosave } from '@/state/documents';
+import { allPrograms } from '@/state/programList';
 import { startProgramAnalysis } from '@/state/programs';
 import { appStore, useApp } from '@/state/store';
 import { Viewport } from '@/viewport/Viewport';
@@ -23,12 +25,14 @@ export function App() {
     void restoreAutosave();
     const stopAutosave = startAutosave(appStore);
     const stopAnalysis = startProgramAnalysis(appStore);
+    const stopCam = startCamPipeline(appStore);
     return () => {
       stopAutosave();
       stopAnalysis();
+      stopCam();
     };
   }, []);
-  const isEmpty = useApp((s) => s.job.model === null && s.job.programs.length === 0);
+  const isEmpty = useApp((s) => s.job.model === null && allPrograms(s).length === 0);
 
   return (
     <div className="flex h-dvh flex-col bg-background text-foreground">

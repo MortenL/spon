@@ -1,9 +1,12 @@
 import {
-  type Adjacency, createJob, type Drawing, type Job, type LengthUnit, type Mesh, type MeshDiagnostics, type NewModel, type ParsedProgram, setModel,
-  type Vec3,
+  type Adjacency, applyCommand, createJob, type Drawing, type GeometryCatalog, type Job, type JobCommand, type LengthUnit, type Mesh,
+  type MeshDiagnostics, type NewModel, type ParsedProgram, type ProgramRef, setModel, type Vec3,
 } from '@sponcam/core';
 import { useStore } from 'zustand';
 import { createStore, type StoreApi } from 'zustand/vanilla';
+import type { CamFile, CamPickTarget, InspectorTab, OperationSummary } from './camTypes';
+import type { CamOutput } from './cam';
+import { allPrograms } from './programList';
 
 export const UNDO_LIMIT = 100;
 
@@ -72,8 +75,19 @@ export interface AppState {
   speed: number;
   visibility: Record<Visibility, boolean>;
   dockTab: DockTab;
+  /** Programs produced by the CAM pipeline (not stored, not undoable; see allPrograms). */
+  generatedPrograms: ProgramRef[];
+  camFiles: CamFile[];
+  camResults: Record<string, OperationSummary>;
+  catalog: GeometryCatalog | null;
+  camStatus: 'idle' | 'generating';
+  selectedOperationId: string | null;
+  camPick: { operationId: string; target: CamPickTarget } | null;
+  inspectorTab: InspectorTab;
 
   commit(update: (job: Job) => Job): void;
+  /** Applies a CAM job edit through applyCommand; CommandError propagates to the caller. */
+  dispatch(command: JobCommand): void;
   undo(): void;
   redo(): void;
   loadDocument(doc: LoadedDocument): void;
@@ -97,12 +111,17 @@ export interface AppState {
   setSpeed(speed: number): void;
   toggleVisibility(v: Visibility): void;
   setDockTab(tab: DockTab): void;
+  setCamOutput(output: CamOutput): void;
+  setCamStatus(status: 'idle' | 'generating'): void;
+  selectOperation(id: string | null): void;
+  setCamPick(pick: { operationId: string; target: CamPickTarget } | null): void;
+  setInspectorTab(tab: InspectorTab): void;
 }
 
-/** Keeps `activeProgramId` if `job` still has it, otherwise falls back to the first program, or null. */
-function activeProgramIdFor(job: Job, activeProgramId: string | null): string | null {
-  if (activeProgramId !== null && job.programs.some((p) => p.id === activeProgramId)) return activeProgramId;
-  return job.programs[0]?.id ?? null;
+/** Keeps `activeProgramId` if it's still in `programs`, otherwise falls back to the first program, or null. */
+function activeProgramIdFor(programs: readonly ProgramRef[], activeProgramId: string | null): string | null {
+  if (activeProgramId !== null && programs.some((p) => p.id === activeProgramId)) return activeProgramId;
+  return programs[0]?.id ?? null;
 }
 
 export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState> {
@@ -131,6 +150,14 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
     speed: 1,
     visibility: { rapids: true, model: true, stock: true },
     dockTab: 'gcode',
+    generatedPrograms: [],
+    camFiles: [],
+    camResults: {},
+    catalog: null,
+    camStatus: 'idle',
+    selectedOperationId: null,
+    camPick: null,
+    inspectorTab: 'geometry',
 
     commit(update) {
       const { job, past } = get();
@@ -138,28 +165,32 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
       if (next === job) return;
       set({ job: next, past: [...past, job].slice(-UNDO_LIMIT), future: [], dirty: true });
     },
+    dispatch(command) {
+      get().commit((job) => applyCommand(job, command));
+    },
     undo() {
-      const { job, past, future, activeProgramId } = get();
+      const { job, past, future, activeProgramId, generatedPrograms } = get();
       const previous = past.at(-1);
       if (!previous) return;
       set({
         job: previous, past: past.slice(0, -1), future: [job, ...future], dirty: true,
-        activeProgramId: activeProgramIdFor(previous, activeProgramId),
+        activeProgramId: activeProgramIdFor(allPrograms({ job: previous, generatedPrograms }), activeProgramId),
       });
     },
     redo() {
-      const { job, past, future, activeProgramId } = get();
+      const { job, past, future, activeProgramId, generatedPrograms } = get();
       const [next, ...rest] = future;
       if (!next) return;
       set({
         job: next, past: [...past, job].slice(-UNDO_LIMIT), future: rest, dirty: true,
-        activeProgramId: activeProgramIdFor(next, activeProgramId),
+        activeProgramId: activeProgramIdFor(allPrograms({ job: next, generatedPrograms }), activeProgramId),
       });
     },
     loadDocument(doc) {
       set({
         ...doc, past: [], future: [], pickMode: 'none', hiddenLayers: [], pendingImport: null,
         programData: {}, activeProgramId: doc.job.programs[0]?.id ?? null, selectedLine: null, playhead: 0, playing: false,
+        generatedPrograms: [], camFiles: [], camResults: {}, catalog: null, selectedOperationId: null, camPick: null,
       });
     },
     applyImportedModel(model, geometry, modelBytes, warnings) {
@@ -226,6 +257,28 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
     },
     setDockTab(dockTab) {
       set({ dockTab });
+    },
+    setCamOutput(out) {
+      const kept = Object.fromEntries(Object.entries(get().programData).filter(([id]) => !id.startsWith('gen:')));
+      const next = {
+        generatedPrograms: out.programs, camFiles: out.files, camResults: out.results, catalog: out.catalog,
+        camStatus: 'idle' as const, programData: { ...kept, ...out.programData },
+      };
+      const programs = allPrograms({ job: get().job, generatedPrograms: out.programs });
+      const active = get().activeProgramId;
+      set({ ...next, activeProgramId: active !== null && programs.some((p) => p.id === active) ? active : (programs[0]?.id ?? null) });
+    },
+    setCamStatus(camStatus) {
+      set({ camStatus });
+    },
+    selectOperation(id) {
+      set({ selectedOperationId: id, ...(id !== get().selectedOperationId ? { camPick: null } : {}) });
+    },
+    setCamPick(camPick) {
+      set({ camPick });
+    },
+    setInspectorTab(inspectorTab) {
+      set({ inspectorTab });
     },
   }));
 }

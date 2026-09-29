@@ -2,6 +2,7 @@ import { allDiagnostics, LineFlag } from '@sponcam/core';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { seekToLine, usePlaybackCursor } from '@/gcode/playback';
 import { cn } from '@/lib/utils';
+import { findProgram } from '@/state/programList';
 import { useApp } from '@/state/store';
 import { isScaled, lineToScrollTop, scrollTopToFirstLine, spacerHeight } from './virtualScroll';
 
@@ -10,7 +11,7 @@ const OVERSCAN = 10;
 
 export function GcodeList() {
   const activeId = useApp((s) => s.activeProgramId);
-  const program = useApp((s) => s.job.programs.find((p) => p.id === s.activeProgramId) ?? null);
+  const program = useApp((s) => findProgram(s, s.activeProgramId));
   const data = useApp((s) => (program ? s.programData[program.blobId] : undefined));
   const selectedLine = useApp((s) => s.selectedLine);
   const cursor = usePlaybackCursor();

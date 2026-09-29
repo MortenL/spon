@@ -3,6 +3,7 @@ import { CircleX, Info, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { seekToLine, useTimeline } from '@/gcode/playback';
 import { formatDuration, formatPoint, formatSize } from '@/panels/format';
+import { findProgram } from '@/state/programList';
 import { programOrigin } from '@/state/programContext';
 import { appStore, useApp } from '@/state/store';
 
@@ -21,7 +22,7 @@ function Row({ label, children, testId }: { label: string; children: ReactNode; 
 export function AnalysisView() {
   const job = useApp((s) => s.job);
   const geometry = useApp((s) => s.geometry);
-  const program = useApp((s) => s.job.programs.find((p) => p.id === s.activeProgramId) ?? null);
+  const program = useApp((s) => findProgram(s, s.activeProgramId));
   const data = useApp((s) => (program ? s.programData[program.blobId] : undefined));
   const units = useApp((s) => s.job.displayUnits);
   const tl = useTimeline();

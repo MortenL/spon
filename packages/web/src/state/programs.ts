@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import type { StoreApi } from 'zustand/vanilla';
 import { analyzeInWorker, parseProgramInWorker } from '../workers/importClient';
 import { putBlob, removeOrphanBlobs } from './autosave';
+import { GEN_PREFIX } from './cam';
 import { programContext } from './programContext';
 import { type AppState, appStore } from './store';
 
@@ -38,8 +39,8 @@ export async function storeBlob(id: string, bytes: Uint8Array): Promise<void> {
 }
 
 export async function pruneBlobs(): Promise<void> {
-  const { job, past, future } = state();
-  const keep = referencedBlobIds(job, past, future);
+  const { job, past, future, generatedPrograms } = state();
+  const keep = [...referencedBlobIds(job, past, future), ...generatedPrograms.map((p) => p.blobId)];
   state().pruneProgramData(keep);
   const keepSet = new Set(keep);
   for (const id of [...parseTokens.keys()]) if (!keepSet.has(id)) parseTokens.delete(id);
@@ -98,6 +99,7 @@ export async function reanalyzeAll(): Promise<void> {
   const keep = new Set(referencedBlobIds(job, past, future));
   const ctx = programContext(job, geometry);
   for (const [blobId, data] of Object.entries(state().programData)) {
+    if (blobId.startsWith(GEN_PREFIX)) continue; // regeneration re-analyses these itself
     if (!keep.has(blobId)) continue; // no longer referenced by the job or its undo/redo history
     if (data.status !== 'ready' || !data.parsed) continue;
     try {
