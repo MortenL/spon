@@ -201,7 +201,7 @@ describe('profileToolpath', () => {
   it.each([0.02, 0.01, 0.005])('keeps full clearance where a nearly round lap is fitted as one circle, at tolerance %s', (tolerance) => {
     // a 36-gon whose vertices sit 0.97 × tol/2 inside a circle except every 12th: its lap (after the 0.875 × tol
     // margin) is fitted as one circle; the circle must not bulge more than tol/2 beyond the lap's chords
-    const rho = 2.59 * Math.sqrt(tolerance / 0.02);
+    const rho = 2.59 * (tolerance / 0.02); // linear: the lap's sagitta scales with the tolerance
     const lap = Array.from({ length: 36 }, (_, k) => {
       const a = (2 * Math.PI * k) / 36;
       const rr = k % 12 === 4 ? rho : rho - 0.97 * (tolerance / 2);

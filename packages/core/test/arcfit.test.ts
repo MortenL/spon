@@ -40,6 +40,26 @@ describe('fitArcs', () => {
     }
   });
 
+  it('keeps a fit within maxBulge of chords that tilt against the arc', () => {
+    // 48 points, every 4th on a circle of radius 1.7, the rest 0.01 inside: chords from an inner point to an
+    // outer one tilt against the arc, whose farthest point from them is off the sub-arc's middle (checking only
+    // the middle let this fit stray 1.117 × maxBulge)
+    const pts = Array.from({ length: 48 }, (_, k) => {
+      const a = (2 * Math.PI * k) / 48;
+      const rr = k % 4 === 0 ? 1.7 : 1.7 - 0.01;
+      return v2(rr * Math.cos(a), rr * Math.sin(a));
+    });
+    const fitted = fitArcs(pts, true, 0.01, 0.01);
+    const segDist = (p: Vec2, a: Vec2, b: Vec2) => {
+      const dx = b.x - a.x, dy = b.y - a.y, len2 = dx * dx + dy * dy;
+      const t = len2 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2)) : 0;
+      return Math.hypot(p.x - a.x - dx * t, p.y - a.y - dy * t);
+    };
+    for (const p of flattenPath(fitted, 1e-7)) {
+      expect(Math.min(...pts.map((a, i) => segDist(p, a, pts[(i + 1) % pts.length])))).toBeLessThanOrEqual(0.01 + 1e-9);
+    }
+  });
+
   it('keeps arcs within maxBulge of the chords between sparse input points', () => {
     const pts = Array.from({ length: 6 }, (_, i) => v2(10 * Math.cos((i * Math.PI) / 10), 10 * Math.sin((i * Math.PI) / 10)));
     expect(fitArcs(pts, false, 0.01).segments).toMatchObject([{ kind: 'arc' }]); // unbounded by default

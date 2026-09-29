@@ -14,6 +14,25 @@ function segmentDistance(p: Vec2, a: Vec2, b: Vec2): number {
   return Math.hypot(p.x - a.x - dx * t, p.y - a.y - dy * t);
 }
 
+/**
+ * Largest distance from the circle arc (centre c, radius r) running from angle a0 through the signed `sweep` to
+ * the segment p–q. Besides the arc's ends and middle, it checks where the arc's tangent is parallel to p–q (the
+ * circle points along the chord's normal from the centre): with p and q off the circle in opposite directions
+ * the chord tilts against the arc and the farthest point is there, not at the middle.
+ */
+function arcChordBulge(c: Vec2, r: number, a0: number, sweep: number, p: Vec2, q: Vec2): number {
+  const angles = [a0, a0 + sweep / 2, a0 + sweep];
+  const normal = Math.atan2(q.x - p.x, -(q.y - p.y)); // direction of (−dy, dx), perpendicular to p→q
+  for (const phi of [normal, normal + Math.PI]) {
+    const t = (sweep >= 0 ? phi - a0 : a0 - phi) % (2 * Math.PI);
+    const along = t < 0 ? t + 2 * Math.PI : t;
+    if (along <= Math.abs(sweep)) angles.push(phi);
+  }
+  let worst = 0;
+  for (const a of angles) worst = Math.max(worst, segmentDistance(v2(c.x + r * Math.cos(a), c.y + r * Math.sin(a)), p, q));
+  return worst;
+}
+
 function circumcenter(a: Vec2, b: Vec2, c: Vec2): Vec2 | null {
   const d = 2 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
   if (Math.abs(d) < 1e-12) return null;
@@ -47,8 +66,7 @@ function arcThrough(pts: readonly Vec2[], i: number, j: number, tol: number, max
     const sweep = arcSweepBetween(a0, a1, turn > 0);
     // between two input points the arc must also stay near the chord joining them (on long chords it could
     // otherwise bulge well beyond tol, even with every input point on the arc)
-    const mid = a0 + sweep / 2;
-    if (segmentDistance(v2(c.x + r * Math.cos(mid), c.y + r * Math.sin(mid)), pts[k - 1], pts[k]) > maxBulge) return null;
+    if (maxBulge !== Infinity && arcChordBulge(c, r, a0, sweep, pts[k - 1], pts[k]) > maxBulge) return null;
     travelled += Math.abs(sweep);
   }
   if (travelled >= 2 * Math.PI - 1e-9) return null;
@@ -112,13 +130,12 @@ export function fitArcs(input: readonly Vec2[], closed: boolean, tol: number, ma
       const turn = Math.sign(cross(pts[0], pts[1], pts[2]));
       if (c && turn !== 0) {
         const r = dist2(c, pts[0]);
-        // as in arcThrough: the circle between two consecutive points (measured at their mid-angle) must stay
-        // within maxBulge of the chord joining them; the points themselves may sit up to tol off the circle
+        // as in arcThrough: the circle between two consecutive points must stay within maxBulge of the chord
+        // joining them; the points themselves may sit up to tol off the circle
         const bulgeOk = (p: Vec2, q: Vec2) => {
           if (maxBulge === Infinity) return true;
           const a0 = Math.atan2(p.y - c.y, p.x - c.x);
-          const mid = a0 + arcSweepBetween(a0, Math.atan2(q.y - c.y, q.x - c.x), turn > 0) / 2;
-          return segmentDistance(v2(c.x + r * Math.cos(mid), c.y + r * Math.sin(mid)), p, q) <= maxBulge;
+          return arcChordBulge(c, r, a0, arcSweepBetween(a0, Math.atan2(q.y - c.y, q.x - c.x), turn > 0), p, q) <= maxBulge;
         };
         if (r <= 1e4 && pts.every((p, k) => Math.abs(dist2(c, p) - r) <= tol && bulgeOk(p, pts[(k + 1) % pts.length]))) {
           return { closed, segments: [{ kind: 'arc', center: c, radius: r, startAngle: Math.atan2(pts[0].y - c.y, pts[0].x - c.x), sweep: turn * 2 * Math.PI }] };
