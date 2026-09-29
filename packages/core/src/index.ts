@@ -55,3 +55,4 @@ export * from './cam/ops/leads';
 export * from './cam/ops/tabs';
 export * from './cam/ops/output';
 export * from './cam/ops/profile';
+export * from './cam/ops/pocket';
