@@ -1,9 +1,11 @@
 import { fitArcs } from '../../geometry/offset/arcFit';
-import { offsetPolys } from '../../geometry/offset/clipper';
+import { offsetPolys, pointInPolys, segmentCrossesPolys } from '../../geometry/offset/clipper';
 import {
-  flattenPath, orientPath, pathLength, pathStart, pointAt, polyArea, reversePath, rotateStart, segmentLength,
+  dist2, flattenPath, orientPath, pathLength, pathStart, pointAt, polyArea, reversePath, rotateStart, segmentLength, v2,
 } from '../../geometry/offset/pathOps';
-import { type Path2D, type Segment, segmentStart } from '../../geometry/path2d';
+
+const lerp = (a: Vec2, b: Vec2, t: number): Vec2 => v2(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
+import { type Path2D, type Segment, segmentStart, type Vec2 } from '../../geometry/path2d';
 import type { Tool } from '../../tools/types';
 import type { CamContext } from '../context';
 import type { ResolvedGeometry } from '../features/resolve';
@@ -13,6 +15,12 @@ import { leadIn, leadOut } from './leads';
 import { emptyOverlays, type OpOutput } from './output';
 import { tabIntervals } from './tabs';
 import { depthLevels, emitLap, emitRampLaps, MoveWriter, type TabProfile } from './writer';
+
+/** Flattening tolerance and slack (mm) of the free-region check for leads and links; together they stay under 1 µm. */
+const FREE_TOL = 1e-4;
+const FREE_SLACK = 5e-4;
+/** Leads are halved until they fit, but never below this length (mm); shorter leads are left out. */
+const MIN_LEAD = 0.1;
 
 /** Tool-centre laps of a contour: offset outward/inward by `offset`, or the contour itself for "on" and open paths. */
 function centreLaps(path: Path2D, side: ProfileOp['side'], offset: number, tol: number): Path2D[] | null {
@@ -51,6 +59,7 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
   const w = new MoveWriter();
   let clearance = -Infinity;
   let plungeWarned = false;
+  let leadWarned = false;
 
   const emitSegs = (segs: Segment[], z0: number, z1: number) => {
     const total = segs.reduce((a, s) => a + segmentLength(s), 0);
@@ -70,7 +79,7 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
    * is true only for a contour's first roughing piece, so overlays are reported once per contour.
    */
   const cutClosed = (
-    lap: Path2D, levels: number[], h: ResolvedHeights, first: boolean, index: number, useExplicit: boolean, recordOverlay: boolean,
+    lap: Path2D, levels: number[], h: ResolvedHeights, first: boolean, index: number, ref: number, useExplicit: boolean, recordOverlay: boolean,
   ) => {
     const wantCW = (op.side !== 'inside') === (op.direction === 'climb');
     let path = orientPath(lap, !wantCW);
@@ -81,8 +90,40 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
     const P = pathStart(path);
     const T = pointAt(path, 0).tangent;
     const freeLeft = op.side === 'inside' ? !wantCW : wantCW; // CW loop: outside is on the left
-    const inSegs = leadIn(P, T, freeLeft, op.leads.mode, op.leads.length);
-    const outSegs = leadOut(P, T, freeLeft, op.leads.mode, op.leads.length);
+
+    // The tool centre may only move inside the lap ('inside') or outside it ('outside', 'on'); the lap is its
+    // boundary. The check polygon is widened by FREE_SLACK so moves along or tangent to the lap itself pass.
+    const lapPoly = flattenPath(orientPath(path, true), FREE_TOL);
+    const inside = op.side === 'inside';
+    const check = offsetPolys([lapPoly], inside ? FREE_SLACK : -FREE_SLACK, FREE_TOL);
+    const clear = (a: Vec2, b: Vec2) => !segmentCrossesPolys(a, b, check) && pointInPolys(b, check) === inside;
+    const segsClear = (segs: Segment[]) => {
+      const pts = flattenPath({ closed: false, segments: segs }, FREE_TOL);
+      for (let i = 0; i + 1 < pts.length; i++) {
+        const n = Math.max(1, Math.ceil(dist2(pts[i], pts[i + 1]) / 0.05));
+        for (let k = 0; k < n; k++) {
+          const a = lerp(pts[i], pts[i + 1], k / n), b = lerp(pts[i], pts[i + 1], (k + 1) / n);
+          if (!clear(a, b)) return false;
+        }
+      }
+      return true;
+    };
+    /** The longest lead (halving from the set length, not below MIN_LEAD) that stays in the free region. */
+    const fitLead = (make: (length: number) => Segment[]): Segment[] => {
+      if (op.leads.mode === 'none' || !(op.leads.length > 0)) return [];
+      for (let len = op.leads.length; ; len /= 2) {
+        const segs = make(len);
+        if (segsClear(segs)) return segs;
+        if (len / 2 < MIN_LEAD) break;
+      }
+      if (!leadWarned) {
+        diag('warning', 'entry-plunge', 'A lead-in or lead-out does not fit beside this contour and was left out; the tool ramps along the path instead', ref);
+        leadWarned = true;
+      }
+      return [];
+    };
+    const inSegs = fitLead((len) => leadIn(P, T, freeLeft, op.leads.mode, len));
+    const outSegs = fitLead((len) => leadOut(P, T, freeLeft, op.leads.mode, len));
     const S = inSegs.length ? segmentStart(inSegs[0]) : P;
     const inLen = inSegs.reduce((a, s) => a + segmentLength(s), 0);
 
@@ -117,7 +158,14 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
       }
       emitLap(w, path, z, z, feed, tabsAt(z));
       emitSegs(outSegs, z, z);
-      if (i < levels.length - 1 && inSegs.length) w.line({ x: S.x, y: S.y, z }, feed);
+      if (i < levels.length - 1 && dist2(w.pos!, S) > 1e-9) {
+        // back to the entry point for the next level: straight if that stays in the free region, else over the top
+        if (segsClear([{ kind: 'line', from: v2(w.pos!.x, w.pos!.y), to: S }])) w.line({ x: S.x, y: S.y, z }, feed);
+        else {
+          w.travel(S, h.feed, h.feed);
+          w.line({ x: S.x, y: S.y, z }, plunge);
+        }
+      }
       prev = z;
     });
     w.up(h.retract);
@@ -152,13 +200,13 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
     if (!laps) return diag('error', 'offset-collapsed', 'The tool does not fit inside this contour', c.ref);
     const levels = depthLevels(h.top, h.bottom + op.stockAxial, op.stepdown);
     laps.forEach((lap, i) => {
-      if (lap.closed) cutClosed(lap, levels, h, first, index, i === 0, i === 0);
+      if (lap.closed) cutClosed(lap, levels, h, first, index, c.ref, i === 0, i === 0);
       else cutOpen(lap, levels, h, first);
       first = false;
     });
     if (op.finishPass && c.path.closed) {
       const finishLaps = centreLaps(c.path, op.side, r, tol) ?? [];
-      finishLaps.forEach((lap, i) => cutClosed(lap, [h.bottom], h, false, index, i === 0, false));
+      finishLaps.forEach((lap, i) => cutClosed(lap, [h.bottom], h, false, index, c.ref, i === 0, false));
     }
   });
 

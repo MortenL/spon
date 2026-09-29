@@ -91,10 +91,15 @@ function segmentsCross(p1: Vec2, p2: Vec2, p3: Vec2, p4: Vec2): boolean {
   return ((d1 > eps && d2 < -eps) || (d1 < -eps && d2 > eps)) && ((d3 > eps && d4 < -eps) || (d3 < -eps && d4 > eps));
 }
 
+/** True when segment a→b properly crosses an edge of any polygon of the set. */
+export function segmentCrossesPolys(a: Vec2, b: Vec2, polys: readonly Poly[]): boolean {
+  for (const poly of polys) {
+    for (let i = 0; i < poly.length; i++) if (segmentsCross(a, b, poly[i], poly[(i + 1) % poly.length])) return true;
+  }
+  return false;
+}
+
 /** True when segment a→b crosses no polygon edge and its midpoint is inside the set. */
 export function segmentInside(a: Vec2, b: Vec2, polys: readonly Poly[]): boolean {
-  for (const poly of polys) {
-    for (let i = 0; i < poly.length; i++) if (segmentsCross(a, b, poly[i], poly[(i + 1) % poly.length])) return false;
-  }
-  return pointInPolys(v2((a.x + b.x) / 2, (a.y + b.y) / 2), polys);
+  return !segmentCrossesPolys(a, b, polys) && pointInPolys(v2((a.x + b.x) / 2, (a.y + b.y) / 2), polys);
 }

@@ -4,6 +4,38 @@ import {
 } from '../src';
 import { camPartSetup, cutMoves, geoOf, rectPath, tool6 } from './fixtures/camSetup';
 
+type AnyMove = NonNullable<ReturnType<typeof profileToolpath>['toolpath']>['moves'][number];
+/** Largest XY distance of the tool centre from `c` over every move below `zBelow` (lines sampled, arcs sampled along the arc). */
+function maxRadius(moves: readonly AnyMove[], c: { x: number; y: number }, zBelow: number): number {
+  let worst = 0;
+  let prev: { x: number; y: number; z: number } | null = null;
+  const at = (x: number, y: number, z: number) => { if (z < zBelow) worst = Math.max(worst, Math.hypot(x - c.x, y - c.y)); };
+  for (const m of moves) {
+    if (m.kind === 'cycle') continue;
+    const to = m.to;
+    if (prev && m.kind === 'arc') {
+      const r0 = Math.hypot(prev.x - m.center.x, prev.y - m.center.y);
+      const a0 = Math.atan2(prev.y - m.center.y, prev.x - m.center.x);
+      let a1 = Math.atan2(to.y - m.center.y, to.x - m.center.x);
+      if (m.ccw) { while (a1 <= a0 + 1e-12) a1 += 2 * Math.PI; } else { while (a1 >= a0 - 1e-12) a1 -= 2 * Math.PI; }
+      for (let i = 0; i <= 64; i++) {
+        const a = a0 + ((a1 - a0) * i) / 64;
+        at(m.center.x + r0 * Math.cos(a), m.center.y + r0 * Math.sin(a), prev.z + ((to.z - prev.z) * i) / 64);
+      }
+    } else if (prev) {
+      for (let i = 0; i <= 64; i++) {
+        const t = i / 64;
+        at(prev.x + (to.x - prev.x) * t, prev.y + (to.y - prev.y) * t, prev.z + (to.z - prev.z) * t);
+      }
+    } else at(to.x, to.y, to.z);
+    prev = to;
+  }
+  return worst;
+}
+const ccwHole = (cx: number, cy: number, r: number) => ({
+  closed: true, segments: [{ kind: 'arc' as const, center: v2(cx, cy), radius: r, startAngle: 0, sweep: 2 * Math.PI }],
+});
+
 const { job, geometry } = camPartSetup(); // stock top 0, bottom −6; program X 0–110, Y 0–70
 const ctx = camContext(applyCommand(job, { type: 'addTool', tool: tool6 }), geometry);
 const outline: ResolvedContour = { path: rectPath(5, 5, 105, 65), z: 0, ref: 0 };
@@ -129,5 +161,28 @@ describe('profileToolpath', () => {
     // lead-in quarter arc: length π/2 × 3 ≈ 4.71 mm × tan 3° ≈ 0.247 ≥ drop 0.2 → the first descending move is the lead-in arc
     const firstDown = cutMoves(tp.moves).find((m) => m.to.z < 0)!;
     expect(firstDown.kind).toBe('arc');
+  });
+
+  it.each([4, 5])('keeps leads and level links inside an R%i hole profiled on the inside', (R) => {
+    const hole: ResolvedContour = { path: ccwHole(55, 35, R), z: 0, ref: 0 };
+    for (const entry of ['auto', 'plunge'] as const) {
+      const op = profile({ side: 'inside', stepdown: 1, entry: { mode: entry, helixDiameterPct: 90, rampAngleDeg: 3 } });
+      const out = profileToolpath(op, tool6, ctx, geoOf({ contours: [hole] }));
+      expect(out.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+      expect(maxRadius(out.toolpath!.moves, v2(55, 35), 0)).toBeLessThanOrEqual(R - 3 + 1e-3);
+    }
+  });
+
+  it('warns when a lead does not fit and is dropped', () => {
+    const out = profileToolpath(profile({ side: 'inside' }), tool6, ctx, geoOf({ contours: [{ path: ccwHole(55, 35, 3.05), z: 0, ref: 0 }] }));
+    expect(out.diagnostics.map((d) => d.code)).toEqual(['entry-plunge']);
+    expect(maxRadius(out.toolpath!.moves, v2(55, 35), 0)).toBeLessThanOrEqual(0.05 + 1e-3);
+  });
+
+  it('keeps full-size arc leads on an outside profile of the outline', () => {
+    const out = profileToolpath(profile(), tool6, ctx, geoOf({ contours: [outline] }));
+    expect(out.diagnostics).toEqual([]);
+    const leadArcs = cutMoves(out.toolpath!.moves).filter((m) => m.kind === 'arc' && Math.abs(Math.hypot(m.to.x - m.center.x, m.to.y - m.center.y) - 3) < 1e-6);
+    expect(leadArcs.length).toBeGreaterThanOrEqual(2);
   });
 });
