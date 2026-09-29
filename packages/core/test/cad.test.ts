@@ -84,6 +84,20 @@ describe('occtToBodies', () => {
     expect(b.name).toBe('Body 1');
     expect(Array.from(b.faceIds)).toEqual([0, 1]);
   });
+
+  it('leaves mesh.faceIds undefined when no reader mesh has any brep_faces', () => {
+    const result: OcctResult = {
+      success: true,
+      meshes: [{
+        name: '',
+        attributes: { position: { array: [0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0] } },
+        index: { array: [0, 1, 2, 0, 2, 3] },
+      }],
+    };
+    const [b] = occtToBodies(result, 'step');
+    expect(b.mesh.faceIds).toBeUndefined();
+    expect(b.faceIds).toEqual(new Uint32Array(0));
+  });
 });
 
 describe('cadImport', () => {

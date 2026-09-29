@@ -18,8 +18,9 @@ export interface OcctResult { success: boolean; root?: OcctNode; meshes?: OcctMe
 
 export interface OcctBody {
   name: string;
-  /** Welded mesh; `mesh.faceIds` is the same array as `faceIds`. */
+  /** Welded mesh; `mesh.faceIds` is the same array as `faceIds`, or undefined when `faceIds` is empty. */
   mesh: Mesh;
+  /** Per-triangle B-rep face id, dense from 0. Empty when no reader mesh in the group had any `brep_faces` entries. */
   faceIds: Uint32Array;
   triangles: number;
   bbox: BBox;
@@ -28,22 +29,29 @@ export interface OcctBody {
 
 export const CAD_LABEL: Record<CadFormat, 'STEP' | 'IGES'> = { step: 'STEP', iges: 'IGES' };
 
-/** Welds a group of reader meshes into one body; face ids are renumbered densely in order of appearance. */
+/**
+ * Welds a group of reader meshes into one body; face ids are renumbered densely in order of appearance. When no
+ * mesh in the group has any `brep_faces` entries, `mesh.faceIds` is left undefined (so `faceRegion` falls back to
+ * `planarRegion`, the STL behaviour) and `faceIds` is an empty array.
+ */
 function toBody(group: readonly OcctMesh[], name: string): OcctBody | null {
+  const hasFaces = group.some((m) => (m.brep_faces?.length ?? 0) > 0);
   let total = 0;
   for (const m of group) total += Math.floor(m.index.array.length / 3);
   const soup = new Float32Array(total * 9);
-  const sourceFace = new Uint32Array(total);
+  const sourceFace = hasFaces ? new Uint32Array(total) : undefined;
   let t = 0;
   let nextFace = 0;
   for (const m of group) {
     const pos = m.attributes.position.array;
     const idx = m.index.array;
     const n = Math.floor(idx.length / 3);
-    const local = new Int32Array(n).fill(-1);
-    for (const f of m.brep_faces ?? []) {
-      const id = nextFace++;
-      for (let k = Math.max(0, f.first); k <= Math.min(n - 1, f.last); k++) local[k] = id;
+    const local = hasFaces ? new Int32Array(n).fill(-1) : undefined;
+    if (local) {
+      for (const f of m.brep_faces ?? []) {
+        const id = nextFace++;
+        for (let k = Math.max(0, f.first); k <= Math.min(n - 1, f.last); k++) local[k] = id;
+      }
     }
     for (let k = 0; k < n; k++, t++) {
       for (let c = 0; c < 3; c++) {
@@ -52,11 +60,14 @@ function toBody(group: readonly OcctMesh[], name: string): OcctBody | null {
         soup[t * 9 + c * 3 + 1] = pos[v * 3 + 1];
         soup[t * 9 + c * 3 + 2] = pos[v * 3 + 2];
       }
-      sourceFace[t] = local[k] >= 0 ? local[k] : nextFace++; // a triangle outside every face range is a face of its own
+      if (sourceFace && local) sourceFace[t] = local[k] >= 0 ? local[k] : nextFace++; // a triangle outside every face range is a face of its own
     }
   }
   const { mesh, degenerateRemoved, kept } = weldTriangles(soup);
   if (kept.length === 0) return null;
+  if (!sourceFace) {
+    return { name, mesh, faceIds: new Uint32Array(0), triangles: kept.length, bbox: bboxOfPoints(mesh.positions)!, degenerateRemoved };
+  }
   const dense = new Map<number, number>();
   const faceIds = new Uint32Array(kept.length);
   for (let i = 0; i < kept.length; i++) {
