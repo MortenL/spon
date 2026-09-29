@@ -11,6 +11,20 @@ let instance: Worker | null = null;
 let remote: Comlink.Remote<ImportWorkerApi> | null = null;
 let epoch = 0;
 
+/** The worker epoch in which the STEP/IGES reader finished loading (-1: not loaded in any worker yet). */
+let cadReaderEpoch = -1;
+
+/** True when the current worker has the STEP/IGES reader loaded (a replaced worker has to load it again). */
+export function cadReaderLoaded(): boolean {
+  return instance !== null && cadReaderEpoch === epoch;
+}
+
+/** Loads the STEP/IGES reader in the worker (downloads its JS and WebAssembly the first time). */
+export async function loadCadReaderInWorker(): Promise<void> {
+  await run((api) => api.loadCadReader(), 'Loading the STEP/IGES reader timed out');
+  cadReaderEpoch = epoch;
+}
+
 /**
  * Changes whenever the shared worker is terminated (a stuck call timed out). The next call gets a fresh
  * worker that has lost any state, such as the CAM model.
@@ -41,10 +55,10 @@ function run<T>(call: (api: Comlink.Remote<ImportWorkerApi>) => Promise<T>, mess
   return withTimeout<T>(call(api), IMPORT_TIMEOUT_MS, terminate, message);
 }
 
-/** Parses a model file off the main thread. Sends a copy of `bytes`, so the caller can keep using them. */
-export function importInWorker(fileName: string, bytes: Uint8Array): Promise<ImportResult> {
+/** Parses a model file off the main thread. Sends a copy of `bytes`, so the caller can keep using them. `body` picks a STEP/IGES body. */
+export function importInWorker(fileName: string, bytes: Uint8Array, body?: number): Promise<ImportResult> {
   const copy = bytes.slice();
-  return run<ImportResult>((api) => api.import(fileName, Comlink.transfer(copy, [copy.buffer])), 'Import timed out');
+  return run<ImportResult>((api) => api.import(fileName, Comlink.transfer(copy, [copy.buffer]), body), 'Import timed out');
 }
 
 /** Parses and analyses a G-code program off the main thread (bytes are copied). */

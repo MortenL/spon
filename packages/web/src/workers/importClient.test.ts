@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const api = vi.hoisted(() => ({ setCamModel: vi.fn(() => new Promise<void>(() => {})) }));
+const api = vi.hoisted(() => ({ setCamModel: vi.fn(() => new Promise<void>(() => {})), loadCadReader: vi.fn(async () => {}) }));
 vi.mock('comlink', () => ({ wrap: () => api, transfer: <T>(v: T) => v }));
 
 class FakeWorker {
@@ -15,7 +15,7 @@ class FakeWorker {
 }
 vi.stubGlobal('Worker', FakeWorker);
 
-const { IMPORT_TIMEOUT_MS, setCamModelInWorker, workerEpoch } = await import('./importClient');
+const { cadReaderLoaded, IMPORT_TIMEOUT_MS, loadCadReaderInWorker, setCamModelInWorker, workerEpoch } = await import('./importClient');
 
 describe('import worker client', () => {
   afterEach(() => vi.useRealTimers());
@@ -31,5 +31,16 @@ describe('import worker client', () => {
     expect(workerEpoch()).toBe(before + 1);
     void setCamModelInWorker(null); // a fresh worker is created for the next call
     expect(FakeWorker.created).toBe(2);
+  });
+
+  it('remembers that the STEP reader is loaded until the worker is replaced', async () => {
+    vi.useFakeTimers();
+    expect(cadReaderLoaded()).toBe(false);
+    await loadCadReaderInWorker();
+    expect(cadReaderLoaded()).toBe(true);
+    const stuck = setCamModelInWorker(null).catch(() => undefined);
+    await vi.advanceTimersByTimeAsync(IMPORT_TIMEOUT_MS + 1);
+    await stuck;
+    expect(cadReaderLoaded()).toBe(false);
   });
 });
