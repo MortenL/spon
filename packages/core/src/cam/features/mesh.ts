@@ -3,7 +3,7 @@ import { type Mesh, triangleCount, triangleNormal, triangleVertices, vertexAt } 
 import { fitArcs } from '../../geometry/offset/arcFit';
 import { orientPath, polyArea, v2 } from '../../geometry/offset/pathOps';
 import type { Path2D, Vec2 } from '../../geometry/path2d';
-import { planarRegion } from '../../geometry/planarRegion';
+import { faceRegion } from '../../geometry/faces';
 import { quatRotate } from '../../geometry/quat';
 import { v3dot, vec3 } from '../../geometry/vec3';
 import { type CamContext, toProgram } from '../context';
@@ -85,7 +85,7 @@ export function resolveFaceRef(ctx: CamContext, ref: MeshFaceRef): { ok: true; f
   if (quatRotate(ctx.placement.rotation, ref.normal).z < COS_1DEG) {
     return { ok: false, code: 'face-not-horizontal', message: 'The face is not horizontal and facing up in the current orientation' };
   }
-  return { ok: true, face: faceGeometry(ctx, planarRegion(g.mesh, g.adjacency, ref.seed)) };
+  return { ok: true, face: faceGeometry(ctx, faceRegion(g.mesh, g.adjacency, ref.seed)) };
 }
 
 const upFacing = new WeakMap<CamContext, { x: number; y: number; z: number }[]>();

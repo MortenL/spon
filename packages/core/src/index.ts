@@ -6,6 +6,7 @@ export * from './geometry/mesh';
 export * from './geometry/weld';
 export * from './geometry/adjacency';
 export * from './geometry/planarRegion';
+export * from './geometry/faces';
 export * from './import/stl';
 export * from './geometry/path2d';
 export * from './import/dxf/affine2d';

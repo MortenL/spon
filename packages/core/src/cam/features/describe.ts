@@ -1,7 +1,7 @@
 import { flattenPath, pathLength, polyArea } from '../../geometry/offset/pathOps';
 import type { Vec2 } from '../../geometry/path2d';
 import { triangleCount, triangleNormal } from '../../geometry/mesh';
-import { planarRegion } from '../../geometry/planarRegion';
+import { faceRegion } from '../../geometry/faces';
 import { quatRotate } from '../../geometry/quat';
 import type { Job } from '../../job/types';
 import { camContext, type CamGeometry, drawingPathToProgram } from '../context';
@@ -38,7 +38,7 @@ export function describeGeometry(job: Job, geometry: CamGeometry): GeometryCatal
     const visited = new Uint8Array(triangleCount(geometry.mesh));
     for (let t = 0; t < visited.length; t++) {
       if (visited[t] || quatRotate(ctx.placement.rotation, triangleNormal(geometry.mesh, t)).z < COS_1DEG) continue;
-      const tris = planarRegion(geometry.mesh, geometry.adjacency, t);
+      const tris = faceRegion(geometry.mesh, geometry.adjacency, t);
       for (const r of tris) visited[r] = 1;
       const f = faceGeometry(ctx, tris);
       const ref = faceRefFromTriangle(geometry.mesh, model.blobId, t);
