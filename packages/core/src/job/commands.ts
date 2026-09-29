@@ -1,5 +1,5 @@
 import { newOperation, OPERATION_LABELS } from '../cam/defaults';
-import type { Operation, OperationPatch, OperationType } from '../cam/types';
+import type { Operation, OperationPatch, OperationType, TabSettings } from '../cam/types';
 import type { Vec3 } from '../geometry/vec3';
 import type { PostSettings } from '../post/types';
 import type { Tool } from '../tools/types';
@@ -63,6 +63,12 @@ function checkTool(job: Job, toolId: string | null): Tool | null {
   return tool;
 }
 
+function checkTabs(t: Partial<TabSettings>): void {
+  if ('spacing' in t && !((t.spacing as number) > 0 && Number.isFinite(t.spacing))) throw new CommandError('Tab spacing must be greater than 0');
+  if ('count' in t && !((t.count as number) >= 1 && Number.isFinite(t.count))) throw new CommandError('Tab count must be at least 1');
+  if ('width' in t && !((t.width as number) > 0 && Number.isFinite(t.width))) throw new CommandError('Tab width must be greater than 0');
+}
+
 function patchOperation(job: Job, op: Operation, patch: OperationPatch): Operation {
   const allowed = OP_KEYS[op.type];
   const next: Record<string, unknown> = { ...op };
@@ -72,6 +78,7 @@ function patchOperation(job: Job, op: Operation, patch: OperationPatch): Operati
     if (NON_NEGATIVE.includes(key) && !((value as number) >= 0)) throw new CommandError(`${key} must not be negative`);
     if (key === 'stepoverPct' && !((value as number) > 0 && (value as number) <= 100)) throw new CommandError('stepoverPct must be in (0, 100]');
     if (key === 'toolId') checkTool(job, value as string | null);
+    if (key === 'tabs') checkTabs(value as Partial<TabSettings>);
     next[key] = NESTED.has(key) ? { ...(op as unknown as Record<string, object>)[key], ...(value as object) } : value;
   }
   return next as unknown as Operation;

@@ -3,6 +3,15 @@ import type { Path2D } from '../../geometry/path2d';
 import type { TabSettings } from '../types';
 import type { TabInterval } from './writer';
 
+/** Upper bound on automatic tabs per lap (a tiny spacing must not hang the worker). */
+const MAX_TABS = 200;
+
+/** Automatic tab count; an invalid count or spacing (≤ 0, NaN, ±∞) means one tab. */
+function autoCount(t: TabSettings, total: number): number {
+  const n = t.placement === 'count' ? Math.round(t.count) : t.spacing > 0 && Number.isFinite(t.spacing) ? Math.floor(total / t.spacing) : 1;
+  return Number.isFinite(n) ? Math.max(1, n) : 1;
+}
+
 /**
  * Tab intervals along a closed tool-centre lap. Each covers the tab width plus the tool diameter.
  * Automatic tabs keep at least one tab width between their edges and any corner sharper than 30°, shifting
@@ -14,7 +23,7 @@ export function tabIntervals(
 ): { intervals: (TabInterval & { center: number })[]; skipped: number } {
   const total = pathLength(path);
   const half = t.width / 2 + toolRadius;
-  const n = explicitT ? explicitT.length : t.placement === 'count' ? Math.max(1, Math.round(t.count)) : Math.max(1, Math.floor(total / t.spacing));
+  const n = explicitT ? explicitT.length : Math.min(MAX_TABS, autoCount(t, total));
   if (!(total > 0) || 2 * half >= total) return { intervals: [], skipped: n };
   const make = (center: number) => ({ s0: center - half, s1: center + half, center, shape: t.shape });
   if (explicitT) {

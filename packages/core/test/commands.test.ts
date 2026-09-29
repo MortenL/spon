@@ -96,6 +96,15 @@ describe('applyCommand', () => {
     for (const c of bad) expect(() => applyCommand(job, c), JSON.stringify(c)).toThrow(CommandError);
   });
 
+  it('rejects tab settings that cannot place tabs', () => {
+    const job = run(withTool(), { type: 'addOperation', opType: 'profile', toolId: 't6', id: 'p' });
+    for (const tabs of [{ spacing: 0 }, { spacing: -1 }, { count: 0 }, { count: Number.NaN }, { width: 0 }, { width: -2 }]) {
+      expect(() => applyCommand(job, { type: 'updateOperation', id: 'p', patch: { tabs } }), JSON.stringify(tabs)).toThrow(CommandError);
+    }
+    expect(applyCommand(job, { type: 'updateOperation', id: 'p', patch: { tabs: { spacing: 30, count: 1, width: 3 } } }).operations[0])
+      .toMatchObject({ tabs: { spacing: 30, count: 1, width: 3 } });
+  });
+
   it('serialises every command through JSON unchanged', () => {
     const commands: JobCommand[] = [
       { type: 'addTool', tool },

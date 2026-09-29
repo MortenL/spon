@@ -137,6 +137,19 @@ describe('tabIntervals', () => {
     expect(tabIntervals(square, tabs({ width: 40 }), 3, null)).toEqual({ intervals: [], skipped: 4 });
   });
 
+  it('treats an invalid spacing or count as one tab and never places more than 200', () => {
+    for (const bad of [0, -5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const r = tabIntervals(rect, tabs({ placement: 'spacing', spacing: bad }), 3, null);
+      expect(r.intervals.length + r.skipped, `spacing ${bad}`).toBe(1);
+    }
+    for (const bad of [Number.NaN, Number.POSITIVE_INFINITY]) {
+      const r = tabIntervals(rect, tabs({ placement: 'count', count: bad }), 3, null);
+      expect(r.intervals.length + r.skipped, `count ${bad}`).toBeLessThanOrEqual(200);
+    }
+    const tiny = tabIntervals(rect, tabs({ placement: 'spacing', spacing: 1e-6 }), 3, null);
+    expect(tiny.intervals.length + tiny.skipped).toBe(200);
+  });
+
   it('places explicit positions as given (clamped inside the lap)', () => {
     const r = tabIntervals(rect, tabs({}), 3, [0.5]);
     expect(r.intervals.map((i) => i.center)).toEqual([150]);
