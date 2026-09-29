@@ -15,6 +15,7 @@ import { restoreAutosave } from '@/state/documents';
 import { allPrograms } from '@/state/programList';
 import { startProgramAnalysis } from '@/state/programs';
 import { appStore, useApp } from '@/state/store';
+import { loadToolLibrary } from '@/state/toolLibrary';
 import { Viewport } from '@/viewport/Viewport';
 
 export function App() {
@@ -23,6 +24,7 @@ export function App() {
   usePlaybackLoop();
   useEffect(() => {
     void restoreAutosave();
+    void loadToolLibrary().catch((e) => console.error('Could not load the tool library', e));
     const stopAutosave = startAutosave(appStore);
     const stopAnalysis = startProgramAnalysis(appStore);
     const stopCam = startCamPipeline(appStore);

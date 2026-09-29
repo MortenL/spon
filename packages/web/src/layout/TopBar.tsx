@@ -7,6 +7,7 @@ import { Separator } from '@/components/ui/separator';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { newDocument, openFile, openViaPicker, registerOpenFallback, saveDocument } from '@/state/documents';
 import { appStore, useApp } from '@/state/store';
+import { ToolLibraryDialog } from '@/tools/ToolLibraryDialog';
 
 function ToolButton({ label, icon: Icon, onClick, disabled, testId }: { label: string; icon: LucideIcon; onClick: () => void; disabled?: boolean; testId: string }) {
   return (
@@ -52,6 +53,8 @@ export function TopBar() {
       <Separator orientation="vertical" className="mx-2 h-6" />
       <ToolButton label="Undo" icon={Undo2} onClick={undo} disabled={!canUndo} testId="undo" />
       <ToolButton label="Redo" icon={Redo2} onClick={redo} disabled={!canRedo} testId="redo" />
+      <Separator orientation="vertical" className="mx-2 h-6" />
+      <ToolLibraryDialog />
       <div className="ml-auto" />
       <ToggleGroup type="single" size="sm" variant="outline" value={units} onValueChange={(v) => v && commit((j) => setDisplayUnits(j, v as LengthUnit))}>
         <ToggleGroupItem value="mm" data-testid="units-toggle-mm">mm</ToggleGroupItem>
