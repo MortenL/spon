@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { runCommand } from '@/state/camView';
 import { programContext, programOrigin } from '@/state/programContext';
 import { type ModelGeometry, useApp } from '@/state/store';
+import { regionShape } from './convert';
 import { noRaycast } from './SceneObjects';
 
 const PICK_COLOR = '#f59e0b';
@@ -200,13 +201,15 @@ function UnmachinedAreas({ overlays }: { overlays: OpOverlays }) {
   const shapes = useMemo(
     () =>
       overlays.unmachined.flatMap((entry, ei) =>
-        entry.polys
-          .filter((poly) => poly.length >= 3)
-          .map((poly, pi) => ({
-            key: `${ei}-${pi}`,
+        entry.regions
+          .filter((region) => region.outer.length >= 3)
+          .map((region, ri) => ({
+            key: `${ei}-${ri}`,
             z: entry.z + 0.01,
-            geometry: polyShapeGeometry(poly),
-            outline: [...poly, poly[0]].map((p): Point3 => [p.x, p.y, 0]),
+            geometry: new THREE.ShapeGeometry(regionShape({ outer: region.outer, holes: region.holes.filter((h) => h.length >= 3) })),
+            outlines: [region.outer, ...region.holes]
+              .filter((poly) => poly.length >= 3)
+              .map((poly) => [...poly, poly[0]].map((p): Point3 => [p.x, p.y, 0])),
           })),
       ),
     [overlays.unmachined],
@@ -220,13 +223,11 @@ function UnmachinedAreas({ overlays }: { overlays: OpOverlays }) {
           <mesh geometry={s.geometry} raycast={noRaycast}>
             <meshBasicMaterial color={UNMACHINED_COLOR} transparent opacity={0.35} depthWrite={false} side={THREE.DoubleSide} />
           </mesh>
-          <Line points={s.outline as Point3[]} color={UNMACHINED_COLOR} lineWidth={1.5} raycast={noRaycast} />
+          {s.outlines.map((outline, i) => (
+            <Line key={i} points={outline} color={UNMACHINED_COLOR} lineWidth={1.5} raycast={noRaycast} />
+          ))}
         </group>
       ))}
     </>
   );
-}
-
-function polyShapeGeometry(poly: readonly Vec2[]): THREE.ShapeGeometry {
-  return new THREE.ShapeGeometry(new THREE.Shape(poly.map((p) => new THREE.Vector2(p.x, p.y))));
 }

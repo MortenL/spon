@@ -141,7 +141,7 @@ export function pocketToolpath(op: PocketOp, tool: Tool, ctx: CamContext, geo: R
     const left = polysToRegions(offsetPolys(offsetPolys(differencePolys(target, swept), -SLIVER, tol), SLIVER, tol));
     if (left.length) {
       diag('warning', 'unmachined-area', `The tool cannot reach ${left.length} area(s) of this pocket`, sh.ref);
-      out.overlays.unmachined.push({ polys: left.flatMap(regionPolys), z: h.bottom });
+      out.overlays.unmachined.push({ regions: left, z: h.bottom });
     }
 
     const levels = depthLevels(h.top, h.bottom + op.stockAxial, op.stepdown);

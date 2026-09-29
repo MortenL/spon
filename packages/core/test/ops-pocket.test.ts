@@ -67,7 +67,8 @@ describe('pocketToolpath', () => {
     expect(firstCut.kind).toBe('arc');
     expect(out.diagnostics.map((d) => d.code)).toEqual(['unmachined-area']);
     expect(out.overlays.unmachined).toHaveLength(1);
-    expect(out.overlays.unmachined[0].polys).toHaveLength(4);
+    expect(out.overlays.unmachined[0].regions).toHaveLength(4);
+    for (const reg of out.overlays.unmachined[0].regions) expect(reg).toMatchObject({ outer: expect.any(Array), holes: [] });
     expect(out.overlays.unmachined[0].z).toBe(-3);
   });
 

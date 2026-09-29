@@ -7,8 +7,8 @@ export interface OpOverlays {
   tabs: { refIndex: number; t: number; point: Vec2 }[];
   /** Tool-centre laps (flattened) that carry tabs, at the tab top Z, for dragging tabs. */
   laps: { refIndex: number; points: Vec2[]; z: number }[];
-  /** Pocket material the tool cannot reach, at the pocket floor. */
-  unmachined: { polys: Vec2[][]; z: number }[];
+  /** Pocket material the tool cannot reach, at the pocket floor: separate regions, each an outer boundary with holes. */
+  unmachined: { regions: { outer: Vec2[]; holes: Vec2[][] }[]; z: number }[];
 }
 
 export interface OpOutput {

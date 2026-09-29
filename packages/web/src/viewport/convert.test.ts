@@ -1,6 +1,6 @@
 import type { DrawingLayer, Mesh } from '@sponcam/core';
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_LINE_COLOR, layerLinePositions, lineColor, meshToGeometry, niceGridStep, subsetGeometry } from './convert';
+import { DEFAULT_LINE_COLOR, layerLinePositions, lineColor, meshToGeometry, niceGridStep, regionShape, subsetGeometry } from './convert';
 
 const mesh: Mesh = {
   positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0]),
@@ -9,6 +9,14 @@ const mesh: Mesh = {
 };
 
 describe('convert', () => {
+  it('builds a region shape with its holes', () => {
+    const sq = (a: number, b: number) => [{ x: a, y: a }, { x: b, y: a }, { x: b, y: b }, { x: a, y: b }];
+    const shape = regionShape({ outer: sq(0, 10), holes: [sq(4, 6).reverse()] });
+    expect(shape.getPoints()).toHaveLength(4);
+    expect(shape.holes).toHaveLength(1);
+    expect(shape.holes[0].getPoints()).toHaveLength(4);
+  });
+
   it('builds indexed buffer geometry and triangle subsets', () => {
     const geometry = meshToGeometry(mesh);
     expect(geometry.getAttribute('position').count).toBe(4);

@@ -3,6 +3,13 @@ import * as THREE from 'three';
 
 export const DEFAULT_LINE_COLOR = '#d4d4d8';
 
+/** A planar region (outer boundary with holes) as a three.js shape. */
+export function regionShape(region: { outer: readonly { x: number; y: number }[]; holes: readonly (readonly { x: number; y: number }[])[] }): THREE.Shape {
+  const shape = new THREE.Shape(region.outer.map((p) => new THREE.Vector2(p.x, p.y)));
+  for (const hole of region.holes) shape.holes.push(new THREE.Path(hole.map((p) => new THREE.Vector2(p.x, p.y))));
+  return shape;
+}
+
 export function meshToGeometry(mesh: Mesh): THREE.BufferGeometry {
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(mesh.positions, 3));
