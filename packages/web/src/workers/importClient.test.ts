@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const api = vi.hoisted(() => ({ setCamModel: vi.fn(() => new Promise<void>(() => {})), loadCadReader: vi.fn(async () => {}) }));
+const api = vi.hoisted(() => ({
+  setCamModel: vi.fn(() => new Promise<void>(() => {})),
+  loadCadReader: vi.fn(async () => {}),
+  import: vi.fn(async () => ({ ok: true, kind: 'mesh', format: 'step', detectedUnits: 'mm' })),
+}));
 vi.mock('comlink', () => ({ wrap: () => api, transfer: <T>(v: T) => v }));
 
 class FakeWorker {
@@ -15,7 +19,7 @@ class FakeWorker {
 }
 vi.stubGlobal('Worker', FakeWorker);
 
-const { cadReaderLoaded, IMPORT_TIMEOUT_MS, loadCadReaderInWorker, setCamModelInWorker, workerEpoch } = await import('./importClient');
+const { cadReaderLoaded, importInWorker, IMPORT_TIMEOUT_MS, loadCadReaderInWorker, setCamModelInWorker, workerEpoch } = await import('./importClient');
 
 describe('import worker client', () => {
   afterEach(() => vi.useRealTimers());
@@ -42,5 +46,11 @@ describe('import worker client', () => {
     await vi.advanceTimersByTimeAsync(IMPORT_TIMEOUT_MS + 1);
     await stuck;
     expect(cadReaderLoaded()).toBe(false);
+  });
+
+  it('marks the reader as loaded after a successful STEP/IGES read, even without an explicit load', async () => {
+    expect(cadReaderLoaded()).toBe(false);
+    await importInWorker('a.step', new Uint8Array([1, 2, 3]));
+    expect(cadReaderLoaded()).toBe(true);
   });
 });

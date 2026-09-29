@@ -1,4 +1,4 @@
-import type { AnalysisContext, AnalysisResult, CamGeometry, ImportResult, Job, MotionTable, ParsedProgram, ProgramContext } from '@sponcam/core';
+import { type AnalysisContext, type AnalysisResult, cadFormat, type CamGeometry, type ImportResult, type Job, type MotionTable, type ParsedProgram, type ProgramContext } from '@sponcam/core';
 import * as Comlink from 'comlink';
 import type { CamRun } from '../state/camTypes';
 import type { ImportWorkerApi } from './import.worker';
@@ -55,10 +55,22 @@ function run<T>(call: (api: Comlink.Remote<ImportWorkerApi>) => Promise<T>, mess
   return withTimeout<T>(call(api), IMPORT_TIMEOUT_MS, terminate, message);
 }
 
-/** Parses a model file off the main thread. Sends a copy of `bytes`, so the caller can keep using them. `body` picks a STEP/IGES body. */
+/**
+ * Parses a model file off the main thread. Sends a copy of `bytes`, so the caller can keep using them. `body` picks a
+ * STEP/IGES body. A successful STEP/IGES read implies the reader was loaded in the worker that served it, even when
+ * that load happened implicitly (not via `loadCadReaderInWorker`) — so the next drop of such a file skips the
+ * "Loading STEP reader…" busy text.
+ */
 export function importInWorker(fileName: string, bytes: Uint8Array, body?: number): Promise<ImportResult> {
   const copy = bytes.slice();
-  return run<ImportResult>((api) => api.import(fileName, Comlink.transfer(copy, [copy.buffer]), body), 'Import timed out');
+  const isCad = cadFormat(fileName) !== null;
+  const startEpoch = epoch;
+  const result = run<ImportResult>((api) => api.import(fileName, Comlink.transfer(copy, [copy.buffer]), body), 'Import timed out');
+  if (!isCad) return result;
+  return result.then((value) => {
+    if (epoch === startEpoch) cadReaderEpoch = startEpoch;
+    return value;
+  });
 }
 
 /** Parses and analyses a G-code program off the main thread (bytes are copied). */
