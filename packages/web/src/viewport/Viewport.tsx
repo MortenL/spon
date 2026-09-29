@@ -1,9 +1,15 @@
+import { bboxCenter, bboxSize, camContext } from '@sponcam/core';
 import { GizmoHelper, GizmoViewport, OrbitControls } from '@react-three/drei';
-import { Canvas } from '@react-three/fiber';
+import { Canvas, type ThreeEvent } from '@react-three/fiber';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Toggle } from '@/components/ui/toggle';
 import { cn } from '@/lib/utils';
+import { runCommand } from '@/state/camView';
+import { useStockBox } from '@/state/selectors';
 import { appStore, useApp, type ViewPreset, type Visibility } from '@/state/store';
+import { applyPick, pickDxf } from './camPick';
+import { CamOverlays } from './CamOverlays';
 import { ModelObject } from './ModelObject';
 import { BedGrid, CameraRig, CursorTracker, StockBox, WcsTriad } from './SceneObjects';
 import { Toolpaths } from './Toolpaths';
@@ -25,8 +31,28 @@ const TOGGLES: { key: Visibility; label: string }[] = [
 export function Viewport() {
   const pickMode = useApp((s) => s.pickMode);
   const visibility = useApp((s) => s.visibility);
+  const camPick = useApp((s) => s.camPick);
+  const job = useApp((s) => s.job);
+  const geometry = useApp((s) => s.geometry);
+  const hiddenLayers = useApp((s) => s.hiddenLayers);
+  const stock = useStockBox();
+  const pickOp = camPick ? job.operations.find((o) => o.id === camPick.operationId) : null;
+
+  const onDxfPlaneClick = (e: ThreeEvent<MouseEvent>) => {
+    if (!camPick || !pickOp || camPick.target !== 'geometry' || e.delta > 4) return; // a drawing has no mesh face for a height pick
+    e.stopPropagation();
+    const ctx = camContext(job, geometry);
+    const q = { x: e.point.x - ctx.origin.x, y: e.point.y - ctx.origin.y };
+    const res = pickDxf(pickOp, ctx, q, new Set(hiddenLayers));
+    if ('error' in res) {
+      toast.error(res.error);
+      return;
+    }
+    runCommand({ type: 'updateOperation', id: pickOp.id, patch: { geometry: applyPick(pickOp, res.refs) } });
+  };
+
   return (
-    <div className={cn('relative h-full w-full', pickMode !== 'none' && 'cursor-crosshair')} data-testid="viewport">
+    <div className={cn('relative h-full w-full', (pickMode !== 'none' || camPick) && 'cursor-crosshair')} data-testid="viewport">
       {/* up = +Z must be set before OrbitControls is created: the whole scene is Z-up like the machine. */}
       <Canvas camera={{ position: [150, -200, 150], up: [0, 0, 1], fov: 45, near: 0.1, far: 100000 }} dpr={[1, 2]}>
         <color attach="background" args={['#1c1d21']} />
@@ -37,7 +63,13 @@ export function Viewport() {
         <BedGrid />
         <StockBox />
         <ModelObject />
+        {camPick && geometry?.kind === 'drawing' && stock && (
+          <mesh position={[bboxCenter(stock).x, bboxCenter(stock).y, 0]} visible={false} onClick={onDxfPlaneClick}>
+            <planeGeometry args={[Math.max(bboxSize(stock).x, 1e-3), Math.max(bboxSize(stock).y, 1e-3)]} />
+          </mesh>
+        )}
         <Toolpaths />
+        <CamOverlays />
         <WcsTriad />
         <CameraRig />
         <CursorTracker />
@@ -66,6 +98,11 @@ export function Viewport() {
       {pickMode !== 'none' && (
         <div data-testid="pick-hint" className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-md bg-amber-500/90 px-3 py-1 text-xs font-medium text-black">
           {pickMode === 'face' ? 'Click a face to put it on the bed' : 'Click an edge to line it up with X'} · Esc to cancel
+        </div>
+      )}
+      {camPick && (
+        <div data-testid="cam-pick-hint" className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-md bg-amber-500/90 px-3 py-1 text-xs font-medium text-black">
+          Click geometry for {pickOp?.name ?? 'the operation'} · Alt-click for a single loop · Esc to finish
         </div>
       )}
     </div>

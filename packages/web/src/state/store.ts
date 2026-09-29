@@ -201,7 +201,7 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
       set({ dirty: false, fileHandle: handle });
     },
     setPickMode(pickMode) {
-      set({ pickMode });
+      set({ pickMode, ...(pickMode !== 'none' ? { camPick: null } : {}) });
     },
     toggleEdges() {
       set({ showEdges: !get().showEdges });
@@ -275,7 +275,7 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
       set({ selectedOperationId: id, ...(id !== get().selectedOperationId ? { camPick: null } : {}) });
     },
     setCamPick(camPick) {
-      set({ camPick });
+      set({ camPick, ...(camPick !== null ? { pickMode: 'none' as const } : {}) });
     },
     setInspectorTab(inspectorTab) {
       set({ inspectorTab });

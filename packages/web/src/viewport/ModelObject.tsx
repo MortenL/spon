@@ -1,12 +1,15 @@
 import {
-  alignEdgeToX, type LengthUnit, layFlat, nearestTriangleEdge, planarRegion, regionNormal, unitScale, type Vec3,
+  alignEdgeToX, camContext, type LengthUnit, layFlat, nearestTriangleEdge, planarRegion, regionNormal, unitScale, type Vec3,
 } from '@sponcam/core';
 import { Edges, Line } from '@react-three/drei';
 import type { ThreeEvent } from '@react-three/fiber';
 import { useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import * as THREE from 'three';
+import { runCommand } from '@/state/camView';
 import { usePlacement } from '@/state/selectors';
 import { appStore, type ModelGeometry, useApp } from '@/state/store';
+import { applyPick, pickMesh } from './camPick';
 import { layerLinePositions, lineColor, meshToGeometry, subsetGeometry, toThreeQuaternion } from './convert';
 import { noRaycast } from './SceneObjects';
 
@@ -34,6 +37,7 @@ export function ModelObject() {
 function ModelMesh({ geometry, importUnits }: { geometry: MeshGeometry; importUnits: LengthUnit }) {
   const showEdges = useApp((s) => s.showEdges);
   const pickMode = useApp((s) => s.pickMode);
+  const camPick = useApp((s) => s.camPick);
   const buffer = useMemo(() => meshToGeometry(geometry.mesh), [geometry.mesh]);
   useEffect(() => () => buffer.dispose(), [buffer]);
 
@@ -44,7 +48,7 @@ function ModelMesh({ geometry, importUnits }: { geometry: MeshGeometry; importUn
   useEffect(() => {
     setRegion(null);
     setEdge(null);
-  }, [pickMode]);
+  }, [pickMode, camPick]);
 
   // 0.01 mm plane tolerance, expressed in the mesh's raw units
   const regionAt = (tri: number) => planarRegion(geometry.mesh, geometry.adjacency, tri, { distanceTol: 0.01 / unitScale(importUnits) });
@@ -54,9 +58,9 @@ function ModelMesh({ geometry, importUnits }: { geometry: MeshGeometry; importUn
   };
 
   const onPointerMove = (e: ThreeEvent<PointerEvent>) => {
-    if (pickMode === 'none' || e.faceIndex == null) return;
+    if ((pickMode === 'none' && !camPick) || e.faceIndex == null) return;
     e.stopPropagation();
-    if (pickMode === 'face') {
+    if (pickMode === 'face' || (pickMode === 'none' && camPick)) {
       if (!region?.includes(e.faceIndex)) setRegion(regionAt(e.faceIndex));
     } else {
       setEdge(edgeAt(e, e.faceIndex));
@@ -64,27 +68,53 @@ function ModelMesh({ geometry, importUnits }: { geometry: MeshGeometry; importUn
   };
 
   const onClick = (e: ThreeEvent<MouseEvent>) => {
-    if (pickMode === 'none' || e.faceIndex == null || e.delta > 4) return; // ignore the end of an orbit drag
+    if ((pickMode === 'none' && !camPick) || e.faceIndex == null || e.delta > 4) return; // ignore the end of an orbit drag
     e.stopPropagation();
-    const { commit, setPickMode, requestView } = appStore.getState();
+    const { commit, setPickMode, requestView, job, setCamPick } = appStore.getState();
     if (pickMode === 'face') {
       const tris = region?.includes(e.faceIndex) ? region : regionAt(e.faceIndex);
       const normal = regionNormal(geometry.mesh, tris);
       commit((j) => layFlat(j, normal));
       requestView('fit');
-    } else {
+      setPickMode('none');
+    } else if (pickMode === 'edge') {
       const [a, b] = edgeAt(e, e.faceIndex);
       commit((j) => alignEdgeToX(j, a, b));
+      setPickMode('none');
+    } else if (camPick) {
+      const op = job.operations.find((o) => o.id === camPick.operationId);
+      if (!op) {
+        setCamPick(null);
+        return;
+      }
+      const ctx = camContext(job, geometry);
+      const world = e.point; // scene coordinates
+      const q = { x: world.x - ctx.origin.x, y: world.y - ctx.origin.y };
+      const forHeight = camPick.target !== 'geometry';
+      const res = pickMesh(op, ctx, e.faceIndex, q, !forHeight && e.altKey);
+      if ('error' in res) {
+        toast.error(res.error);
+        return;
+      }
+      if (camPick.target === 'geometry') {
+        runCommand({ type: 'updateOperation', id: op.id, patch: { geometry: applyPick(op, res.refs) } });
+        return;
+      }
+      const face = res.refs[0];
+      if (face.kind !== 'meshFace') return; // pickMesh always returns a face when alt is forced off
+      const name = camPick.target.height;
+      if (runCommand({ type: 'updateOperation', id: op.id, patch: { heights: { [name]: { from: 'face', offset: op.heights[name].offset, face } } } })) {
+        setCamPick(null);
+      }
     }
-    setPickMode('none');
   };
 
   return (
     <>
       <mesh
         geometry={buffer} onPointerMove={onPointerMove} onClick={onClick} onPointerOut={() => { setRegion(null); setEdge(null); }}
-        // a full-mesh raycast on every pointer move is only worth it while picking a face or edge
-        raycast={pickMode === 'none' ? noRaycast : THREE.Mesh.prototype.raycast}
+        // a full-mesh raycast on every pointer move is only worth it while picking a face, edge or CAM reference
+        raycast={pickMode === 'none' && !camPick ? noRaycast : THREE.Mesh.prototype.raycast}
       >
         <meshStandardMaterial
           color="#9aa6b5" metalness={0.15} roughness={0.65} flatShading side={THREE.DoubleSide}

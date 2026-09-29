@@ -1,10 +1,11 @@
-import { bboxSize, type ParsedProgram, type ProgramRef } from '@sponcam/core';
+import { bboxSize, type MotionTable, type ParsedProgram, type ProgramRef } from '@sponcam/core';
 import { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { splitVertex, usePlaybackCursor, useTimeline } from '@/gcode/playback';
 import { buildToolpathBuffers, toolpathGeometryKey } from '@/gcode/toolpath';
-import { allPrograms } from '@/state/programList';
+import type { CamFile } from '@/state/camTypes';
 import { programOrigin } from '@/state/programContext';
+import { allPrograms } from '@/state/programList';
 import { useStockBox } from '@/state/selectors';
 import { useApp } from '@/state/store';
 import { noRaycast } from './SceneObjects';
@@ -15,26 +16,64 @@ export function Toolpaths() {
   const data = useApp((s) => s.programData);
   const showRapids = useApp((s) => s.visibility.rapids);
   const programs = useApp((s) => allPrograms(s));
+  const selectedOperationId = useApp((s) => s.selectedOperationId);
+  const camFiles = useApp((s) => s.camFiles);
+  const camStatus = useApp((s) => s.camStatus);
   const origin = useMemo(() => programOrigin(job, geometry), [job, geometry]);
   return (
     <group position={[origin.x, origin.y, origin.z]}>
       {programs.map((p) => {
         const parsed = data[p.blobId]?.parsed;
-        return parsed ? <ProgramToolpath key={p.id} program={p} parsed={parsed} showRapids={showRapids} /> : null;
+        return parsed ? (
+          <ProgramToolpath
+            key={p.id} program={p} parsed={parsed} showRapids={showRapids}
+            selectedOperationId={selectedOperationId} camFiles={camFiles} camStatus={camStatus}
+          />
+        ) : null;
       })}
       <ToolMarker />
     </group>
   );
 }
 
-function ProgramToolpath({ program, parsed, showRapids }: { program: ProgramRef; parsed: ParsedProgram; showRapids: boolean }) {
+/** Vertex rows whose posted line falls inside [firstLine, lastLine], as a contiguous [r0, r1] row range (inclusive), or null if none. */
+function sectionRowRange(table: MotionTable, firstLine: number, lastLine: number): [number, number] | null {
+  let r0 = -1;
+  let r1 = -1;
+  for (let i = 0; i < table.count; i++) {
+    const line = table.line[i];
+    if (line >= firstLine && line <= lastLine) {
+      if (r0 < 0) r0 = i;
+      r1 = i;
+    }
+  }
+  return r0 < 0 ? null : [r0, r1];
+}
+
+/** Geometries whose dashed "lineDistance" attribute has already been computed (computed once, lazily, per geometry). */
+const dashedReady = new WeakSet<THREE.BufferGeometry>();
+function ensureLineDistances(g: THREE.BufferGeometry): void {
+  if (!dashedReady.has(g)) {
+    // computeLineDistances() lives on THREE.Line, not BufferGeometry; a throwaway Line (never added to the scene)
+    // is enough to compute and attach the "lineDistance" attribute this geometry needs for lineDashedMaterial.
+    new THREE.Line(g).computeLineDistances();
+    dashedReady.add(g);
+  }
+}
+
+function ProgramToolpath({
+  program, parsed, showRapids, selectedOperationId, camFiles, camStatus,
+}: {
+  program: ProgramRef; parsed: ParsedProgram; showRapids: boolean;
+  selectedOperationId: string | null; camFiles: readonly CamFile[]; camStatus: 'idle' | 'generating';
+}) {
   // keyed on the geometry buildToolpathBuffers actually reads, not on `parsed.table` itself:
   // reanalyzeAll replaces the table wrapper (a new `t` for timing) on every re-analysis while
   // reusing these arrays, so keying on `parsed.table` would rebuild and re-upload every buffer then.
   const geometryKey = toolpathGeometryKey(parsed.table);
   const buffers = useMemo(() => buildToolpathBuffers(parsed.table, { showRapids }), [...geometryKey, showRapids]);
-  // two geometries share the same attributes (one GPU upload); each has its own draw range
-  const [done, todo] = useMemo(() => {
+  // three geometries share the same attributes (one GPU upload); each has its own draw range
+  const [done, todo, selected] = useMemo(() => {
     const position = new THREE.BufferAttribute(buffers.positions, 3);
     const color = new THREE.BufferAttribute(buffers.colors, 3);
     const make = () => {
@@ -44,13 +83,14 @@ function ProgramToolpath({ program, parsed, showRapids }: { program: ProgramRef;
       g.computeBoundingSphere();
       return g;
     };
-    return [make(), make()];
+    return [make(), make(), make()];
   }, [buffers]);
-  // both are disposed together, so the shared attributes are released exactly when neither is drawn any more
+  // all three are disposed together, so the shared attributes are released exactly when none is drawn any more
   useEffect(() => () => {
     done.dispose();
     todo.dispose();
-  }, [done, todo]);
+    selected.dispose();
+  }, [done, todo, selected]);
 
   const tl = useTimeline();
   const entry = tl.entries.find((e) => e.programId === program.id);
@@ -58,13 +98,40 @@ function ProgramToolpath({ program, parsed, showRapids }: { program: ProgramRef;
   done.setDrawRange(0, split);
   todo.setDrawRange(split, Infinity);
 
+  // the selected operation's own rows, drawn again on top at full strength
+  const section = selectedOperationId ? camFiles.find((f) => f.blobId === program.blobId)?.sections.find((s) => s.operationId === selectedOperationId) : null;
+  const rows = section ? sectionRowRange(parsed.table, section.firstLine, section.lastLine) : null;
+  const selStart = rows ? (rows[0] > 0 ? buffers.rowVertexEnd[rows[0] - 1] : 0) : 0;
+  const selCount = rows ? buffers.rowVertexEnd[rows[1]] - selStart : 0;
+  selected.setDrawRange(selStart, selCount);
+
+  const isGenerated = program.source === 'generated';
+  const dim = selectedOperationId !== null && isGenerated;
+  const dashed = camStatus === 'generating' && isGenerated;
+  const doneOpacity = dim ? 0.3 : 1;
+  const todoOpacity = dim ? 0.3 : program.inTimeline ? 0.35 : 0.15;
+
+  useEffect(() => {
+    if (!dashed) return;
+    ensureLineDistances(done);
+    ensureLineDistances(todo);
+    ensureLineDistances(selected);
+  }, [dashed, done, todo, selected]);
+
   return (
     <>
       <lineSegments geometry={done} raycast={noRaycast}>
-        <lineBasicMaterial vertexColors />
+        {dashed
+          ? <lineDashedMaterial vertexColors transparent={dim} opacity={doneOpacity} dashSize={2} gapSize={1.5} />
+          : <lineBasicMaterial vertexColors transparent={dim} opacity={doneOpacity} />}
       </lineSegments>
       <lineSegments geometry={todo} raycast={noRaycast}>
-        <lineBasicMaterial vertexColors transparent opacity={program.inTimeline ? 0.35 : 0.15} depthWrite={false} />
+        {dashed
+          ? <lineDashedMaterial vertexColors transparent opacity={todoOpacity} depthWrite={false} dashSize={2} gapSize={1.5} />
+          : <lineBasicMaterial vertexColors transparent opacity={todoOpacity} depthWrite={false} />}
+      </lineSegments>
+      <lineSegments geometry={selected} raycast={noRaycast} renderOrder={1}>
+        <lineBasicMaterial vertexColors depthTest={false} />
       </lineSegments>
     </>
   );
