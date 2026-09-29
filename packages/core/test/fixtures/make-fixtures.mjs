@@ -3,6 +3,7 @@
 import { writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { igesFile, stepFile } from './cadWriters.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -198,4 +199,14 @@ writeFileSync(join(here, 'box-20x10x5.stl'), binaryStl(boxTriangles(20, 10, 5)))
 writeFileSync(join(here, 'plate-pocket.stl'), binaryStl(platePocketTriangles(), 'Spon fixture: plate with pocket and holes'));
 writeFileSync(join(here, 'plate-mm.dxf'), plateDxf());
 writeFileSync(join(here, 'cam-part.dxf'), camPartDxf());
-console.log('Wrote box-20x10x5.stl, plate-pocket.stl, plate-mm.dxf and cam-part.dxf');
+// STEP and IGES fixtures (Milestone 3.2). Their recorded reader output (*.occt.json) is written by
+// packages/web/scripts/record-occt.mjs, which runs the real occt-import-js reader (a dependency of @sponcam/web only).
+writeFileSync(join(here, 'box-hole.step'), stepFile('box-hole.step', [
+  { name: 'Bracket', origin: [0, 0, 0], size: [20, 10, 5], holes: [{ center: [10, 5], diameter: 8 }] },
+]));
+writeFileSync(join(here, 'two-bodies.step'), stepFile('two-bodies.step', [
+  { name: 'Small block', origin: [0, 0, 0], size: [10, 10, 5] },
+  { name: 'Large block', origin: [30, 0, 0], size: [40, 20, 10] },
+]));
+writeFileSync(join(here, 'box.iges'), igesFile('box.iges', { origin: [0, 0, 0], size: [20, 10, 5] }));
+console.log('Wrote box-20x10x5.stl, plate-pocket.stl, plate-mm.dxf, cam-part.dxf, box-hole.step, two-bodies.step and box.iges');
