@@ -21,6 +21,22 @@ function maxDeviation(points: Vec2[], path: Path2D): number {
 }
 
 describe('fitArcs', () => {
+  it('keeps arcs within maxBulge of the chords between sparse input points', () => {
+    const pts = Array.from({ length: 6 }, (_, i) => v2(10 * Math.cos((i * Math.PI) / 10), 10 * Math.sin((i * Math.PI) / 10)));
+    expect(fitArcs(pts, false, 0.01).segments).toMatchObject([{ kind: 'arc' }]); // unbounded by default
+    const fitted = fitArcs(pts, false, 0.01, 0.01);
+    const input: Path2D = { closed: false, segments: pts.slice(1).map((to, i) => ({ kind: 'line' as const, from: pts[i], to })) };
+    const segDist = (p: Vec2, a: Vec2, b: Vec2) => {
+      const dx = b.x - a.x, dy = b.y - a.y, len2 = dx * dx + dy * dy;
+      const t = len2 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2)) : 0;
+      return Math.hypot(p.x - a.x - dx * t, p.y - a.y - dy * t);
+    };
+    const chords = flattenPath(input, 1e-4);
+    for (const p of flattenPath(fitted, 1e-4)) {
+      expect(Math.min(...chords.slice(1).map((b, i) => segDist(p, chords[i], b)))).toBeLessThanOrEqual(0.01 + 1e-9);
+    }
+  });
+
   it('recovers a full circle from a 64-facet polygon', () => {
     const pts = circlePoints(5, 5, 4, 64);
     const path = fitArcs(pts, true, 0.002);

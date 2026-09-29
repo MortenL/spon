@@ -6,6 +6,14 @@ const MAX_TURN = Math.cos(Math.PI / 4); // consecutive chords may turn at most 4
 
 const cross = (o: Vec2, a: Vec2, b: Vec2) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
 
+/** Distance from p to segment a–b. */
+function segmentDistance(p: Vec2, a: Vec2, b: Vec2): number {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const len2 = dx * dx + dy * dy;
+  const t = len2 > 0 ? Math.min(1, Math.max(0, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2)) : 0;
+  return Math.hypot(p.x - a.x - dx * t, p.y - a.y - dy * t);
+}
+
 function circumcenter(a: Vec2, b: Vec2, c: Vec2): Vec2 | null {
   const d = 2 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
   if (Math.abs(d) < 1e-12) return null;
@@ -13,8 +21,11 @@ function circumcenter(a: Vec2, b: Vec2, c: Vec2): Vec2 | null {
   return v2((a2 * (b.y - c.y) + b2 * (c.y - a.y) + c2 * (a.y - b.y)) / d, (a2 * (c.x - b.x) + b2 * (a.x - c.x) + c2 * (b.x - a.x)) / d);
 }
 
-/** An arc through pts[i..j] within `tol`, turning consistently, or null. */
-function arcThrough(pts: readonly Vec2[], i: number, j: number, tol: number): ArcSegment | null {
+/**
+ * An arc through pts[i..j] within `tol` of every point and within `maxBulge` of every chord between consecutive
+ * points, turning consistently, or null.
+ */
+function arcThrough(pts: readonly Vec2[], i: number, j: number, tol: number, maxBulge: number): ArcSegment | null {
   const m = (i + j) >> 1;
   const c = circumcenter(pts[i], pts[m], pts[j]);
   if (!c) return null;
@@ -33,7 +44,12 @@ function arcThrough(pts: readonly Vec2[], i: number, j: number, tol: number): Ar
     }
     const a0 = Math.atan2(pts[k - 1].y - c.y, pts[k - 1].x - c.x);
     const a1 = Math.atan2(pts[k].y - c.y, pts[k].x - c.x);
-    travelled += Math.abs(arcSweepBetween(a0, a1, turn > 0));
+    const sweep = arcSweepBetween(a0, a1, turn > 0);
+    // between two input points the arc must also stay near the chord joining them (on long chords it could
+    // otherwise bulge well beyond tol, even with every input point on the arc)
+    const mid = a0 + sweep / 2;
+    if (segmentDistance(v2(c.x + r * Math.cos(mid), c.y + r * Math.sin(mid)), pts[k - 1], pts[k]) > maxBulge) return null;
+    travelled += Math.abs(sweep);
   }
   if (travelled >= 2 * Math.PI - 1e-9) return null;
   const startAngle = Math.atan2(pts[i].y - c.y, pts[i].x - c.x);
@@ -79,8 +95,14 @@ function fitStart(pts: readonly Vec2[]): number {
   return sharpCos < MAX_TURN ? sharp : longest;
 }
 
-/** Replaces runs of polyline points with lines and arcs that stay within `tol` of every input point. */
-export function fitArcs(input: readonly Vec2[], closed: boolean, tol: number): Path2D {
+/**
+ * Replaces runs of polyline points with lines and arcs that stay within `tol` of every input point.
+ * `maxBulge` bounds how far an arc may stray from the polyline between input points. It is unbounded by
+ * default, so a coarsely faceted circle (an STL hole) is still recognised as one; callers that need the
+ * fitted path to stay near the polyline itself (pocket rings, which must keep their wall clearance) pass a
+ * bound and feed polygons whose facets are finer than it.
+ */
+export function fitArcs(input: readonly Vec2[], closed: boolean, tol: number, maxBulge = Infinity): Path2D {
   let pts = dedupe(input, closed, tol * 1e-3);
   if (pts.length < 2) return { segments: [], closed };
   if (closed) {
@@ -90,7 +112,8 @@ export function fitArcs(input: readonly Vec2[], closed: boolean, tol: number): P
       const turn = Math.sign(cross(pts[0], pts[1], pts[2]));
       if (c && turn !== 0) {
         const r = dist2(c, pts[0]);
-        if (r <= 1e4 && pts.every((p) => Math.abs(dist2(c, p) - r) <= tol)) {
+        const bulgeOk = (p: Vec2, q: Vec2) => r - Math.sqrt(Math.max(0, r * r - (dist2(p, q) / 2) ** 2)) <= maxBulge;
+        if (r <= 1e4 && pts.every((p, k) => Math.abs(dist2(c, p) - r) <= tol && bulgeOk(p, pts[(k + 1) % pts.length]))) {
           return { closed, segments: [{ kind: 'arc', center: c, radius: r, startAngle: Math.atan2(pts[0].y - c.y, pts[0].x - c.x), sweep: turn * 2 * Math.PI }] };
         }
       }
@@ -105,7 +128,7 @@ export function fitArcs(input: readonly Vec2[], closed: boolean, tol: number): P
     let arc: ArcSegment | null = null;
     let arcEnd = -1;
     for (let j = i + 3; j < n && j - i <= MAX_RUN; j++) {
-      const a = arcThrough(pts, i, j, tol);
+      const a = arcThrough(pts, i, j, tol, maxBulge);
       if (!a) break;
       arc = a;
       arcEnd = j;

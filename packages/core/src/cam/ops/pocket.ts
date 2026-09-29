@@ -24,6 +24,18 @@ export function pocketToolpath(op: PocketOp, tool: Tool, ctx: CamContext, geo: R
   const diag = (severity: CamSeverity, code: CamCode, message: string, ref?: number) =>
     out.diagnostics.push({ operationId: op.id, severity, code, message, ...(ref === undefined ? {} : { ref }) });
   const tol = ctx.tolerance;
+  /**
+   * Four approximations can each move the tool-centre path towards a wall or island: flattening the contours
+   * (chords cut into convex islands) and simplifying the region, up to `flatTol` each; Clipper's round joins
+   * (chords inside the true offset arc), up to `joinTol`; and arc fitting, up to `fitTol` (passed to fitArcs as
+   * the bound between input points too). `joinTol` is kept well under `fitTol`, or arcs could not follow the joins'
+   * chords. Every ring is offset `margin` further than nominal to cover all four, so the tool centre never
+   * comes closer than r + stockRadial to a wall or island.
+   */
+  const flatTol = tol / 4;
+  const joinTol = tol / 8;
+  const fitTol = tol / 2;
+  const margin = 2 * flatTol + joinTol + fitTol;
   const r = tool.diameter / 2;
   const stepover = Math.max(0.01, (tool.diameter * op.stepoverPct) / 100);
   const feed = op.feeds.feed;
@@ -36,7 +48,7 @@ export function pocketToolpath(op: PocketOp, tool: Tool, ctx: CamContext, geo: R
   const orientRing = (poly: Poly): Path2D => {
     const outerRing = polyArea(poly) > 0;
     const ccw = outerRing === (op.direction === 'climb');
-    return orientPath(fitArcs(poly, true, tol), ccw);
+    return orientPath(fitArcs(poly, true, fitTol, fitTol), ccw);
   };
   const startNear = (path: Path2D, p: Vec2 | null): Path2D => (p ? rotateStart(path, nearestS(path, p).s) : path);
 
@@ -105,17 +117,16 @@ export function pocketToolpath(op: PocketOp, tool: Tool, ctx: CamContext, geo: R
     out.heights ??= h;
     clearance = Math.max(clearance, h.clearance);
     const region: Poly[] = [
-      flattenPath(orientPath(sh.shape.outer, true), tol),
-      ...sh.shape.islands.map((i) => flattenPath(orientPath(i, false), tol)),
+      flattenPath(orientPath(sh.shape.outer, true), flatTol),
+      ...sh.shape.islands.map((i) => flattenPath(orientPath(i, false), flatTol)),
     ];
     // Every ring is offset from the region itself (never from the previous ring: chained offsets double their
-    // vertex count around islands and concave curves on every ring). The region is simplified once, within
-    // tol/2, and each ring is offset tol/2 further, so the rings stay at least as far from the walls and
-    // islands as offsets of the exact region would.
-    const simple = simplifyPolys(region, tol / 2);
+    // vertex count around islands and concave curves on every ring). The region is simplified once (within
+    // `flatTol`), which keeps the offsets cheap; `margin` covers that and the other approximations.
+    const simple = simplifyPolys(region, flatTol);
     const ringLevels: Poly[][] = [];
     for (let k = 0; k < 100000; k++) {
-      const off = offsetPolys(simple, -(r + op.stockRadial + k * stepover + tol / 2), tol);
+      const off = offsetPolys(simple, -(r + op.stockRadial + k * stepover + margin), joinTol);
       if (!off.length) break;
       ringLevels.push(off);
     }
@@ -148,7 +159,8 @@ export function pocketToolpath(op: PocketOp, tool: Tool, ctx: CamContext, geo: R
     for (const area of areas) clearArea(area, levels, h, h.feed);
     if (op.finishFloor && op.stockAxial > 0) for (const area of areas) clearArea(area, [h.bottom], h, h.feed);
     if (op.finishWalls) {
-      for (const poly of offsetPolys(region, -r, tol)) {
+      // the flattened region, not simplified: one `flatTol` less margin
+      for (const poly of offsetPolys(region, -(r + margin - flatTol), joinTol)) {
         const path = orientRing(poly);
         w.travel(pathStart(path), h.retract, h.feed);
         emitRampLaps(w, path, h.feed, h.bottom, angle, feed, null);

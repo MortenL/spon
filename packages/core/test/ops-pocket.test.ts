@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyCommand, camContext, type Move, newOperation, type PocketOp, pocketToolpath, type ResolvedShape, v2 } from '../src';
+import { applyCommand, camContext, flattenPath, type Move, newOperation, type PocketOp, pocketToolpath, type ResolvedShape, v2 } from '../src';
 import { camPartSetup, cutMoves, geoOf, rectPath, tool6 } from './fixtures/camSetup';
 
 /**
@@ -170,4 +170,83 @@ describe('pocketToolpath', () => {
     }));
     for (const m of cutMoves(out.toolpath!.moves)) expect(wall(m.to)).toBeGreaterThanOrEqual(3 - 1e-6);
   });
+
+  const cosineStar = (cx: number, cy: number) => {
+    const pts = Array.from({ length: 1000 }, (_, i) => {
+      const a = (i / 1000) * 2 * Math.PI;
+      const rr = 30 + 3 * Math.cos(5 * a);
+      return v2(cx + rr * Math.cos(a), cy + rr * Math.sin(a));
+    });
+    return { closed: true, segments: pts.map((from, i) => ({ kind: 'line' as const, from, to: pts[(i + 1) % pts.length] })) };
+  };
+  const clearanceCases: [string, ResolvedShape][] = [
+    ['the island pocket', withIsland],
+    ['the cosine star', { shape: { outer: cosineStar(55, 35), islands: [] }, z: 0, ref: 0 }],
+    ['the cosine star with an island', { shape: { outer: cosineStar(55, 35), islands: [circle(55, 35, 4)] }, z: 0, ref: 0 }],
+  ];
+  for (const [name, shape] of clearanceCases) {
+    it.each([0.002, 0.01, 0.02])(`keeps full tool clearance inside arc moves in ${name} at tolerance %s`, (tolerance) => {
+      const out = pocketToolpath(pocket(), tool6, { ...ctx, tolerance }, geoOf({ shapes: [shape] }));
+      const walls = [shape.shape.outer, ...shape.shape.islands].map((p) => flattenPath(p, 1e-4));
+      expect(minWallDistance(out.toolpath!.moves, walls)).toBeGreaterThanOrEqual(3 - 1e-3);
+    });
+  }
 });
+
+/**
+ * Smallest XY distance from the tool centre to any wall polyline (closed) over every move below Z 0, sampling
+ * lines and arc interiors (swept from the previous position around the centre) every 0.02 mm.
+ */
+function minWallDistance(moves: readonly Move[], walls: { x: number; y: number }[][]): number {
+  const CELL = 2;
+  const grid = new Map<string, [{ x: number; y: number }, { x: number; y: number }][]>();
+  for (const w of walls) {
+    for (let i = 0; i < w.length; i++) {
+      const a = w[i], b = w[(i + 1) % w.length];
+      const x0 = Math.floor(Math.min(a.x, b.x) / CELL), x1 = Math.floor(Math.max(a.x, b.x) / CELL);
+      const y0 = Math.floor(Math.min(a.y, b.y) / CELL), y1 = Math.floor(Math.max(a.y, b.y) / CELL);
+      for (let gx = x0; gx <= x1; gx++) for (let gy = y0; gy <= y1; gy++) {
+        const k = `${gx},${gy}`;
+        grid.set(k, [...(grid.get(k) ?? []), [a, b]]);
+      }
+    }
+  }
+  const segDist = (p: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }) => {
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 > 0 ? Math.min(1, Math.max(0, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2)) : 0;
+    return Math.hypot(p.x - a.x - dx * t, p.y - a.y - dy * t);
+  };
+  let worst = Infinity;
+  const at = (x: number, y: number, z: number) => {
+    if (z >= 0) return;
+    // walls within 4 mm (two cells) are enough: the tool radius is 3 mm
+    const cx = Math.floor(x / CELL), cy = Math.floor(y / CELL);
+    let d = 4;
+    for (let gx = cx - 2; gx <= cx + 2; gx++) for (let gy = cy - 2; gy <= cy + 2; gy++) {
+      for (const [a, b] of grid.get(`${gx},${gy}`) ?? []) d = Math.min(d, segDist({ x, y }, a, b));
+    }
+    worst = Math.min(worst, d);
+  };
+  let prev: { x: number; y: number; z: number } | null = null;
+  for (const m of moves) {
+    if (m.kind === 'cycle') continue;
+    const to = m.to;
+    if (prev && m.kind === 'arc') {
+      const r0 = Math.hypot(prev.x - m.center.x, prev.y - m.center.y);
+      const a0 = Math.atan2(prev.y - m.center.y, prev.x - m.center.x);
+      let a1 = Math.atan2(to.y - m.center.y, to.x - m.center.x);
+      if (m.ccw) { while (a1 <= a0 + 1e-12) a1 += 2 * Math.PI; } else { while (a1 >= a0 - 1e-12) a1 -= 2 * Math.PI; }
+      const n = Math.max(1, Math.ceil((Math.abs(a1 - a0) * r0) / 0.02));
+      for (let i = 0; i <= n; i++) {
+        const a = a0 + ((a1 - a0) * i) / n;
+        at(m.center.x + r0 * Math.cos(a), m.center.y + r0 * Math.sin(a), prev.z + ((to.z - prev.z) * i) / n);
+      }
+    } else if (prev) {
+      const n = Math.max(1, Math.ceil(Math.hypot(to.x - prev.x, to.y - prev.y) / 0.02));
+      for (let i = 0; i <= n; i++) at(prev.x + ((to.x - prev.x) * i) / n, prev.y + ((to.y - prev.y) * i) / n, prev.z + ((to.z - prev.z) * i) / n);
+    } else at(to.x, to.y, to.z);
+    prev = to;
+  }
+  return worst;
+}
