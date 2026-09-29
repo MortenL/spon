@@ -42,6 +42,17 @@ export function pocketToolpath(op: PocketOp, tool: Tool, ctx: CamContext, geo: R
   const clearArea = (area: Area, levels: number[], h: ResolvedHeights, startZ: number) => {
     const rings = [...area.rings].sort((a, b) => b.k - a.k);
     let prev = startZ;
+    /**
+     * A rejected straight link: rises to feed height (clear of islands, which are never machined and so stand
+     * solid from the top down), crosses to `xy`, drops to `safeZ` (already cleared above that XY — the previous
+     * depth level, or feed height before any level has been cut), then feeds the rest of the way down to `target`.
+     */
+    const liftAcross = (xy: Vec2, safeZ: number, target: number) => {
+      w.up(h.feed);
+      w.rapid({ ...xy, z: h.feed });
+      if (safeZ < h.feed - 1e-9) w.rapid({ ...xy, z: safeZ });
+      w.line({ ...xy, z: target }, plunge);
+    };
     levels.forEach((z, li) => {
       const entryZ = li === 0 ? startZ : Math.min(h.feed, prev + LIFT);
       let ring = startNear(rings[0].path, w.pos);
@@ -56,19 +67,15 @@ export function pocketToolpath(op: PocketOp, tool: Tool, ctx: CamContext, geo: R
         }
         const hStart = { x: c.x + rh, y: c.y };
         if (w.pos && w.pos.z <= entryZ + 1e-9 && segmentInside(w.pos, hStart, area.polys)) w.line({ ...hStart, z: entryZ }, feed);
-        else w.travel(hStart, first ? h.clearance : Math.max(entryZ, w.pos ? w.pos.z : h.retract), entryZ);
+        else w.travel(hStart, first ? h.clearance : h.feed, entryZ);
         first = false;
         emitHelix(w, c, rh, entryZ, z, angle, feed);
         ring = startNear(ring, w.pos);
         const s = pathStart(ring);
         if (segmentInside(w.pos!, s, area.polys)) w.line({ ...s, z }, feed);
-        else {
-          w.up(z + LIFT);
-          w.rapid({ ...s, z: z + LIFT });
-          w.line({ ...s, z }, plunge);
-        }
+        else liftAcross(s, entryZ, z);
       } else {
-        w.travel(pathStart(ring), first ? h.clearance : Math.max(entryZ, w.pos ? w.pos.z : h.retract), entryZ);
+        w.travel(pathStart(ring), first ? h.clearance : h.feed, entryZ);
         first = false;
         if (op.entry.mode === 'plunge') w.line({ ...pathStart(ring), z }, plunge);
         else emitRampLaps(w, ring, entryZ, z, angle, feed, null);
@@ -78,11 +85,7 @@ export function pocketToolpath(op: PocketOp, tool: Tool, ctx: CamContext, geo: R
         const path = startNear(next.path, w.pos);
         const s = pathStart(path);
         if (segmentInside(w.pos!, s, area.polys)) w.line({ ...s, z }, feed);
-        else {
-          w.up(z + LIFT);
-          w.rapid({ ...s, z: z + LIFT });
-          w.line({ ...s, z }, plunge);
-        }
+        else liftAcross(s, entryZ, z);
         emitLap(w, path, z, z, feed, null);
       }
       prev = z;

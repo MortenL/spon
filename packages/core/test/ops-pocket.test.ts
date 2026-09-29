@@ -1,6 +1,39 @@
 import { describe, expect, it } from 'vitest';
-import { applyCommand, camContext, newOperation, type PocketOp, pocketToolpath, type ResolvedShape, v2 } from '../src';
+import { applyCommand, camContext, type Move, newOperation, type PocketOp, pocketToolpath, type ResolvedShape, v2 } from '../src';
 import { camPartSetup, cutMoves, geoOf, rectPath, tool6 } from './fixtures/camSetup';
+
+/**
+ * Every move of `moves` (including rapids), whose straight segment (or, for an arc, whose end points) runs below
+ * Z 0, must keep the tool centre at least `minDist` from `center`. Straight segments are sampled every 0.2 mm.
+ */
+function assertClearOfCenter(moves: readonly Move[], center: { x: number; y: number }, minDist: number) {
+  const checkPoint = (x: number, y: number, z: number) => {
+    if (z < 0) expect(Math.hypot(x - center.x, y - center.y)).toBeGreaterThanOrEqual(minDist);
+  };
+  let prev: { x: number; y: number; z: number } | null = null;
+  for (const m of moves) {
+    if (m.kind === 'cycle') {
+      prev = { x: m.at.x, y: m.at.y, z: m.retract };
+      continue;
+    }
+    const to = m.to;
+    if (m.kind === 'arc') {
+      if (prev) checkPoint(prev.x, prev.y, prev.z);
+      checkPoint(to.x, to.y, to.z);
+    } else if (!prev) {
+      checkPoint(to.x, to.y, to.z);
+    } else {
+      const dx = to.x - prev.x, dy = to.y - prev.y, dz = to.z - prev.z;
+      const len = Math.hypot(dx, dy, dz);
+      const steps = Math.max(1, Math.ceil(len / 0.2));
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        checkPoint(prev.x + dx * t, prev.y + dy * t, prev.z + dz * t);
+      }
+    }
+    prev = to;
+  }
+}
 
 const { job, geometry } = camPartSetup();
 const ctx = camContext(applyCommand(job, { type: 'addTool', tool: tool6 }), geometry);
@@ -55,6 +88,29 @@ describe('pocketToolpath', () => {
     const out = pocketToolpath(pocket(), big, ctx, geoOf({ shapes: [withIsland] }));
     expect(out.toolpath).toBeNull();
     expect(out.diagnostics).toMatchObject([{ severity: 'error', code: 'offset-collapsed' }]);
+  });
+
+  it('never rapids or feeds through the island, even between the two lobes of a ring', () => {
+    const out = pocketToolpath(pocket(), tool6, ctx, geoOf({ shapes: [withIsland] }));
+    assertClearOfCenter(out.toolpath!.moves, { x: 55, y: 35 }, 7 - 1e-3);
+  });
+
+  it('never rapids or feeds through the island across multiple depth levels', () => {
+    const op = pocket({ stepdown: 1 }); // 3 levels
+    const out = pocketToolpath(op, tool6, ctx, geoOf({ shapes: [withIsland] }));
+    assertClearOfCenter(out.toolpath!.moves, { x: 55, y: 35 }, 7 - 1e-3);
+  });
+
+  it('cuts the outermost ring clockwise under conventional milling', () => {
+    const op = pocket({ direction: 'conventional' });
+    const out = pocketToolpath(
+      op, tool6, ctx, geoOf({ shapes: [{ shape: { outer: ccwCircle(55, 35, 15), islands: [] }, z: 0, ref: 0 }] }),
+    );
+    const arcs = cutMoves(out.toolpath!.moves).filter((m): m is Extract<Move, { kind: 'arc' }> => m.kind === 'arc');
+    const radius = (m: Extract<Move, { kind: 'arc' }>) => Math.hypot(m.to.x - m.center.x, m.to.y - m.center.y);
+    const outer = arcs.reduce((best, m) => (radius(m) > radius(best) ? m : best));
+    const signedArea = (outer.ccw ? 1 : -1) * Math.PI * radius(outer) ** 2;
+    expect(signedArea).toBeLessThan(0);
   });
 
   it('clears separate areas of a pocket one after the other', () => {
