@@ -1,7 +1,7 @@
 import type { ProgramRef } from '@sponcam/core';
 import { toast } from 'sonner';
 import type { StoreApi } from 'zustand/vanilla';
-import { generateInWorker, setCamModelInWorker } from '../workers/importClient';
+import { generateInWorker, setCamModelInWorker, workerEpoch } from '../workers/importClient';
 import type { CamFile, CamRun, OperationSummary } from './camTypes';
 import { programContext } from './programContext';
 import { type AppState, appStore, type ModelGeometry, type ProgramData } from './store';
@@ -31,27 +31,44 @@ export function toCamOutput(run: CamRun): CamOutput {
 
 let generation = 0;
 let sentGeometry: ModelGeometry | null | undefined;
+let sentEpoch = -1;
 
 export async function regenerate(): Promise<void> {
   const gen = ++generation;
   const s = appStore.getState();
-  const jobId = s.job.id;
-  const stale = () => gen !== generation || appStore.getState().job.id !== jobId;
-  if (!s.job.operations.length) {
+  const { job, geometry } = s;
+  if (!job.operations.length) {
     if (s.generatedPrograms.length || Object.keys(s.camResults).length) s.setCamOutput(EMPTY_CAM_OUTPUT);
+    else s.setCamStatus('idle');
     return;
   }
   s.setCamStatus('generating');
+  /**
+   * After an await: 'superseded' when a newer run started (it owns the status), 'changed' when the job or the
+   * geometry changed since this run started (its output would be stale).
+   */
+  const check = () => {
+    if (gen !== generation) return 'superseded';
+    const now = appStore.getState();
+    return now.job !== job || now.geometry !== geometry ? 'changed' : 'current';
+  };
   try {
-    if (s.geometry !== sentGeometry) {
-      await setCamModelInWorker(s.geometry);
-      sentGeometry = s.geometry;
+    // the worker keeps its own copy of the model; a replaced worker has lost it
+    if (geometry !== sentGeometry || workerEpoch() !== sentEpoch) {
+      const epoch = workerEpoch();
+      await setCamModelInWorker(geometry);
+      sentGeometry = geometry;
+      sentEpoch = epoch;
     }
-    const result = await generateInWorker(s.job, programContext(s.job, s.geometry));
-    if (stale()) return;
+    const result = await generateInWorker(job, programContext(job, geometry));
+    const state = check();
+    if (state === 'superseded') return;
+    if (state === 'changed') return regenerate(); // never leave the status at 'generating'
     appStore.getState().setCamOutput(toCamOutput(result));
   } catch (err) {
-    if (stale()) return;
+    const state = check();
+    if (state === 'superseded') return;
+    if (state === 'changed') return regenerate();
     appStore.getState().setCamStatus('idle');
     toast.error(`Toolpath generation failed: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -62,6 +79,8 @@ export function startCamPipeline(store: StoreApi<AppState>, delayMs = 250): () =
   let timer: ReturnType<typeof setTimeout> | undefined;
   const schedule = () => {
     clearTimeout(timer);
+    // the current output is out of date from now on: export refuses while generating
+    if (store.getState().camStatus !== 'generating') store.getState().setCamStatus('generating');
     timer = setTimeout(() => void regenerate(), delayMs);
   };
   const unsubscribe = store.subscribe((s, prev) => {

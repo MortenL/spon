@@ -5,10 +5,12 @@ import type { CamRun } from './camTypes';
 const worker = vi.hoisted(() => ({
   setCamModelInWorker: vi.fn(async () => {}),
   generateInWorker: vi.fn(),
+  epoch: 0,
+  workerEpoch: () => worker.epoch,
 }));
 vi.mock('../workers/importClient', () => worker);
 
-const { regenerate, toCamOutput } = await import('./cam');
+const { regenerate, startCamPipeline, toCamOutput } = await import('./cam');
 const { appStore } = await import('./store');
 const { allPrograms } = await import('./programList');
 
@@ -24,7 +26,7 @@ describe('CAM pipeline', () => {
   beforeEach(() => {
     worker.generateInWorker.mockReset();
     worker.setCamModelInWorker.mockClear();
-    appStore.setState({ job: createJob(), programData: {}, generatedPrograms: [], camFiles: [], camResults: {}, activeProgramId: null });
+    appStore.setState({ job: createJob(), programData: {}, generatedPrograms: [], camFiles: [], camResults: {}, activeProgramId: null, camStatus: 'idle' });
   });
 
   it('maps a run to generated programs, program data and results', () => {
@@ -82,5 +84,49 @@ describe('CAM pipeline', () => {
     await regenerate();
     await regenerate();
     expect(worker.setCamModelInWorker).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-sends the model after the worker was replaced', async () => {
+    const geometry = { kind: 'drawing', drawing: { layers: [] }, rawPoints: new Float32Array() } as never;
+    appStore.setState({ job: withOp(), geometry });
+    worker.generateInWorker.mockResolvedValue(run([]));
+    await regenerate();
+    const sent = worker.setCamModelInWorker.mock.calls.length;
+    worker.epoch++; // the shared worker timed out and was terminated
+    await regenerate();
+    expect(worker.setCamModelInWorker).toHaveBeenCalledTimes(sent + 1);
+  });
+
+  it('marks the output pending as soon as a regeneration is scheduled', () => {
+    const stop = startCamPipeline(appStore, 60_000);
+    try {
+      appStore.setState({ camStatus: 'idle' });
+      appStore.getState().dispatch({ type: 'addOperation', opType: 'drill', toolId: null, id: 'o9' } as JobCommand);
+      expect(appStore.getState().camStatus).toBe('generating');
+    } finally {
+      stop();
+    }
+  });
+
+  it('settles to idle when there is nothing to generate', async () => {
+    appStore.setState({ camStatus: 'generating' });
+    await regenerate();
+    expect(appStore.getState().camStatus).toBe('idle');
+  });
+
+  it('discards a run whose job changed while it was in flight and runs again', async () => {
+    appStore.setState({ job: withOp() });
+    let resolveOld!: (r: CamRun) => void;
+    worker.generateInWorker.mockImplementationOnce(() => new Promise((res) => (resolveOld = res)));
+    worker.generateInWorker.mockImplementationOnce(async () => run(['fresh.nc']));
+    const pending = regenerate();
+    // same document, edited while the worker was busy (a change the pipeline does not watch, so no timer runs)
+    appStore.setState({ job: { ...appStore.getState().job, name: appStore.getState().job.name } });
+    resolveOld(run(['old.nc']));
+    await pending;
+    const s = appStore.getState();
+    expect(worker.generateInWorker).toHaveBeenCalledTimes(2);
+    expect(s.generatedPrograms.map((p) => p.id)).toEqual(['gen:fresh.nc']);
+    expect(s.camStatus).toBe('idle');
   });
 });

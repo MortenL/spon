@@ -45,7 +45,15 @@ export async function exportGcode(confirm: (warnings: string[]) => Promise<boole
     toast.error('Cannot export G-code', { description: errors.slice(0, 5).join('\n') + (errors.length > 5 ? `\n… and ${errors.length - 5} more` : '') });
     return false;
   }
-  if (warnings.length && !(await confirm(warnings))) return false;
+  if (warnings.length) {
+    if (!(await confirm(warnings))) return false;
+    // the job may have changed while the dialog was open: never write output other than what was confirmed
+    const now = appStore.getState();
+    if (now.camStatus === 'generating' || now.camFiles !== s.camFiles) {
+      toast.info('Toolpaths changed while you were confirming; review the warnings and export again');
+      return false;
+    }
+  }
   const { name, bytes } = exportFiles(s);
   downloadBytes(name, bytes);
   return true;

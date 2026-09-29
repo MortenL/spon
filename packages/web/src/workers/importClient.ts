@@ -9,6 +9,15 @@ export const IMPORT_TIMEOUT_MS = 120_000;
 
 let instance: Worker | null = null;
 let remote: Comlink.Remote<ImportWorkerApi> | null = null;
+let epoch = 0;
+
+/**
+ * Changes whenever the shared worker is terminated (a stuck call timed out). The next call gets a fresh
+ * worker that has lost any state, such as the CAM model.
+ */
+export function workerEpoch(): number {
+  return epoch;
+}
 
 function worker(): { worker: Worker; api: Comlink.Remote<ImportWorkerApi> } {
   if (!instance || !remote) {
@@ -26,6 +35,7 @@ function run<T>(call: (api: Comlink.Remote<ImportWorkerApi>) => Promise<T>, mess
     if (instance === current) {
       instance = null;
       remote = null;
+      epoch++;
     }
   };
   return withTimeout<T>(call(api), IMPORT_TIMEOUT_MS, terminate, message);
