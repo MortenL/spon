@@ -64,6 +64,25 @@ describe('app store', () => {
     expect(s.dirty).toBe(true);
   });
 
+  it('enforces pickMode/camPick mutual exclusion in the setters', () => {
+    const store = createAppStore(createJob('A'));
+    const s = () => store.getState();
+    s().setCamPick({ operationId: 'op1', target: 'geometry' });
+    expect(s().camPick).toEqual({ operationId: 'op1', target: 'geometry' });
+    expect(s().pickMode).toBe('none');
+
+    s().setPickMode('face'); // starting lay-flat clears an active CAM pick
+    expect(s().pickMode).toBe('face');
+    expect(s().camPick).toBeNull();
+
+    s().setCamPick({ operationId: 'op1', target: { height: 'top' } }); // starting a CAM pick cancels lay-flat
+    expect(s().pickMode).toBe('none');
+    expect(s().camPick).toEqual({ operationId: 'op1', target: { height: 'top' } });
+
+    s().setPickMode('none'); // turning pick mode off doesn't disturb an unrelated camPick
+    expect(s().camPick).toEqual({ operationId: 'op1', target: { height: 'top' } });
+  });
+
   it('toggles layers, clears the dirty flag on save and numbers view requests', () => {
     const store = createAppStore(createJob('A'));
     const s = () => store.getState();

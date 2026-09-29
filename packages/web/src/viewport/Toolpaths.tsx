@@ -98,12 +98,21 @@ function ProgramToolpath({
   done.setDrawRange(0, split);
   todo.setDrawRange(split, Infinity);
 
-  // the selected operation's own rows, drawn again on top at full strength
-  const section = selectedOperationId ? camFiles.find((f) => f.blobId === program.blobId)?.sections.find((s) => s.operationId === selectedOperationId) : null;
-  const rows = section ? sectionRowRange(parsed.table, section.firstLine, section.lastLine) : null;
-  const selStart = rows ? (rows[0] > 0 ? buffers.rowVertexEnd[rows[0] - 1] : 0) : 0;
-  const selCount = rows ? buffers.rowVertexEnd[rows[1]] - selStart : 0;
-  selected.setDrawRange(selStart, selCount);
+  // the selected operation's own rows, drawn again on top at full strength; memoised so a playback
+  // frame (which re-renders this component every frame via the playhead-keyed `split` above) doesn't
+  // redo the O(table.count) row scan when none of these actually changed.
+  const section = useMemo(
+    () => (selectedOperationId ? camFiles.find((f) => f.blobId === program.blobId)?.sections.find((s) => s.operationId === selectedOperationId) ?? null : null),
+    [selectedOperationId, camFiles, program.blobId],
+  );
+  const selRange = useMemo(() => {
+    if (!section) return null;
+    const rows = sectionRowRange(parsed.table, section.firstLine, section.lastLine);
+    if (!rows) return null;
+    const start = rows[0] > 0 ? buffers.rowVertexEnd[rows[0] - 1] : 0;
+    return { start, count: buffers.rowVertexEnd[rows[1]] - start };
+  }, [section, parsed.table, buffers.rowVertexEnd]);
+  selected.setDrawRange(selRange?.start ?? 0, selRange?.count ?? 0);
 
   const isGenerated = program.source === 'generated';
   const dim = selectedOperationId !== null && isGenerated;

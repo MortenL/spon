@@ -39,8 +39,13 @@ export function Viewport() {
   const pickOp = camPick ? job.operations.find((o) => o.id === camPick.operationId) : null;
 
   const onDxfPlaneClick = (e: ThreeEvent<MouseEvent>) => {
-    if (!camPick || !pickOp || camPick.target !== 'geometry' || e.delta > 4) return; // a drawing has no mesh face for a height pick
+    if (!camPick || !pickOp || e.delta > 4) return;
     e.stopPropagation();
+    if (camPick.target !== 'geometry') {
+      // a drawing has no mesh face for a height pick
+      toast.info('Heights can only be picked from faces of a 3D model');
+      return;
+    }
     const ctx = camContext(job, geometry);
     const q = { x: e.point.x - ctx.origin.x, y: e.point.y - ctx.origin.y };
     const res = pickDxf(pickOp, ctx, q, new Set(hiddenLayers));
