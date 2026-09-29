@@ -73,7 +73,11 @@ export async function importModelBytes(fileName: string, bytes: Uint8Array, body
   try {
     if (cad && !cadReaderLoaded()) {
       state().setBusy(`Loading ${CAD_LABEL[cad]} reader…`);
-      await loadCadReaderInWorker();
+      try {
+        await loadCadReaderInWorker();
+      } catch (err) {
+        throw new Error(`Could not load the ${CAD_LABEL[cad]} reader: ${message(err)}`);
+      }
     }
     state().setBusy(cad ? `Reading ${CAD_LABEL[cad]} file…` : `Importing ${fileName}…`);
     result = await importInWorker(fileName, bytes, body);
