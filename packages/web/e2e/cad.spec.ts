@@ -81,6 +81,18 @@ test('multi-body STEP asks which body; the choice survives a reload', async ({ p
   await page.reload();
   await expect(page.getByTestId('model-source')).toHaveText('STEP · body 1 of 2 · Small block', { timeout: 30_000 });
   await expect(page.getByTestId('model-size')).toHaveText('10.00 × 10.00 × 5.00 mm');
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByTestId('save').click();
+  const download = await downloadPromise;
+  const saved = await download.path();
+  if (!saved) throw new Error('download has no local path');
+
+  await page.getByTestId('new').click();
+  await expect(page.getByTestId('model-source')).toHaveCount(0);
+  await page.getByTestId('open-input').setInputFiles({ name: 'two-bodies.spon', mimeType: 'application/octet-stream', buffer: await fs.readFile(saved) });
+  await expect(page.getByTestId('model-source')).toHaveText('STEP · body 1 of 2 · Small block', { timeout: 30_000 });
+  await expect(page.getByTestId('model-size')).toHaveText('10.00 × 10.00 × 5.00 mm');
 });
 
 test('IGES imports the same way', async ({ page }) => {
