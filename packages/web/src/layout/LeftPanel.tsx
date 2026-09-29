@@ -1,6 +1,8 @@
 import { MachinePanel } from '@/panels/MachinePanel';
 import { ModelPanel } from '@/panels/ModelPanel';
+import { OperationsPanel } from '@/panels/OperationsPanel';
 import { OrientationPanel } from '@/panels/OrientationPanel';
+import { PostPanel } from '@/panels/PostPanel';
 import { ProgramsPanel } from '@/panels/ProgramsPanel';
 import { StockPanel } from '@/panels/StockPanel';
 import { WcsPanel } from '@/panels/WcsPanel';
@@ -12,6 +14,8 @@ export function LeftPanel() {
       <OrientationPanel />
       <StockPanel />
       <WcsPanel />
+      <OperationsPanel />
+      <PostPanel />
       <ProgramsPanel />
       <MachinePanel />
     </aside>
