@@ -42,6 +42,31 @@ describe('Spon tool library files', () => {
     expect(() => importToolLibrary('{"format":"other"}')).toThrow(/not a Spon tool library/);
     expect(() => importToolLibrary(JSON.stringify({ format: 'spon-tools', version: 1, tools: [{ id: 'x' }] }))).toThrow(/Tool 1 is invalid/);
   });
+
+  it('rejects malformed presets gracefully', () => {
+    const malformed = JSON.stringify({
+      format: 'spon-tools', version: 1,
+      tools: [{
+        id: 'test', name: 'Test', type: 'flat', number: 1, diameter: 6, cornerRadius: 0, tipAngleDeg: 0, fluteLength: 18, stickout: 30, flutes: 2,
+        presets: [null],
+      }],
+    });
+    expect(() => importToolLibrary(malformed)).toThrow(/Tool 1 is invalid/);
+  });
+
+  it('validates bounds for presets and tool properties', () => {
+    const tool = starterLibrary()[0];
+    const badFeed = { ...tool, presets: [{ ...tool.presets[0], feed: 0 }] };
+    const badPlunge = { ...tool, presets: [{ ...tool.presets[0], plungeFeed: 0 }] };
+    const badRpm = { ...tool, presets: [{ ...tool.presets[0], rpm: 0 }] };
+    const badFlutes = { ...tool, flutes: 0 };
+    const badStickout = { ...tool, stickout: 0 };
+    expect(validateTool(badFeed)).toBe(false);
+    expect(validateTool(badPlunge)).toBe(false);
+    expect(validateTool(badRpm)).toBe(false);
+    expect(validateTool(badFlutes)).toBe(false);
+    expect(validateTool(badStickout)).toBe(false);
+  });
 });
 
 describe('Fusion 360 import', () => {
@@ -67,5 +92,40 @@ describe('Fusion 360 import', () => {
     const zipped = zipSync({ 'tools.json': strToU8(JSON.stringify(fusion)) });
     expect(importFusionLibrary(zipped, 'lib.tools').tools).toHaveLength(3);
     expect(() => importFusionLibrary(strToU8('{"x":1}'), 'a.json')).toThrow(/not a Fusion 360 tool library/);
+  });
+
+  it('handles malformed data entries gracefully', () => {
+    const malformed = { data: [null, fusion.data[0]] };
+    const r = importFusionLibrary(strToU8(JSON.stringify(malformed)), 'lib.json');
+    expect(r.tools).toHaveLength(1);
+    expect(r.skipped).toHaveLength(1);
+    expect(r.skipped[0].reason).toBe('Not a tool entry');
+  });
+
+  it('handles presets that are not arrays', () => {
+    const malformed = {
+      data: [{
+        type: 'flat end mill', unit: 'millimeters', description: 'Test',
+        geometry: { DC: 6, NOF: 2 }, 'post-process': { number: 1 },
+        'start-values': { presets: 'x' },
+      }],
+    };
+    const r = importFusionLibrary(strToU8(JSON.stringify(malformed)), 'lib.json');
+    expect(r.tools).toHaveLength(1);
+    expect(r.tools[0].presets).toHaveLength(0);
+  });
+
+  it('ignores null preset entries', () => {
+    const malformed = {
+      data: [{
+        type: 'flat end mill', unit: 'millimeters', description: 'Test',
+        geometry: { DC: 6, NOF: 2 }, 'post-process': { number: 1 },
+        'start-values': { presets: [null, { name: 'Valid', n: 5000, v_f: 500, stepdown: 1 }] },
+      }],
+    };
+    const r = importFusionLibrary(strToU8(JSON.stringify(malformed)), 'lib.json');
+    expect(r.tools).toHaveLength(1);
+    expect(r.tools[0].presets).toHaveLength(1);
+    expect(r.tools[0].presets[0].name).toBe('Valid');
   });
 });
