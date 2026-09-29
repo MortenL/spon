@@ -76,6 +76,12 @@ describe('pocketToolpath', () => {
     expect(out.diagnostics).toEqual([]);
   });
 
+  it.each([8, 50])('raises no unmachined warning on a clean R%i round pocket with a 12 mm tool', (R) => {
+    const tool12 = { ...tool6, id: 't12', number: 2, diameter: 12 };
+    const out = pocketToolpath(pocket(), tool12, ctx, geoOf({ shapes: [{ shape: { outer: ccwCircle(55, 35, R), islands: [] }, z: 0, ref: 0 }] }));
+    expect(out.diagnostics).toEqual([]);
+  });
+
   it('steps down in levels and finishes the floor when axial stock is left', () => {
     const op = pocket({ stepdown: 1, stockAxial: 0.5, finishFloor: true });
     const cuts = cutMoves(pocketToolpath(op, tool6, ctx, geoOf({ shapes: [withIsland] })).toolpath!.moves);

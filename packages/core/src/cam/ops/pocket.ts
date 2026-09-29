@@ -16,7 +16,7 @@ interface Ring { k: number; path: Path2D; poly: Poly }
 interface Area { polys: Poly[]; rings: Ring[] }
 
 const LIFT = 1; // mm above the previous level for moves inside the pocket
-const COVERAGE_TOL = 0.05; // mm; floor for the unmachined-area sweep's tolerance (see below)
+const COVERAGE_TOL = 0.01; // mm; floor for the unmachined-area sweep's tolerance (see below)
 const SLIVER = 0.025; // mm; unreached material thinner than twice this is not reported
 
 export function pocketToolpath(op: PocketOp, tool: Tool, ctx: CamContext, geo: ResolvedGeometry): OpOutput {
