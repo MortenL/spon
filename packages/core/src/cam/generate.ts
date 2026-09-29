@@ -34,12 +34,13 @@ export function operationKey(op: Operation, job: Job): string {
 }
 
 export function generateOperation(op: Operation, ctx: CamContext): OperationResult {
-  const base: OperationResult = { operationId: op.id, key: operationKey(op, ctx.job), toolpath: null, diagnostics: [], heights: null, overlays: emptyOverlays() };
+  const base: OperationResult = { operationId: op.id, key: '', toolpath: null, diagnostics: [], heights: null, overlays: emptyOverlays() };
   if (!op.enabled) return base;
   const err = (code: CamDiagnostic['code'], message: string): OperationResult => ({
     ...base, diagnostics: [{ operationId: op.id, severity: 'error', code, message }],
   });
   try {
+    base.key = operationKey(op, ctx.job);
     const tool = ctx.job.tools.find((t) => t.id === op.toolId);
     if (!tool) return err('no-tool', 'Choose a tool for this operation');
     if (!op.geometry.length) return err('no-geometry', 'Pick geometry for this operation');
@@ -48,7 +49,8 @@ export function generateOperation(op: Operation, ctx: CamContext): OperationResu
     const diagnostics: CamDiagnostic[] = [...geo.diagnostics, ...res.diagnostics];
     const warn = (code: CamDiagnostic['code'], message: string) => diagnostics.push({ operationId: op.id, severity: 'warning', code, message });
     if (op.type !== 'drill' && op.stepdown > tool.fluteLength) warn('stepdown-exceeds-flute', `Stepdown ${op.stepdown} mm is deeper than the ${tool.fluteLength} mm flutes`);
-    if (op.feeds.feed > ctx.job.machine.maxFeed) warn('feed-exceeds-machine', `Feed ${op.feeds.feed} mm/min is above the machine maximum of ${ctx.job.machine.maxFeed}`);
+    const maxFeed = op.type === 'drill' ? op.feeds.plungeFeed : op.feeds.feed;
+    if (maxFeed > ctx.job.machine.maxFeed) warn('feed-exceeds-machine', `Feed ${maxFeed} mm/min is above the machine maximum of ${ctx.job.machine.maxFeed}`);
     const failed = diagnostics.some((d) => d.severity === 'error');
     return { ...base, ...res, diagnostics, toolpath: failed ? null : res.toolpath };
   } catch (e) {
@@ -59,12 +61,20 @@ export function generateOperation(op: Operation, ctx: CamContext): OperationResu
 export function generateJob(job: Job, geometry: CamGeometry | null, cache?: GenerationCache): OperationResult[] {
   let ctx: CamContext | null = null;
   const results = job.operations.map((op) => {
-    const key = operationKey(op, job);
-    const hit = cache?.get(op.id, key, geometry);
-    if (hit) return hit;
+    try {
+      const key = operationKey(op, job);
+      const hit = cache?.get(op.id, key, geometry);
+      if (hit) return hit;
+    } catch (e) {
+      // Key computation failed; fall through to generateOperation which will also fail with internal error
+    }
     ctx ??= camContext(job, geometry);
     const result = generateOperation(op, ctx);
-    cache?.set(op.id, geometry, result);
+    try {
+      cache?.set(op.id, geometry, result);
+    } catch {
+      // Cache set failed; continue without caching this result
+    }
     return result;
   });
   cache?.retain(job.operations.map((o) => o.id));

@@ -64,4 +64,35 @@ describe('generateJob', () => {
     expect(c[2]).toBe(a[2]);
     expect(generateJob(job, { ...geometry }, cache)[0]).not.toBe(a[0]); // a different geometry object invalidates
   });
+
+  it('handles key computation failures as internal errors for affected operations only', () => {
+    const { job, geometry } = camJob();
+    const badOp = { ...job.operations[1], bad: BigInt(42) } as any; // Operation with non-serializable field
+    const badJob = { ...job, operations: [job.operations[0], badOp, job.operations[2]] };
+    const results = generateJob(badJob, geometry);
+    expect(results[0].operationId).toBe('pocket');
+    expect(results[0].diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+    expect(results[1].operationId).toBe('drill');
+    expect(results[1].diagnostics[0]).toMatchObject({ severity: 'error', code: 'internal' });
+    expect(results[2].operationId).toBe('profile');
+    expect(results[2].diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+  });
+});
+
+describe('feed warnings', () => {
+  it('warns when drill plungeFeed exceeds machine maximum', () => {
+    const { job, geometry } = camJob();
+    const j = applyCommand(job, { type: 'updateOperation', id: 'drill', patch: { feeds: { plungeFeed: 99999 } } });
+    const results = generateJob(j, geometry);
+    const drill = results.find((r) => r.operationId === 'drill');
+    expect(drill!.diagnostics.map((d) => d.code)).toContain('feed-exceeds-machine');
+  });
+
+  it('warns when pocket feed exceeds machine maximum', () => {
+    const { job, geometry } = camJob();
+    const j = applyCommand(job, { type: 'updateOperation', id: 'pocket', patch: { feeds: { feed: 99999 } } });
+    const results = generateJob(j, geometry);
+    const pocket = results.find((r) => r.operationId === 'pocket');
+    expect(pocket!.diagnostics.map((d) => d.code)).toContain('feed-exceeds-machine');
+  });
 });
