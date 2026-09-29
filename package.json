@@ -9,6 +9,7 @@
     "build": "pnpm --filter @sponcam/web build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
-    "e2e": "pnpm --filter @sponcam/web e2e"
+    "e2e": "pnpm --filter @sponcam/web e2e",
+    "e2e:preview": "pnpm --filter @sponcam/web e2e:preview"
   }
 }
