@@ -35,6 +35,8 @@ let sentGeometry: ModelGeometry | null | undefined;
 export async function regenerate(): Promise<void> {
   const gen = ++generation;
   const s = appStore.getState();
+  const jobId = s.job.id;
+  const stale = () => gen !== generation || appStore.getState().job.id !== jobId;
   if (!s.job.operations.length) {
     if (s.generatedPrograms.length || Object.keys(s.camResults).length) s.setCamOutput(EMPTY_CAM_OUTPUT);
     return;
@@ -46,10 +48,10 @@ export async function regenerate(): Promise<void> {
       sentGeometry = s.geometry;
     }
     const result = await generateInWorker(s.job, programContext(s.job, s.geometry));
-    if (gen !== generation) return;
+    if (stale()) return;
     appStore.getState().setCamOutput(toCamOutput(result));
   } catch (err) {
-    if (gen !== generation) return;
+    if (stale()) return;
     appStore.getState().setCamStatus('idle');
     toast.error(`Toolpath generation failed: ${err instanceof Error ? err.message : String(err)}`);
   }

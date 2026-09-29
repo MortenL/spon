@@ -51,6 +51,22 @@ describe('CAM pipeline', () => {
     expect(s.camStatus).toBe('idle');
   });
 
+  it('discards a run that resolves after a different document was loaded while it was in flight', async () => {
+    appStore.setState({ job: withOp() });
+    let resolveOld!: (r: CamRun) => void;
+    worker.generateInWorker.mockImplementationOnce(() => new Promise((res) => (resolveOld = res)));
+    const pending = regenerate();
+    // Simulate loadDocument: a new job (different id), CAM fields reset, as loadDocument does.
+    const newJob = applyCommand(createJob(), { type: 'addOperation', opType: 'drill', toolId: null, id: 'o2' } as JobCommand);
+    appStore.setState({ job: newJob, generatedPrograms: [], camFiles: [], camResults: {}, programData: {}, activeProgramId: null });
+    resolveOld(run(['old.nc']));
+    await pending;
+    const s = appStore.getState();
+    expect(s.generatedPrograms).toEqual([]);
+    expect(s.camResults).toEqual({});
+    expect(s.programData).toEqual({});
+  });
+
   it('clears the output without calling the worker when there are no operations', async () => {
     appStore.setState({ generatedPrograms: toCamOutput(run(['x.nc'])).programs, programData: toCamOutput(run(['x.nc'])).programData });
     await regenerate();
