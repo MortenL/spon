@@ -65,6 +65,10 @@ export function ToolLibraryDialog() {
 
   const handleSave = async () => {
     if (!draft) return;
+    if (!draft.name.trim()) {
+      toast.error('Give the tool a name');
+      return;
+    }
     try {
       await saveLibraryTool(draft);
       closeForm();
@@ -96,8 +100,10 @@ export function ToolLibraryDialog() {
 
   const handleImport = async (file: File) => {
     try {
-      const { imported, skipped } = await importLibraryFile(file);
-      toast.success(`Imported ${imported} tool${imported === 1 ? '' : 's'}; ${skipped.length} skipped`, {
+      const { added, updated, skipped } = await importLibraryFile(file);
+      const total = added + updated;
+      const updatedPart = updated > 0 ? ` (${updated} updated)` : '';
+      toast.success(`Imported ${total} tool${total === 1 ? '' : 's'}${updatedPart}; ${skipped.length} skipped`, {
         description: skipped.length ? skipped.map((s) => `${s.name}: ${s.reason}`).join('\n') : undefined,
       });
     } catch (err) {
@@ -122,7 +128,13 @@ export function ToolLibraryDialog() {
 
   return (
     <>
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (!next) closeForm();
+        }}
+      >
         <DialogTrigger asChild>
           <Button variant="ghost" size="sm" data-testid="open-tool-library" title="Tools">
             <Wrench className="size-4" />

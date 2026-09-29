@@ -17,6 +17,10 @@ const db = () =>
       d.createObjectStore('tools');
       d.createObjectStore('meta');
     },
+  }).catch((err: unknown) => {
+    // Don't cache a failed open forever: let the next call retry.
+    connection = null;
+    throw err;
   }));
 
 export const toolLibraryStore = createStore<{ tools: Tool[]; loaded: boolean }>(() => ({ tools: [], loaded: false }));
@@ -58,16 +62,21 @@ export async function resetStarterLibrary(): Promise<void> {
   await refresh();
 }
 
-export async function importLibraryFile(file: File): Promise<{ imported: number; skipped: { name: string; reason: string }[] }> {
+export async function importLibraryFile(
+  file: File,
+): Promise<{ added: number; updated: number; skipped: { name: string; reason: string }[] }> {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const text = new TextDecoder().decode(bytes);
   const isSpon = !file.name.toLowerCase().endsWith('.tools') && text.includes('"spon-tools"');
   const result = isSpon ? { tools: importToolLibrary(text), skipped: [] } : importFusionLibrary(bytes, file.name);
-  const tx = (await db()).transaction('tools', 'readwrite');
+  const d = await db();
+  const existingIds = new Set(await d.getAllKeys('tools'));
+  const tx = d.transaction('tools', 'readwrite');
   for (const t of result.tools) await tx.store.put(t, t.id);
   await tx.done;
   await refresh();
-  return { imported: result.tools.length, skipped: result.skipped };
+  const updated = result.tools.filter((t) => existingIds.has(t.id)).length;
+  return { added: result.tools.length - updated, updated, skipped: result.skipped };
 }
 
 export function exportLibraryFile(): void {

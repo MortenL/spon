@@ -1,9 +1,24 @@
 import 'fake-indexeddb/auto';
 import { exportToolLibrary, starterLibrary } from '@sponcam/core';
-import { describe, expect, it } from 'vitest';
+import { openDB } from 'idb';
+import { describe, expect, it, vi } from 'vitest';
 import { defaultToolFor, deleteLibraryTool, importLibraryFile, loadToolLibrary, resetStarterLibrary, saveLibraryTool, toolLibraryStore } from './toolLibrary';
 
+vi.mock('idb', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('idb')>();
+  return { ...actual, openDB: vi.fn(actual.openDB) };
+});
+
 const tools = () => toolLibraryStore.getState().tools;
+
+describe('tool library database', () => {
+  it('retries opening the database after a failure', async () => {
+    vi.mocked(openDB).mockRejectedValueOnce(new Error('boom'));
+    await expect(loadToolLibrary()).rejects.toThrow('boom');
+    await loadToolLibrary();
+    expect(toolLibraryStore.getState().loaded).toBe(true);
+  });
+});
 
 describe('tool library', () => {
   it('seeds the starter library once, then keeps user changes', async () => {
@@ -22,9 +37,10 @@ describe('tool library', () => {
   it('imports Spon and Fusion files', async () => {
     await loadToolLibrary();
     const spon = new File([exportToolLibrary([{ ...starterLibrary()[0], id: 'imported', number: 30 }])], 'lib.json');
-    expect(await importLibraryFile(spon)).toEqual({ imported: 1, skipped: [] });
+    expect(await importLibraryFile(spon)).toEqual({ added: 1, updated: 0, skipped: [] });
+    expect(await importLibraryFile(spon)).toEqual({ added: 0, updated: 1, skipped: [] });
     const fusion = new File([JSON.stringify({ data: [{ type: 'probe', description: 'Probe' }] })], 'f.json');
-    expect(await importLibraryFile(fusion)).toEqual({ imported: 0, skipped: [{ name: 'Probe', reason: 'Unsupported tool type "probe"' }] });
+    expect(await importLibraryFile(fusion)).toEqual({ added: 0, updated: 0, skipped: [{ name: 'Probe', reason: 'Unsupported tool type "probe"' }] });
   });
 
   it('picks default tools per operation type', () => {
