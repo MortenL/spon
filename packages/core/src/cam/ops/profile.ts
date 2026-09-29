@@ -3,8 +3,6 @@ import { offsetPolys, pointInPolys, segmentCrossesPolys } from '../../geometry/o
 import {
   dist2, flattenPath, orientPath, pathLength, pathStart, pointAt, polyArea, reversePath, rotateStart, segmentLength, v2,
 } from '../../geometry/offset/pathOps';
-
-const lerp = (a: Vec2, b: Vec2, t: number): Vec2 => v2(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
 import { type Path2D, type Segment, segmentStart, type Vec2 } from '../../geometry/path2d';
 import type { Tool } from '../../tools/types';
 import type { CamContext } from '../context';
@@ -15,6 +13,8 @@ import { leadIn, leadOut } from './leads';
 import { emptyOverlays, type OpOutput } from './output';
 import { tabIntervals } from './tabs';
 import { depthLevels, emitLap, emitRampLaps, MoveWriter, type TabProfile } from './writer';
+
+const lerp = (a: Vec2, b: Vec2, t: number): Vec2 => v2(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
 
 /** Flattening tolerance and slack (mm) of the free-region check for leads and links; together they stay under 1 µm. */
 const FREE_TOL = 1e-4;
