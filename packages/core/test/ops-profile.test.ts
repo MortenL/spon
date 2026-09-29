@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  applyCommand, camContext, dist2, newOperation, polyArea, type ProfileOp, profileToolpath, type ResolvedContour, v2,
+  applyCommand, camContext, dist2, flattenPath, newOperation, polyArea, type ProfileOp, profileToolpath, type ResolvedContour, v2,
 } from '../src';
 import { camPartSetup, cutMoves, geoOf, rectPath, tool6 } from './fixtures/camSetup';
 
@@ -32,6 +32,14 @@ function maxRadius(moves: readonly AnyMove[], c: { x: number; y: number }, zBelo
   }
   return worst;
 }
+/**
+ * A lap coordinate sits at its nominal value or up to the tolerance (0.002 mm) further away from the material,
+ * in direction `dir` (+1: the value may be larger), never closer: laps are offset conservatively.
+ */
+function expectAway(value: number, nominal: number, dir: 1 | -1) {
+  expect((value - nominal) * dir).toBeGreaterThanOrEqual(-1e-9);
+  expect((value - nominal) * dir).toBeLessThanOrEqual(0.002);
+}
 const ccwHole = (cx: number, cy: number, r: number) => ({
   closed: true, segments: [{ kind: 'arc' as const, center: v2(cx, cy), radius: r, startAngle: 0, sweep: 2 * Math.PI }],
 });
@@ -55,8 +63,8 @@ describe('profileToolpath', () => {
     expect(tp.clearance).toBe(15);
     const bottom = cutMoves(tp.moves).filter((m) => Math.abs(m.to.z + 6.2) < 1e-9);
     const xs = bottom.map((m) => m.to.x), ys = bottom.map((m) => m.to.y);
-    expect(Math.max(...xs)).toBeCloseTo(108, 6);
-    expect(Math.min(...ys)).toBeCloseTo(2, 6);
+    expectAway(Math.max(...xs), 108, 1);
+    expectAway(Math.min(...ys), 2, -1);
     expect(Math.min(...cutMoves(tp.moves).map((m) => m.to.z))).toBeCloseTo(-6.2, 9);
     // the flat bottom lap runs clockwise
     const lap = bottom.filter((m) => m.kind === 'line').map((m) => v2(m.to.x, m.to.y));
@@ -71,8 +79,8 @@ describe('profileToolpath', () => {
     const inside = profileToolpath(profile({ side: 'inside', leads: { mode: 'none', length: 0, startPoint: 'auto' } }), tool6, ctx,
       geoOf({ contours: [{ path: rectPath(35, 25, 75, 45), z: 0, ref: 0 }] })).toolpath!;
     const xs = cutMoves(inside.moves).map((m) => m.to.x);
-    expect(Math.min(...xs)).toBeCloseTo(38, 6);
-    expect(Math.max(...xs)).toBeCloseTo(72, 6);
+    expectAway(Math.min(...xs), 38, 1);
+    expectAway(Math.max(...xs), 72, -1);
   });
 
   it('reports a collapsed inside offset', () => {
@@ -85,9 +93,9 @@ describe('profileToolpath', () => {
     const out = profileToolpath(profile({ stockRadial: 0.5, stockAxial: 0.3, finishPass: true }), tool6, ctx, geoOf({ contours: [outline] }));
     const cuts = cutMoves(out.toolpath!.moves);
     const rough = cuts.filter((m) => Math.abs(m.to.z + 5.9) < 1e-9);
-    expect(Math.max(...rough.map((m) => m.to.x))).toBeCloseTo(108.5, 6);
+    expectAway(Math.max(...rough.map((m) => m.to.x)), 108.5, 1);
     const finish = cuts.filter((m) => Math.abs(m.to.z + 6.2) < 1e-9);
-    expect(Math.max(...finish.map((m) => m.to.x))).toBeCloseTo(108, 6);
+    expectAway(Math.max(...finish.map((m) => m.to.x)), 108, 1);
     expect(zs(cuts)).toEqual(expect.arrayContaining([-2.95, -5.9, -6.2]));
   });
 
@@ -185,4 +193,64 @@ describe('profileToolpath', () => {
     const leadArcs = cutMoves(out.toolpath!.moves).filter((m) => m.kind === 'arc' && Math.abs(Math.hypot(m.to.x - m.center.x, m.to.y - m.center.y) - 3) < 1e-6);
     expect(leadArcs.length).toBeGreaterThanOrEqual(2);
   });
+
+  const ngon = (n: number, cx: number, cy: number, R: number) => {
+    const pts = Array.from({ length: n }, (_, i) => v2(cx + R * Math.cos((2 * Math.PI * i) / n), cy + R * Math.sin((2 * Math.PI * i) / n)));
+    return { closed: true, segments: pts.map((from, i) => ({ kind: 'line' as const, from, to: pts[(i + 1) % n] })) };
+  };
+  for (const side of ['outside', 'inside'] as const) {
+    for (const [name, path] of [['a 12-gon', ngon(12, 55, 35, 20)], ['a sparse 40-gon', ngon(40, 55, 35, 20)], ['a round hole', ccwHole(55, 35, 20)]] as const) {
+      it.each([0.002, 0.01, 0.02])(`keeps full clearance from ${name} profiled ${side}, arc interiors included, at tolerance %s`, (tolerance) => {
+        const wall = flattenPath(path, 1e-4);
+        for (const stockRadial of [0, 0.5]) {
+          const out = profileToolpath(profile({ side, stockRadial }), tool6, { ...ctx, tolerance }, geoOf({ contours: [{ path, z: 0, ref: 0 }] }));
+          expect(minContourDistance(out.toolpath!.moves, wall), `stock ${stockRadial}`).toBeGreaterThanOrEqual(3 + stockRadial - 1e-3);
+        }
+        const finished = profileToolpath(profile({ side, stockRadial: 0.5, finishPass: true }), tool6, { ...ctx, tolerance },
+          geoOf({ contours: [{ path, z: 0, ref: 0 }] }));
+        expect(minContourDistance(finished.toolpath!.moves, wall), 'finish pass').toBeGreaterThanOrEqual(3 - 1e-3);
+      }, 30_000);
+    }
+  }
 });
+
+/**
+ * Smallest XY distance from the tool centre to the closed polyline `wall` over every move below Z 0 (lines and
+ * arc interiors sampled every 0.02 mm).
+ */
+function minContourDistance(moves: readonly AnyMove[], wall: { x: number; y: number }[]): number {
+  const segDist = (p: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }) => {
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 > 0 ? Math.min(1, Math.max(0, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2)) : 0;
+    return Math.hypot(p.x - a.x - dx * t, p.y - a.y - dy * t);
+  };
+  let worst = Infinity;
+  const at = (x: number, y: number, z: number) => {
+    if (z >= 0) return;
+    let d = Infinity;
+    for (let i = 0; i < wall.length; i++) d = Math.min(d, segDist({ x, y }, wall[i], wall[(i + 1) % wall.length]));
+    worst = Math.min(worst, d);
+  };
+  let prev: { x: number; y: number; z: number } | null = null;
+  for (const m of moves) {
+    if (m.kind === 'cycle') continue;
+    const to = m.to;
+    if (prev && m.kind === 'arc') {
+      const r0 = Math.hypot(prev.x - m.center.x, prev.y - m.center.y);
+      const a0 = Math.atan2(prev.y - m.center.y, prev.x - m.center.x);
+      let a1 = Math.atan2(to.y - m.center.y, to.x - m.center.x);
+      if (m.ccw) { while (a1 <= a0 + 1e-12) a1 += 2 * Math.PI; } else { while (a1 >= a0 - 1e-12) a1 -= 2 * Math.PI; }
+      const n = Math.max(1, Math.ceil((Math.abs(a1 - a0) * r0) / 0.02));
+      for (let i = 0; i <= n; i++) {
+        const a = a0 + ((a1 - a0) * i) / n;
+        at(m.center.x + r0 * Math.cos(a), m.center.y + r0 * Math.sin(a), prev.z + ((to.z - prev.z) * i) / n);
+      }
+    } else if (prev) {
+      const n = Math.max(1, Math.ceil(Math.hypot(to.x - prev.x, to.y - prev.y) / 0.02));
+      for (let i = 0; i <= n; i++) at(prev.x + ((to.x - prev.x) * i) / n, prev.y + ((to.y - prev.y) * i) / n, prev.z + ((to.z - prev.z) * i) / n);
+    } else at(to.x, to.y, to.z);
+    prev = to;
+  }
+  return worst;
+}

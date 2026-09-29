@@ -22,12 +22,23 @@ const FREE_SLACK = 5e-4;
 /** Leads are halved until they fit, but never below this length (mm); shorter leads are left out. */
 const MIN_LEAD = 0.1;
 
-/** Tool-centre laps of a contour: offset outward/inward by `offset`, or the contour itself for "on" and open paths. */
+/**
+ * Tool-centre laps of a contour: offset outward/inward by `offset`, or the contour itself for "on" and open paths.
+ *
+ * Three approximations can each move a lap towards the material: flattening the contour (chords cut into convex
+ * material), up to tol/4; Clipper's round joins (chords inside the true offset arc), up to tol/8; and arc
+ * fitting, up to tol/2, which fitArcs also enforces between input points (a few sparse vertices would otherwise
+ * be fitted by one arc bulging far from the lap). The joins stay well under the fit bound, or arcs could not
+ * follow their chords. The lap is offset by their sum beyond `offset`, so the tool centre never comes closer
+ * than `offset` to the contour; the lap stays within `tol` of nominal.
+ */
 function centreLaps(path: Path2D, side: ProfileOp['side'], offset: number, tol: number): Path2D[] | null {
   if (!path.closed || side === 'on' || offset === 0) return [path];
-  const poly = flattenPath(orientPath(path, true), tol);
-  const res = offsetPolys([poly], side === 'outside' ? offset : -offset, tol).filter((p) => polyArea(p) > 0);
-  return res.length ? res.map((p) => fitArcs(p, true, tol)) : null;
+  const flatTol = tol / 4, joinTol = tol / 8, fitTol = tol / 2;
+  const d = offset + flatTol + joinTol + fitTol;
+  const poly = flattenPath(orientPath(path, true), flatTol);
+  const res = offsetPolys([poly], side === 'outside' ? d : -d, joinTol).filter((p) => polyArea(p) > 0);
+  return res.length ? res.map((p) => fitArcs(p, true, fitTol, fitTol)) : null;
 }
 
 /** Midpoint of the longest line segment, else of the longest arc. */
