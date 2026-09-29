@@ -128,4 +128,25 @@ describe('Fusion 360 import', () => {
     expect(r.tools[0].presets).toHaveLength(1);
     expect(r.tools[0].presets[0].name).toBe('Valid');
   });
+
+  it('drops presets with missing feed and still imports tool', () => {
+    const malformed = {
+      data: [{
+        type: 'flat end mill', unit: 'millimeters', description: 'Test',
+        geometry: { DC: 6, NOF: 2 }, 'post-process': { number: 1 },
+        'start-values': { presets: [{ name: 'Bad', n: 5000 }, { name: 'Good', n: 5000, v_f: 500, stepdown: 1 }] },
+      }],
+    };
+    const r = importFusionLibrary(strToU8(JSON.stringify(malformed)), 'lib.json');
+    expect(r.tools).toHaveLength(1);
+    expect(r.tools[0].presets).toHaveLength(1);
+    expect(r.tools[0].presets[0].name).toBe('Good');
+  });
+
+  it('only returns tools that pass validation', () => {
+    const r = importFusionLibrary(strToU8(JSON.stringify(fusion)), 'lib.json');
+    for (const tool of r.tools) {
+      expect(validateTool(tool), `Tool "${tool.name}" should be valid`).toBe(true);
+    }
+  });
 });

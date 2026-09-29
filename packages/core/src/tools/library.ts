@@ -114,8 +114,10 @@ export function importFusionLibrary(bytes: Uint8Array, fileName: string): Fusion
           stepoverPct: stepover > 0 ? Math.min(100, Math.max(1, (stepover / diameter) * 100)) : 40,
           coolant: coolantOf(preset['tool-coolant']),
         };
-      });
+      })
+      .filter((p) => p.rpm > 0 && p.feed > 0 && p.plungeFeed > 0);
     const post = entry['post-process'] as { number?: unknown } | undefined;
+    const flutes = Math.round(n(g.NOF)) || 2;
     const tool: Tool = {
       id: crypto.randomUUID(), name, type,
       number: Number.isInteger(post?.number) ? (post!.number as number) : index + 1,
@@ -123,11 +125,12 @@ export function importFusionLibrary(bytes: Uint8Array, fileName: string): Fusion
       tipAngleDeg: isNum(g.SIG) ? g.SIG : isNum(g.TA) ? 2 * g.TA : 0,
       fluteLength: n(g.LCF) * k || diameter * 3,
       stickout: (isNum(g.LB) ? g.LB : n(g.OAL)) * k || diameter * 5,
-      flutes: n(g.NOF) || 2,
+      flutes,
       presets,
       ...(entry.vendor ? { vendor: String(entry.vendor) } : {}),
       ...(entry['product-id'] ? { productId: String(entry['product-id']) } : {}),
     };
+    if (!validateTool(tool)) return out.skipped.push({ name, reason: 'Invalid tool values' });
     out.tools.push(tool);
   });
   return out;
