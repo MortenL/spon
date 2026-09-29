@@ -124,4 +124,43 @@ describe('pocketToolpath', () => {
     const rooms = cutMoves(out.toolpath!.moves).map((m) => (m.to.x < 20 ? 'L' : m.to.x > 40 ? 'R' : '')).join('');
     expect(rooms).toMatch(/^(L+R+|R+L+)$/); // one room is finished completely before the other starts
   });
+
+  it.each([10, 45])('clears a pocket around a small island at %i percent stepover quickly and with a sane move count', (stepoverPct) => {
+    const shape: ResolvedShape = { shape: { outer: rectPath(0, 0, 120, 80), islands: [circle(60, 40, 4)] }, z: 0, ref: 0 };
+    const started = performance.now();
+    const out = pocketToolpath(pocket({ stepoverPct }), tool6, ctx, geoOf({ shapes: [shape] }));
+    expect(performance.now() - started).toBeLessThan(3000);
+    expect(out.toolpath!.moves.length).toBeLessThan(1500);
+    assertClearOfCenter(out.toolpath!.moves, { x: 60, y: 40 }, 7 - 1e-3);
+    for (const m of cutMoves(out.toolpath!.moves)) {
+      expect(Math.min(m.to.x, 120 - m.to.x, m.to.y, 80 - m.to.y)).toBeGreaterThanOrEqual(3 - 1e-6);
+    }
+  });
+
+  it.each(['polygonal', 'smooth'])('clears a 1,000-segment %s star in under 2 s at 0.002 mm, clear of its walls', (kind) => {
+    const pts = Array.from({ length: 1000 }, (_, i) => {
+      const a = (i / 1000) * 2 * Math.PI;
+      let rr = 30 + 3 * Math.cos(5 * a);
+      if (kind === 'polygonal') {
+        // a 5-point star (tips 33, notches 27) with each of its 10 edges split into 100 segments
+        const k = Math.floor(i / 100), f = (i % 100) / 100;
+        const ra = k % 2 ? 27 : 33, rb = k % 2 ? 33 : 27;
+        const va = (k / 10) * 2 * Math.PI, vb = ((k + 1) / 10) * 2 * Math.PI;
+        const A = v2(ra * Math.cos(va), ra * Math.sin(va)), B = v2(rb * Math.cos(vb), rb * Math.sin(vb));
+        return v2(55 + A.x + (B.x - A.x) * f, 35 + A.y + (B.y - A.y) * f);
+      }
+      return v2(55 + rr * Math.cos(a), 35 + rr * Math.sin(a));
+    });
+    const outer = { closed: true, segments: pts.map((from, i) => ({ kind: 'line' as const, from, to: pts[(i + 1) % pts.length] })) };
+    const started = performance.now();
+    const out = pocketToolpath(pocket(), tool6, ctx, geoOf({ shapes: [{ shape: { outer, islands: [] }, z: 0, ref: 0 }] }));
+    expect(performance.now() - started).toBeLessThan(2000);
+    const wall = (p: { x: number; y: number }) => Math.min(...pts.map((a, i) => {
+      const b = pts[(i + 1) % pts.length];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const t = Math.min(1, Math.max(0, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy)));
+      return Math.hypot(p.x - a.x - dx * t, p.y - a.y - dy * t);
+    }));
+    for (const m of cutMoves(out.toolpath!.moves)) expect(wall(m.to)).toBeGreaterThanOrEqual(3 - 1e-6);
+  });
 });

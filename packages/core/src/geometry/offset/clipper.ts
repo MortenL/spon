@@ -24,6 +24,43 @@ export function offsetPolys(polys: readonly Poly[], delta: number, tol: number):
   return fromPaths(inflatePaths(toPaths(polys), delta * CLIP_SCALE, JoinType.Round, EndType.Polygon, 2, arcTol(tol)));
 }
 
+/**
+ * Drops vertices of closed polygons (Ramer–Douglas–Peucker) so that every original vertex and edge stays within
+ * `epsilon` mm of the result. Each polygon keeps its first vertex and closing edge; polygons that degenerate
+ * to fewer than three vertices are dropped.
+ */
+export function simplifyPolys(polys: readonly Poly[], epsilon: number): Poly[] {
+  return polys.map((p) => simplifyChain([...p, p[0]], epsilon).slice(0, -1)).filter((p) => p.length >= 3);
+}
+
+/** Distance from p to segment a–b. */
+function segmentDistance(p: Vec2, a: Vec2, b: Vec2): number {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const len2 = dx * dx + dy * dy;
+  const t = len2 > 0 ? Math.min(1, Math.max(0, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2)) : 0;
+  return Math.hypot(p.x - a.x - dx * t, p.y - a.y - dy * t);
+}
+
+/** Ramer–Douglas–Peucker on an open chain, measuring the distance to the segment (not its line); keeps both ends. */
+function simplifyChain(pts: readonly Vec2[], epsilon: number): Vec2[] {
+  const keep = new Uint8Array(pts.length);
+  keep[0] = keep[pts.length - 1] = 1;
+  const stack: [number, number][] = [[0, pts.length - 1]];
+  while (stack.length) {
+    const [i, j] = stack.pop()!;
+    let worst = -1, at = -1;
+    for (let k = i + 1; k < j; k++) {
+      const d = segmentDistance(pts[k], pts[i], pts[j]);
+      if (d > worst) { worst = d; at = k; }
+    }
+    if (at >= 0 && worst > epsilon) {
+      keep[at] = 1;
+      stack.push([i, at], [at, j]);
+    }
+  }
+  return pts.filter((_, k) => keep[k]);
+}
+
 /** The area covered by a disc of `radius` moving along each polyline (closed polylines sweep a band). */
 export function sweepPolylines(lines: readonly { points: readonly Vec2[]; closed: boolean }[], radius: number, tol: number): Poly[] {
   const open = lines.filter((l) => !l.closed && l.points.length > 1).map((l) => toPath(l.points));

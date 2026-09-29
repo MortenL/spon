@@ -1,13 +1,32 @@
 import { describe, expect, it } from 'vitest';
 import {
   type ArcSegment, cornerDistances, fitArcs, nearestS, offsetPolys, orientPath, pathArea, pathEnd, pathFromPoints, pathLength, pathStart, pointAt, pointInPolys, type Poly, polysArea,
-  polysToRegions, reversePath, rotateStart, segmentInside, subPath, sweepPolylines, unionPolys, v2,
+  polysToRegions, reversePath, rotateStart, segmentInside, simplifyPolys, subPath, sweepPolylines, unionPolys, v2,
 } from '../src';
 
 const rect = (x0: number, y0: number, x1: number, y1: number): Poly => [v2(x0, y0), v2(x1, y0), v2(x1, y1), v2(x0, y1)];
 const cw = (p: Poly): Poly => [...p].reverse();
 
 describe('clipper wrapper', () => {
+  it('simplifies polygons keeping every original vertex within epsilon of the result', () => {
+    const wobbly = Array.from({ length: 2000 }, (_, i) => {
+      const a = (i / 2000) * 2 * Math.PI;
+      const r = 30 + 3 * Math.cos(5 * a) + 0.0004 * Math.sin(97 * a);
+      return v2(r * Math.cos(a), r * Math.sin(a));
+    });
+    const [simple] = simplifyPolys([wobbly], 0.001);
+    expect(simple.length).toBeLessThan(wobbly.length / 2);
+    const segDist = (p: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }) => {
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const t = Math.min(1, Math.max(0, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy)));
+      return Math.hypot(p.x - a.x - dx * t, p.y - a.y - dy * t);
+    };
+    for (const p of wobbly) {
+      expect(Math.min(...simple.map((a, i) => segDist(p, a, simple[(i + 1) % simple.length])))).toBeLessThanOrEqual(0.001 + 1e-12);
+    }
+    expect(simplifyPolys([[v2(0, 0), v2(1, 0), v2(2, 1e-6)]], 0.01)).toEqual([]);
+  });
+
   it('offsets a rectangle inward and outward with round corners', () => {
     const inner = offsetPolys([rect(0, 0, 20, 10)], -3, 0.002);
     expect(inner).toHaveLength(1);

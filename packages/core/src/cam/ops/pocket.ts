@@ -1,6 +1,6 @@
 import { fitArcs } from '../../geometry/offset/arcFit';
 import {
-  differencePolys, offsetPolys, type Poly, pointInPolys, polysToRegions, regionPolys, segmentInside, sweepPolylines,
+  differencePolys, offsetPolys, type Poly, pointInPolys, polysToRegions, regionPolys, segmentInside, simplifyPolys, sweepPolylines,
 } from '../../geometry/offset/clipper';
 import { dist2, flattenPath, nearestS, orientPath, pathStart, polyArea, rotateStart } from '../../geometry/offset/pathOps';
 import type { Path2D, Vec2 } from '../../geometry/path2d';
@@ -17,6 +17,7 @@ interface Area { polys: Poly[]; rings: Ring[] }
 
 const LIFT = 1; // mm above the previous level for moves inside the pocket
 const COVERAGE_TOL = 0.05; // mm; floor for the unmachined-area sweep's tolerance (see below)
+const SLIVER = 0.025; // mm; unreached material thinner than twice this is not reported
 
 export function pocketToolpath(op: PocketOp, tool: Tool, ctx: CamContext, geo: ResolvedGeometry): OpOutput {
   const out: OpOutput = { toolpath: null, diagnostics: [], heights: null, overlays: emptyOverlays() };
@@ -107,20 +108,16 @@ export function pocketToolpath(op: PocketOp, tool: Tool, ctx: CamContext, geo: R
       flattenPath(orientPath(sh.shape.outer, true), tol),
       ...sh.shape.islands.map((i) => flattenPath(orientPath(i, false), tol)),
     ];
-    // Each ring is offset from the previous ring by `stepover`, not from the original region by a growing
-    // delta: erosion by a disc is associative (eroding by a then by b equals eroding by a+b), and chaining
-    // keeps every offsetPolys call's delta small and constant, which matters for round joins on a jagged
-    // boundary — inflating by a large radius in one step tessellates every corner at that radius.
+    // Every ring is offset from the region itself (never from the previous ring: chained offsets double their
+    // vertex count around islands and concave curves on every ring). The region is simplified once, within
+    // tol/2, and each ring is offset tol/2 further, so the rings stay at least as far from the walls and
+    // islands as offsets of the exact region would.
+    const simple = simplifyPolys(region, tol / 2);
     const ringLevels: Poly[][] = [];
-    let prevPolys = region;
-    let prevDelta = 0;
     for (let k = 0; k < 100000; k++) {
-      const delta = r + op.stockRadial + k * stepover;
-      const off = offsetPolys(prevPolys, -(delta - prevDelta), tol);
+      const off = offsetPolys(simple, -(r + op.stockRadial + k * stepover + tol / 2), tol);
       if (!off.length) break;
       ringLevels.push(off);
-      prevPolys = off;
-      prevDelta = delta;
     }
     if (!ringLevels.length) return diag('error', 'offset-collapsed', 'The tool does not fit in this pocket', sh.ref);
     const areas: Area[] = polysToRegions(ringLevels[0]).map((reg) => ({ polys: regionPolys(reg), rings: [] }));
@@ -139,7 +136,9 @@ export function pocketToolpath(op: PocketOp, tool: Tool, ctx: CamContext, geo: R
     const coverageTol = Math.max(tol, COVERAGE_TOL);
     const sweepInput = areas.flatMap((a) => a.rings.map((ring) => ({ points: flattenPath(ring.path, coverageTol), closed: true })));
     const swept = sweepPolylines(sweepInput, r, coverageTol);
-    const left = polysToRegions(differencePolys(target, swept)).filter((reg) => offsetPolys(regionPolys(reg), -0.025, tol).length > 0);
+    // a morphological opening drops slivers thinner than 2 × SLIVER (flattening error, the rings' tol/2 margin)
+    // so they neither count as leftovers nor join real leftovers into one region
+    const left = polysToRegions(offsetPolys(offsetPolys(differencePolys(target, swept), -SLIVER, tol), SLIVER, tol));
     if (left.length) {
       diag('warning', 'unmachined-area', `The tool cannot reach ${left.length} area(s) of this pocket`, sh.ref);
       out.overlays.unmachined.push({ polys: left.flatMap(regionPolys), z: h.bottom });
