@@ -58,7 +58,7 @@ function writeProgram(job: Job, d: Dialect, group: readonly Toolpath[], date: st
   const k = inch ? 1 / 25.4 : 1;
   const dec = inch ? s.decimals + 1 : s.decimals;
   const num = (v: number) => fmtNum(v * k, dec, d.trailingDot);
-  const feedNum = (v: number) => fmtNum(v * k, inch ? 2 : 1, d.trailingDot);
+  const feedNum = (v: number) => fmtNum(v * k, dec, d.trailingDot);
   const out = new Lines(s, d);
   const toolOf = (id: string) => job.tools.find((t) => t.id === id);
 

@@ -101,4 +101,13 @@ describe('postProcess', () => {
     expect(postProcess(bracket('fanuc'), [dwellB], { date: 'd' })[0].text).toContain('G98 G82 X40. Y40. Z-6. R2. P500 F200.');
     expect(postProcess(bracket('linuxcnc'), [], {})).toEqual([]);
   });
+
+  it('formats feed words with the configured post decimals, like coordinates', () => {
+    const feedy: Toolpath = { ...A, moves: [{ kind: 'rapid', to: { x: 0, y: 0, z: 15 } }, { kind: 'line', to: { x: 1, y: 0, z: 0 }, feed: 1234.5678 }] };
+    const mm = postProcess(bracket('linuxcnc'), [feedy], { date: 'd' })[0].text;
+    expect(mm).toContain('F1234.568'); // 1234.5678 at 3 decimals (mm)
+    const inch = { ...bracket('linuxcnc'), displayUnits: 'in' as const };
+    const t = postProcess(inch, [feedy], { date: 'd' })[0].text;
+    expect(t).toContain('F48.605'); // 1234.5678 / 25.4 at 4 decimals (inch), trailing zero stripped by fmtNum
+  });
 });
