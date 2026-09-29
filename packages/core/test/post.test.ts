@@ -52,6 +52,15 @@ describe('postProcess', () => {
     ]);
   });
 
+  it('changes tools between different tools that share a T number', () => {
+    const twin = { ...t2, number: 1 };
+    const job = { ...bracket('linuxcnc'), tools: [t1, twin] }; // an old job: applyCommand no longer allows this
+    const text = lines(postProcess(job, [A, B], { date: '2026-09-28' })[0].text);
+    expect(text.filter((l) => l === 'T1 M6')).toHaveLength(2);
+    const grbl = { ...bracket('grbl', { splitByTool: false }), tools: [t1, twin] };
+    expect(lines(postProcess(grbl, [A, B], { date: '2026-09-28' })[0].text)).toContain('M0');
+  });
+
   it('writes GRBL split by tool with expanded peck cycles', () => {
     const files = postProcess(bracket('grbl'), [A, B], { date: '2026-09-28' });
     expect(files.map((f) => f.name)).toEqual(['Bracket-01-T1.nc', 'Bracket-02-T2.nc']);

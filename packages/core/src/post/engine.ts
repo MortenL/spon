@@ -83,7 +83,7 @@ function writeProgram(job: Job, d: Dialect, group: readonly Toolpath[], date: st
   let X: string | null = null, Y: string | null = null, Z: string | null = null, F: string | null = null;
   let cur: Vec3 | null = null;
   let cycleKey: string | null = null;
-  let tool: number | null = null;
+  let toolId: string | null = null;
   let rpm: number | null = null;
   let coolant: string = 'off';
   const g = (code: string) => (motion === code ? '' : code);
@@ -215,7 +215,7 @@ function writeProgram(job: Job, d: Dialect, group: readonly Toolpath[], date: st
     out.comment(tp.operationName);
     const t = toolOf(tp.toolId);
     const number = t?.number ?? 0;
-    if (number !== tool) {
+    if (tp.toolId !== toolId) {
       if (s.coolant && coolant !== 'off') {
         out.line('M9');
         coolant = 'off';
@@ -223,12 +223,12 @@ function writeProgram(job: Job, d: Dialect, group: readonly Toolpath[], date: st
       if (d.toolChange === 'm6') {
         out.line(`T${number} M6`);
         if (d.lengthOffset) out.line(`G43 H${number}`);
-      } else if (d.toolChange === 'pause' && tool !== null) {
+      } else if (d.toolChange === 'pause' && toolId !== null) {
         out.line('M5');
         out.line('M0');
         out.comment(`Change to T${number}: ${t?.name ?? ''}`);
       }
-      tool = number;
+      toolId = tp.toolId;
       rpm = null;
       motion = null;
       X = Y = Z = null;

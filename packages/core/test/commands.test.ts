@@ -96,6 +96,15 @@ describe('applyCommand', () => {
     for (const c of bad) expect(() => applyCommand(job, c), JSON.stringify(c)).toThrow(CommandError);
   });
 
+  it('rejects a tool whose T number another job tool already has', () => {
+    const job = withTool(); // t6 is T2
+    const other = { ...tool, id: 't8', number: 2 };
+    expect(() => applyCommand(job, { type: 'addTool', tool: other })).toThrow(CommandError);
+    const two = applyCommand(job, { type: 'addTool', tool: { ...other, number: 3 } });
+    expect(() => applyCommand(two, { type: 'updateTool', id: 't8', patch: { number: 2 } })).toThrow(CommandError);
+    expect(applyCommand(two, { type: 'updateTool', id: 't6', patch: { number: 2, name: 'renamed' } }).tools[0].name).toBe('renamed');
+  });
+
   it('rejects tab settings that cannot place tabs', () => {
     const job = run(withTool(), { type: 'addOperation', opType: 'profile', toolId: 't6', id: 'p' });
     for (const tabs of [{ spacing: 0 }, { spacing: -1 }, { count: 0 }, { count: Number.NaN }, { width: 0 }, { width: -2 }]) {

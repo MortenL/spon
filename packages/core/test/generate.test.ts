@@ -42,6 +42,20 @@ describe('generateJob', () => {
     expect(byId.drill).toMatchObject({ toolpath: null, diagnostics: [] });
   });
 
+  it('blocks operations whose distinct tools share a T number', () => {
+    const { job, geometry } = camJob();
+    const twin = { ...tool6, id: 't6b', name: 'another 6 mm' }; // same T1 as t6, inserted as an old job would carry it
+    const j = applyCommand({ ...job, tools: [...job.tools, twin] }, { type: 'updateOperation', id: 'drill', patch: { toolId: 't6b' } });
+    const byId = Object.fromEntries(generateJob(j, geometry).map((r) => [r.operationId, r]));
+    for (const id of ['pocket', 'drill', 'profile']) {
+      expect(byId[id].diagnostics.map((d) => d.code), id).toContain('tool-number-duplicate');
+      expect(byId[id].toolpath).toBeNull();
+    }
+    // a disabled operation's tool does not conflict
+    const off = applyCommand(j, { type: 'setOperationEnabled', id: 'drill', enabled: false });
+    expect(generateJob(off, geometry).flatMap((r) => r.diagnostics.map((d) => d.code))).not.toContain('tool-number-duplicate');
+  });
+
   it('warns about stepdowns deeper than the flutes and feeds above the machine maximum', () => {
     const { job, geometry } = camJob();
     const j = applyCommand(applyCommand(job, { type: 'updateOperation', id: 'profile', patch: { stepdown: 25 } }),

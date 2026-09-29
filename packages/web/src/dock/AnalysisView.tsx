@@ -12,7 +12,7 @@ const ICON = { error: CircleX, warning: TriangleAlert, info: Info } as const;
 const COLOR = { error: 'text-destructive', warning: 'text-amber-500', info: 'text-sky-400' } as const;
 
 const HEIGHTS_CODES: readonly CamCode[] = ['heights-invalid', 'no-stock'];
-const TOOL_CODES: readonly CamCode[] = ['no-tool', 'tool-too-large', 'tool-undersize', 'feed-exceeds-machine', 'stepdown-exceeds-flute'];
+const TOOL_CODES: readonly CamCode[] = ['no-tool', 'tool-too-large', 'tool-undersize', 'feed-exceeds-machine', 'stepdown-exceeds-flute', 'tool-number-duplicate'];
 const GEOMETRY_CODES: readonly CamCode[] = ['ref-missing', 'ref-changed', 'face-not-horizontal', 'open-contour', 'no-geometry', 'offset-collapsed'];
 
 function inspectorTabForCode(code: CamCode): InspectorTab {

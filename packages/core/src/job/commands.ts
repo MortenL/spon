@@ -63,6 +63,12 @@ function checkTool(job: Job, toolId: string | null): Tool | null {
   return tool;
 }
 
+/** Two different tools with the same T number would post without a tool change between them. */
+function checkToolNumber(job: Job, id: string, number: number): void {
+  const other = job.tools.find((t) => t.id !== id && t.number === number);
+  if (other) throw new CommandError(`T${number} is already used by "${other.name}" in this job`);
+}
+
 function checkTabs(t: Partial<TabSettings>): void {
   if ('spacing' in t && !((t.spacing as number) > 0 && Number.isFinite(t.spacing))) throw new CommandError('Tab spacing must be greater than 0');
   if ('count' in t && !((t.count as number) >= 1 && Number.isFinite(t.count))) throw new CommandError('Tab count must be at least 1');
@@ -134,9 +140,11 @@ export function applyCommand(job: Job, c: JobCommand): Job {
     }
     case 'addTool':
       if (job.tools.some((t) => t.id === c.tool.id)) throw new CommandError(`A tool with id ${c.tool.id} is already in the job`);
+      checkToolNumber(job, c.tool.id, c.tool.number);
       return { ...job, tools: [...job.tools, structuredClone(c.tool)] };
     case 'updateTool': {
       const tool = checkTool(job, c.id)!;
+      if (c.patch.number !== undefined) checkToolNumber(job, tool.id, c.patch.number);
       return { ...job, tools: job.tools.map((t) => (t === tool ? { ...t, ...c.patch, id: t.id } : t)) };
     }
     case 'removeTool': {

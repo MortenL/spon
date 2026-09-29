@@ -78,5 +78,24 @@ export function generateJob(job: Job, geometry: CamGeometry | null, cache?: Gene
     return result;
   });
   cache?.retain(job.operations.map((o) => o.id));
-  return results;
+  return flagDuplicateToolNumbers(job, results);
+}
+
+/**
+ * Enabled operations whose distinct tools share a T number get an error (and lose their toolpath): the posted
+ * program could not tell the tools apart. Jobs made through applyCommand cannot get here; older jobs can.
+ */
+function flagDuplicateToolNumbers(job: Job, results: OperationResult[]): OperationResult[] {
+  const used = new Map<number, Set<string>>();
+  for (const op of job.operations) {
+    const tool = op.enabled ? job.tools.find((t) => t.id === op.toolId) : undefined;
+    if (tool) used.set(tool.number, (used.get(tool.number) ?? new Set()).add(tool.id));
+  }
+  return results.map((r, i) => {
+    const op = job.operations[i];
+    const tool = op.enabled ? job.tools.find((t) => t.id === op.toolId) : undefined;
+    if (!tool || (used.get(tool.number)?.size ?? 0) < 2) return r;
+    const message = `T${tool.number} is shared by different tools; give each tool its own number`;
+    return { ...r, toolpath: null, diagnostics: [...r.diagnostics, { operationId: op.id, severity: 'error', code: 'tool-number-duplicate', message }] };
+  });
 }
