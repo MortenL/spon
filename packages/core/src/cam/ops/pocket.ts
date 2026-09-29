@@ -71,7 +71,9 @@ export function pocketToolpath(op: PocketOp, tool: Tool, ctx: CamContext, geo: R
       const entryZ = li === 0 ? startZ : Math.min(h.feed, prev + LIFT);
       let ring = startNear(rings[0].path, w.pos);
       const rh = (tool.diameter * op.entry.helixDiameterPct) / 200;
-      const inner = op.entry.mode === 'auto' || op.entry.mode === 'helix' ? offsetPolys(area.polys, -rh, tol) : [];
+      // helix centres: offset `joinTol` further than rh, so the round joins' chords (up to joinTol inside the true
+      // offset arc) still keep every centre at least rh from the area's boundary
+      const inner = op.entry.mode === 'auto' || op.entry.mode === 'helix' ? offsetPolys(area.polys, -(rh + joinTol), joinTol) : [];
       if (inner.length && rh > 0) {
         const start = pathStart(ring);
         let c = start;

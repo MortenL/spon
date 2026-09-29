@@ -21,6 +21,25 @@ function maxDeviation(points: Vec2[], path: Path2D): number {
 }
 
 describe('fitArcs', () => {
+  it('keeps a whole-ring circle fit within maxBulge of the polygon, even with vertices inside the circle', () => {
+    // 36 vertices 0.0097 inside a circle of radius 2.59, except every 12th on it: the fitted circle passes
+    // outside the others, so its bulge over their chords is the sagitta plus their inset
+    const pts = Array.from({ length: 36 }, (_, k) => {
+      const a = (2 * Math.PI * k) / 36;
+      const rr = k % 12 === 0 ? 2.59 : 2.59 - 0.0097;
+      return v2(rr * Math.cos(a), rr * Math.sin(a));
+    });
+    const fitted = fitArcs(pts, true, 0.01, 0.01);
+    const segDist = (p: Vec2, a: Vec2, b: Vec2) => {
+      const dx = b.x - a.x, dy = b.y - a.y, len2 = dx * dx + dy * dy;
+      const t = len2 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2)) : 0;
+      return Math.hypot(p.x - a.x - dx * t, p.y - a.y - dy * t);
+    };
+    for (const p of flattenPath(fitted, 1e-5)) {
+      expect(Math.min(...pts.map((a, i) => segDist(p, a, pts[(i + 1) % pts.length])))).toBeLessThanOrEqual(0.01 + 1e-9);
+    }
+  });
+
   it('keeps arcs within maxBulge of the chords between sparse input points', () => {
     const pts = Array.from({ length: 6 }, (_, i) => v2(10 * Math.cos((i * Math.PI) / 10), 10 * Math.sin((i * Math.PI) / 10)));
     expect(fitArcs(pts, false, 0.01).segments).toMatchObject([{ kind: 'arc' }]); // unbounded by default

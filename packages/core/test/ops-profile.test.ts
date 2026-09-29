@@ -198,6 +198,22 @@ describe('profileToolpath', () => {
     const pts = Array.from({ length: n }, (_, i) => v2(cx + R * Math.cos((2 * Math.PI * i) / n), cy + R * Math.sin((2 * Math.PI * i) / n)));
     return { closed: true, segments: pts.map((from, i) => ({ kind: 'line' as const, from, to: pts[(i + 1) % n] })) };
   };
+  it.each([0.02, 0.01, 0.005])('keeps full clearance where a nearly round lap is fitted as one circle, at tolerance %s', (tolerance) => {
+    // a 36-gon whose vertices sit 0.97 × tol/2 inside a circle except every 12th: its lap (after the 0.875 × tol
+    // margin) is fitted as one circle; the circle must not bulge more than tol/2 beyond the lap's chords
+    const rho = 2.59 * Math.sqrt(tolerance / 0.02);
+    const lap = Array.from({ length: 36 }, (_, k) => {
+      const a = (2 * Math.PI * k) / 36;
+      const rr = k % 12 === 4 ? rho : rho - 0.97 * (tolerance / 2);
+      return v2(55 + rr * Math.cos(a), 35 + rr * Math.sin(a));
+    });
+    const contour = miterOffset(lap, 3 + 0.875 * tolerance);
+    const path = { closed: true, segments: contour.map((from, i) => ({ kind: 'line' as const, from, to: contour[(i + 1) % contour.length] })) };
+    const out = profileToolpath(profile({ side: 'inside', leads: { mode: 'none', length: 0, startPoint: 'auto' } }), tool6, { ...ctx, tolerance },
+      geoOf({ contours: [{ path, z: 0, ref: 0 }] }));
+    expect(minContourDistance(out.toolpath!.moves, contour, 0.005)).toBeGreaterThanOrEqual(3 - 1e-3);
+  });
+
   for (const side of ['outside', 'inside'] as const) {
     for (const [name, path] of [['a 12-gon', ngon(12, 55, 35, 20)], ['a sparse 40-gon', ngon(40, 55, 35, 20)], ['a round hole', ccwHole(55, 35, 20)]] as const) {
       it.each([0.002, 0.01, 0.02])(`keeps full clearance from ${name} profiled ${side}, arc interiors included, at tolerance %s`, (tolerance) => {
@@ -214,11 +230,27 @@ describe('profileToolpath', () => {
   }
 });
 
+/** Outward offset of a convex counter-clockwise polygon by `d` with mitred (sharp) corners. */
+function miterOffset(pts: { x: number; y: number }[], d: number): { x: number; y: number }[] {
+  const n = pts.length;
+  const lines = pts.map((a, i) => {
+    const b = pts[(i + 1) % n];
+    const dx = b.x - a.x, dy = b.y - a.y, l = Math.hypot(dx, dy);
+    return { p: v2(a.x + (dy / l) * d, a.y - (dx / l) * d), d: v2(dx, dy) };
+  });
+  return lines.map((l1, i) => {
+    const l0 = lines[(i - 1 + n) % n];
+    const den = l0.d.x * l1.d.y - l0.d.y * l1.d.x;
+    const t = ((l1.p.x - l0.p.x) * l1.d.y - (l1.p.y - l0.p.y) * l1.d.x) / den;
+    return v2(l0.p.x + l0.d.x * t, l0.p.y + l0.d.y * t);
+  });
+}
+
 /**
  * Smallest XY distance from the tool centre to the closed polyline `wall` over every move below Z 0 (lines and
  * arc interiors sampled every 0.02 mm).
  */
-function minContourDistance(moves: readonly AnyMove[], wall: { x: number; y: number }[]): number {
+function minContourDistance(moves: readonly AnyMove[], wall: { x: number; y: number }[], step = 0.02): number {
   const segDist = (p: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }) => {
     const dx = b.x - a.x, dy = b.y - a.y;
     const len2 = dx * dx + dy * dy;
@@ -241,13 +273,13 @@ function minContourDistance(moves: readonly AnyMove[], wall: { x: number; y: num
       const a0 = Math.atan2(prev.y - m.center.y, prev.x - m.center.x);
       let a1 = Math.atan2(to.y - m.center.y, to.x - m.center.x);
       if (m.ccw) { while (a1 <= a0 + 1e-12) a1 += 2 * Math.PI; } else { while (a1 >= a0 - 1e-12) a1 -= 2 * Math.PI; }
-      const n = Math.max(1, Math.ceil((Math.abs(a1 - a0) * r0) / 0.02));
+      const n = Math.max(1, Math.ceil((Math.abs(a1 - a0) * r0) / step));
       for (let i = 0; i <= n; i++) {
         const a = a0 + ((a1 - a0) * i) / n;
         at(m.center.x + r0 * Math.cos(a), m.center.y + r0 * Math.sin(a), prev.z + ((to.z - prev.z) * i) / n);
       }
     } else if (prev) {
-      const n = Math.max(1, Math.ceil(Math.hypot(to.x - prev.x, to.y - prev.y) / 0.02));
+      const n = Math.max(1, Math.ceil(Math.hypot(to.x - prev.x, to.y - prev.y) / step));
       for (let i = 0; i <= n; i++) at(prev.x + ((to.x - prev.x) * i) / n, prev.y + ((to.y - prev.y) * i) / n, prev.z + ((to.z - prev.z) * i) / n);
     } else at(to.x, to.y, to.z);
     prev = to;

@@ -112,7 +112,14 @@ export function fitArcs(input: readonly Vec2[], closed: boolean, tol: number, ma
       const turn = Math.sign(cross(pts[0], pts[1], pts[2]));
       if (c && turn !== 0) {
         const r = dist2(c, pts[0]);
-        const bulgeOk = (p: Vec2, q: Vec2) => r - Math.sqrt(Math.max(0, r * r - (dist2(p, q) / 2) ** 2)) <= maxBulge;
+        // as in arcThrough: the circle between two consecutive points (measured at their mid-angle) must stay
+        // within maxBulge of the chord joining them; the points themselves may sit up to tol off the circle
+        const bulgeOk = (p: Vec2, q: Vec2) => {
+          if (maxBulge === Infinity) return true;
+          const a0 = Math.atan2(p.y - c.y, p.x - c.x);
+          const mid = a0 + arcSweepBetween(a0, Math.atan2(q.y - c.y, q.x - c.x), turn > 0) / 2;
+          return segmentDistance(v2(c.x + r * Math.cos(mid), c.y + r * Math.sin(mid)), p, q) <= maxBulge;
+        };
         if (r <= 1e4 && pts.every((p, k) => Math.abs(dist2(c, p) - r) <= tol && bulgeOk(p, pts[(k + 1) % pts.length]))) {
           return { closed, segments: [{ kind: 'arc', center: c, radius: r, startAngle: Math.atan2(pts[0].y - c.y, pts[0].x - c.x), sweep: turn * 2 * Math.PI }] };
         }

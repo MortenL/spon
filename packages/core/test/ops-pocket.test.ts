@@ -179,6 +179,15 @@ describe('pocketToolpath', () => {
     });
     return { closed: true, segments: pts.map((from, i) => ({ kind: 'line' as const, from, to: pts[(i + 1) % pts.length] })) };
   };
+  it.each([0.1, 0.05])('keeps full clearance in the helix entry of an island pocket at tolerance %s', (tolerance) => {
+    for (const stepoverPct of [45, 20]) {
+      const out = pocketToolpath(pocket({ stepoverPct, stepdown: 1 }), tool6, { ...ctx, tolerance }, geoOf({ shapes: [withIsland] }));
+      expect(cutMoves(out.toolpath!.moves)[0].kind).toBe('arc'); // entered with a helix
+      const walls = [withIsland.shape.outer, ...withIsland.shape.islands].map((p) => flattenPath(p, 1e-4));
+      expect(minWallDistance(out.toolpath!.moves, walls)).toBeGreaterThanOrEqual(3 - 1e-3);
+    }
+  });
+
   const clearanceCases: [string, ResolvedShape][] = [
     ['the island pocket', withIsland],
     ['the cosine star', { shape: { outer: cosineStar(55, 35), islands: [] }, z: 0, ref: 0 }],
