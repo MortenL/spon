@@ -214,7 +214,8 @@ export function renderPreviewSvg(input: PreviewInput, options: PreviewOptions = 
 
   const regions = ops.flatMap((op) => op.unmachined.flatMap((u) => u.regions.map((r) =>
     [r.outer, ...r.holes].map((ring) => pathCommands(ring.flatMap((v) => screen(at(v, u.z))), true)).join(''))));
-  if (regions.length) parts.push(`<g class="unmachined" fill="url(#hatch)" stroke="${ERROR}" stroke-width="1" fill-rule="evenodd"><path d="${regions.join('')}"/></g>`);
+  // one path per region: even-odd applies only between a region's outer ring and its own holes, so overlaps stay hatched
+  if (regions.length) parts.push(`<g class="unmachined" fill="url(#hatch)" stroke="${ERROR}" stroke-width="1" fill-rule="evenodd">${regions.map((r) => `<path d="${r}"/>`).join('')}</g>`);
 
   ops.forEach((op, i) => {
     const color = PREVIEW_PALETTE[i % PREVIEW_PALETTE.length];
