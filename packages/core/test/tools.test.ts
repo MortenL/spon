@@ -1,6 +1,8 @@
 import { strToU8, zipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
-import { exportToolLibrary, importFusionLibrary, importToolLibrary, MATERIALS, starterLibrary, ToolLibraryError, validateTool } from '../src';
+import {
+  exportToolLibrary, importFusionLibrary, importToolLibrary, MATERIALS, mergeToolLibrary, parseToolLibraryFile, starterLibrary, type Tool, ToolLibraryError, validateTool,
+} from '../src';
 
 const fusion = {
   data: [
@@ -148,5 +150,22 @@ describe('Fusion 360 import', () => {
     for (const tool of r.tools) {
       expect(validateTool(tool), `Tool "${tool.name}" should be valid`).toBe(true);
     }
+  });
+});
+
+describe('mergeToolLibrary', () => {
+  const t = (id: string, number: number, name = id): Tool => ({ ...starterLibrary()[0], id, number, name });
+
+  it('replaces tools with the same id and keeps T numbers unique', () => {
+    const merge = mergeToolLibrary([t('a', 1), t('b', 2)], [t('b', 5, 'B2'), t('c', 1)]);
+    expect(merge.incoming.map((x) => [x.id, x.number])).toEqual([['b', 5], ['c', 2]]);
+    expect(merge.notes).toEqual(['c: T1 was taken, renumbered to T2']);
+    expect(merge.library.map((x) => [x.id, x.number])).toEqual([['a', 1], ['c', 2], ['b', 5]]);
+    expect([merge.added, merge.updated]).toEqual([1, 1]);
+  });
+
+  it('reads a Spon library file', () => {
+    const bytes = new TextEncoder().encode(exportToolLibrary([t('a', 1)]));
+    expect(parseToolLibraryFile(bytes, 'lib.json')).toEqual({ tools: [t('a', 1)], skipped: [] });
   });
 });

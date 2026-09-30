@@ -1,5 +1,5 @@
 import {
-  exportToolLibrary, importFusionLibrary, importToolLibrary, type OperationType, starterLibrary, type Tool, validateTool,
+  exportToolLibrary, mergeToolLibrary, type OperationType, parseToolLibraryFile, sortTools, starterLibrary, type Tool, validateTool,
 } from '@sponcam/core';
 import { type DBSchema, type IDBPDatabase, openDB } from 'idb';
 import { useStore } from 'zustand';
@@ -28,7 +28,7 @@ export const useToolLibrary = (): Tool[] => useStore(toolLibraryStore, (s) => s.
 
 async function refresh(): Promise<void> {
   const all = await (await db()).getAll('tools');
-  toolLibraryStore.setState({ tools: all.sort((a, b) => a.number - b.number || a.name.localeCompare(b.name)), loaded: true });
+  toolLibraryStore.setState({ tools: sortTools(all), loaded: true });
 }
 
 /** Seeds the starter library on first run only; later calls just refresh the in-memory store from IndexedDB. */
@@ -73,31 +73,14 @@ export async function resetStarterLibrary(): Promise<void> {
 export async function importLibraryFile(
   file: File,
 ): Promise<{ added: number; updated: number; skipped: { name: string; reason: string }[]; notes: string[] }> {
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const text = new TextDecoder().decode(bytes);
-  const isSpon = !file.name.toLowerCase().endsWith('.tools') && text.includes('"spon-tools"');
-  const result = isSpon ? { tools: importToolLibrary(text), skipped: [] } : importFusionLibrary(bytes, file.name);
+  const result = parseToolLibraryFile(new Uint8Array(await file.arrayBuffer()), file.name);
   const d = await db();
-  const existing = await d.getAll('tools');
-  const existingIds = new Set(existing.map((t) => t.id));
-  // T numbers stay unique: an imported tool whose number is taken gets the next free one
-  const importedIds = new Set(result.tools.map((t) => t.id));
-  const taken = new Set(existing.filter((t) => !importedIds.has(t.id)).map((t) => t.number));
-  const notes: string[] = [];
-  const tools = result.tools.map((t) => {
-    let number = t.number;
-    while (taken.has(number)) number++;
-    taken.add(number);
-    if (number === t.number) return t;
-    notes.push(`${t.name}: T${t.number} was taken, renumbered to T${number}`);
-    return { ...t, number };
-  });
+  const merge = mergeToolLibrary(await d.getAll('tools'), result.tools);
   const tx = d.transaction('tools', 'readwrite');
-  for (const t of tools) await tx.store.put(t, t.id);
+  for (const t of merge.incoming) await tx.store.put(t, t.id);
   await tx.done;
   await refresh();
-  const updated = tools.filter((t) => existingIds.has(t.id)).length;
-  return { added: tools.length - updated, updated, skipped: result.skipped, notes };
+  return { added: merge.added, updated: merge.updated, skipped: result.skipped, notes: merge.notes };
 }
 
 export function exportLibraryFile(): void {

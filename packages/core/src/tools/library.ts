@@ -135,3 +135,37 @@ export function importFusionLibrary(bytes: Uint8Array, fileName: string): Fusion
   });
   return out;
 }
+
+/** Tools in library order: by T number, then by name. */
+export function sortTools(tools: readonly Tool[]): Tool[] {
+  return [...tools].sort((a, b) => a.number - b.number || a.name.localeCompare(b.name));
+}
+
+/** A Spon library (.json with "spon-tools") or a Fusion 360 library (.json / zipped .tools). */
+export function parseToolLibraryFile(bytes: Uint8Array, fileName: string): FusionImportResult {
+  const text = new TextDecoder().decode(bytes);
+  const isSpon = !fileName.toLowerCase().endsWith('.tools') && text.includes('"spon-tools"');
+  return isSpon ? { tools: importToolLibrary(text), skipped: [] } : importFusionLibrary(bytes, fileName);
+}
+
+export interface ToolLibraryMerge { incoming: Tool[]; library: Tool[]; added: number; updated: number; notes: string[] }
+
+/** Imported tools replace library tools with the same id; a T number used by another library tool moves to the next free one. */
+export function mergeToolLibrary(existing: readonly Tool[], imported: readonly Tool[]): ToolLibraryMerge {
+  const existingIds = new Set(existing.map((t) => t.id));
+  const importedIds = new Set(imported.map((t) => t.id));
+  const taken = new Set(existing.filter((t) => !importedIds.has(t.id)).map((t) => t.number));
+  const notes: string[] = [];
+  const incoming = imported.map((t) => {
+    let number = t.number;
+    while (taken.has(number)) number++;
+    taken.add(number);
+    if (number === t.number) return t;
+    notes.push(`${t.name}: T${t.number} was taken, renumbered to T${number}`);
+    return { ...t, number };
+  });
+  const byId = new Map(existing.map((t) => [t.id, t]));
+  for (const t of incoming) byId.set(t.id, t);
+  const updated = incoming.filter((t) => existingIds.has(t.id)).length;
+  return { incoming, library: sortTools([...byId.values()]), added: incoming.length - updated, updated, notes };
+}
