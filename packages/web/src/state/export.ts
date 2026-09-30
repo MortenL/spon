@@ -1,29 +1,23 @@
-import { sanitizeName } from '@sponcam/core';
-import { strToU8, zipSync } from 'fflate';
+import { type ExportInput, exportFiles as filesOf, exportProblems as problemsOf } from '@sponcam/core';
 import { toast } from 'sonner';
 import { type AppState, appStore } from './store';
 
 export type ExportState = Pick<AppState, 'job' | 'camResults' | 'camFiles' | 'programData'>;
 
-export function exportProblems(s: ExportState): { errors: string[]; warnings: string[] } {
-  const errors: string[] = [];
-  const warnings: string[] = [];
-  for (const op of s.job.operations) {
-    for (const d of s.camResults[op.id]?.diagnostics ?? []) (d.severity === 'error' ? errors : warnings).push(`${op.name}: ${d.message}`);
-  }
-  for (const f of s.camFiles) {
-    for (const d of f.postErrors) errors.push(`${f.name}: post-processor produced invalid G-code (${d.message})`);
-    for (const d of s.programData[f.blobId]?.parsed?.analysis.diagnostics ?? []) warnings.push(`${f.name} line ${d.line + 1}: ${d.message}`);
-  }
-  if (!s.camFiles.length) errors.push('Nothing to export: add operations with geometry');
-  return { errors, warnings };
+export function toExportInput(s: ExportState): ExportInput {
+  return {
+    jobName: s.job.name,
+    operations: s.job.operations,
+    results: s.camResults,
+    files: s.camFiles.map((f) => {
+      const data = s.programData[f.blobId];
+      return { name: f.name, text: data?.text ?? '', postErrors: f.postErrors, analysisDiagnostics: data?.parsed?.analysis.diagnostics ?? [] };
+    }),
+  };
 }
 
-export function exportFiles(s: ExportState): { name: string; bytes: Uint8Array } {
-  const files = s.camFiles.map((f) => ({ name: f.name, text: s.programData[f.blobId]?.text ?? '' }));
-  if (files.length === 1) return { name: files[0].name, bytes: strToU8(files[0].text) };
-  return { name: `${sanitizeName(s.job.name)}.zip`, bytes: zipSync(Object.fromEntries(files.map((f) => [f.name, strToU8(f.text)]))) };
-}
+export const exportProblems = (s: ExportState): { errors: string[]; warnings: string[] } => problemsOf(toExportInput(s));
+export const exportFiles = (s: ExportState): { name: string; bytes: Uint8Array } => filesOf(toExportInput(s));
 
 export function downloadBytes(name: string, bytes: Uint8Array): void {
   const a = document.createElement('a');

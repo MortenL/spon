@@ -1,17 +1,13 @@
 import {
-  type AnalysisContext, type AnalysisResult, analyzeTable, type CamGeometry, describeGeometry, GenerationCache, generateJob, type GeometryCatalog,
-  type ImportResult, importResultTransferables, type Job, type MotionTable, type ParsedProgram, parsedProgramTransferables, parseProgram,
-  postProcess, type ProgramContext,
+  type AnalysisContext, type AnalysisResult, analyzeTable, type CamGeometry, type CamRun, type ImportResult, importResultTransferables, type Job,
+  type MotionTable, type ParsedProgram, parsedProgramTransferables, parseProgram, PipelineCache, type ProgramContext, runPipeline,
 } from '@sponcam/core';
 import * as Comlink from 'comlink';
-import type { CamRun } from '../state/camTypes';
 import { importModel } from './modelImport';
 import { loadOcct } from './occtReader';
 
 let camGeometry: CamGeometry | null = null;
-const camCache = new GenerationCache();
-let catalogKey = '';
-let catalog: GeometryCatalog | null = null;
+let pipeline = new PipelineCache();
 
 const api = {
   async import(fileName: string, bytes: Uint8Array, body?: number): Promise<ImportResult> {
@@ -34,23 +30,12 @@ const api = {
   /** Keeps a copy of the loaded model for CAM (sent once per model load). */
   setCamModel(geometry: CamGeometry | null): void {
     camGeometry = geometry;
-    catalogKey = '';
+    pipeline = new PipelineCache();
   },
   /** Generates, posts, parses and analyses every operation; returns summaries, files and the geometry catalog. */
   generate(job: Job, ctx: ProgramContext): CamRun {
-    const results = generateJob(job, camGeometry, camCache);
-    const toolpaths = results.flatMap((r) => (r.toolpath ? [r.toolpath] : []));
-    const files = postProcess(job, toolpaths).map((f) => {
-      const parsed = parseProgram(new TextEncoder().encode(f.text), ctx);
-      return { ...f, parsed, postErrors: parsed.interpretDiagnostics.filter((d) => d.severity === 'error') };
-    });
-    const key = JSON.stringify([job.model, job.stock, job.wcs, job.tolerance]);
-    if (key !== catalogKey) {
-      catalog = camGeometry && job.model ? describeGeometry(job, camGeometry) : null;
-      catalogKey = key;
-    }
-    const summaries = results.map(({ operationId, diagnostics, heights, overlays, toolpath }) => ({ operationId, diagnostics, heights, overlays, hasToolpath: toolpath !== null }));
-    return Comlink.transfer({ results: summaries, files, catalog }, files.flatMap((f) => parsedProgramTransferables(f.parsed)));
+    const { run } = runPipeline(job, camGeometry, ctx, pipeline);
+    return Comlink.transfer(run, run.files.flatMap((f) => parsedProgramTransferables(f.parsed)));
   },
 };
 

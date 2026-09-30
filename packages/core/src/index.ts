@@ -68,3 +68,5 @@ export * from './tools/starterLibrary';
 export * from './tools/library';
 export * from './pipeline/model';
 export * from './pipeline/importFlow';
+export * from './pipeline/run';
+export * from './pipeline/export';
