@@ -62,4 +62,20 @@ describe('jobCommandSchema', () => {
     expect(bad.success).toBe(false);
     expect(JSON.stringify(bad.error?.issues)).toContain('stepovr');
   });
+
+  it('rejects typos in nested objects and inside commands, naming the key', () => {
+    const nested = jobCommandSchema.safeParse({ type: 'updateOperation', id: 'o', patch: { tabs: { enable: true } } });
+    expect(nested.success).toBe(false);
+    expect(JSON.stringify(nested.error?.issues)).toContain('enable');
+    const top = jobCommandSchema.safeParse({ type: 'setPost', patch: { lineNumber: true } });
+    expect(top.success).toBe(false);
+    expect(JSON.stringify(top.error?.issues)).toContain('lineNumber');
+    const extra = jobCommandSchema.safeParse({ type: 'removeTool', id: 't', idd: 'x' });
+    expect(extra.success).toBe(false);
+    expect(JSON.stringify(extra.error?.issues)).toContain('idd');
+    const tool = jobCommandSchema.safeParse({ type: 'updateTool', id: 't', patch: { diameterr: 3 } });
+    expect(tool.success).toBe(false);
+    const axis = jobCommandSchema.safeParse({ type: 'setMachineProfile', patch: { rapid: { xx: 1 } } });
+    expect(axis.success).toBe(false);
+  });
 });
