@@ -1,4 +1,5 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { randomBytes } from 'node:crypto';
+import { readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { extname } from 'node:path';
 import {
   addProgram, applyCommand, applyMachinePreset, type BBox, bboxOfPoints, bboxSize, type BlobMap, camContext, type CamRun, CommandError, createJob,
@@ -59,8 +60,8 @@ export class FileSession implements JobSession {
     let geometry: ModelGeometry | null = null;
     if (job.model) {
       const step = importStep(await importModel(modelFilePath(job.model), blobs[job.model.blobId], job.model.body, options.loadReader));
-      if (step.kind === 'error') throw new SessionError(`Could not load the job's model: ${step.error}`);
-      if (step.kind === 'chooseBody') throw new SessionError("Could not load the job's model: the file has several bodies and the job does not say which one");
+      if (step.kind === 'error') throw new SessionError(`${path}: Could not load the job's model: ${step.error}`);
+      if (step.kind === 'chooseBody') throw new SessionError(`${path}: Could not load the job's model: the file has several bodies and the job does not say which one`);
       geometry = toModelGeometry(step.result);
     }
     return new FileSession(job, blobs, geometry, path, false, options);
@@ -150,9 +151,13 @@ export class FileSession implements JobSession {
     const target = path ?? this.path;
     if (!target) throw new SessionError('This job has not been saved yet — give a path');
     const file = extname(target).toLowerCase() === SPON_EXTENSION ? target : `${target}${SPON_EXTENSION}`;
+    // a temporary file renamed over the target, so a failed write never leaves a half-written .spon
+    const tmp = `${file}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`;
     try {
-      await writeFile(file, writeSpon(this.current, this.blobs));
+      await writeFile(tmp, writeSpon(this.current, this.blobs));
+      await rename(tmp, file);
     } catch (err) {
+      await rm(tmp, { force: true }).catch(() => undefined);
       throw new SessionError(`Could not write ${file}: ${message(err)}`);
     }
     this.path = file;

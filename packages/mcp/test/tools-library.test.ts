@@ -25,4 +25,12 @@ describe('library tools', () => {
     const tools = data(await call('list_tools')).tools as { source: string; id: string }[];
     expect(tools[0]).toMatchObject({ source: 'job', id: 't6' });
   });
+
+  it('names the absolute path of a library file it cannot read (finding 9)', async () => {
+    const { call, dir } = await connect();
+    writeFileSync(join(dir, 'bad.json'), '{ nope');
+    const r = await call('import_tool_library', { path: 'bad.json' });
+    expect(r.isError).toBe(true);
+    expect(text(r)).toContain(`Could not read the tool library file ${join(dir, 'bad.json')}`);
+  });
 });

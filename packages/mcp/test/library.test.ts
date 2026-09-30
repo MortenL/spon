@@ -40,4 +40,19 @@ describe('ToolLibraryFile', () => {
     expect(defaultLibraryPath({ SPON_TOOL_LIBRARY: '/x/y.json' })).toBe('/x/y.json');
     expect(defaultLibraryPath({}).replace(/\\/g, '/')).toMatch(/\/\.spon\/tools\.json$/);
   });
+
+  it('serialises concurrent adds on a fresh library (finding 6)', async () => {
+    const dir = tempDir();
+    const lib = new ToolLibraryFile(join(dir, 'tools.json'));
+    await Promise.all([lib.add({ ...tool6, id: 'a', number: 91 }), lib.add({ ...tool6, id: 'b', number: 92 })]);
+    const ids = (await lib.list()).map((t) => t.id);
+    expect(ids).toContain('a');
+    expect(ids).toContain('b');
+    expect(readdirSync(dir)).toEqual(['tools.json']);
+  });
+
+  it('names the file when an import cannot be read (finding 9)', async () => {
+    const lib = new ToolLibraryFile(join(tempDir(), 'tools.json'));
+    await expect(lib.importFile('lib.json', new TextEncoder().encode('{ nope'))).rejects.toThrow('Could not read the tool library file lib.json');
+  });
 });

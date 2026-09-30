@@ -50,7 +50,7 @@ export function registerLibraryTools(server: McpServer, ctx: ToolContext): void 
     inputSchema: importShape,
   }, guarded('import_tool_library', async (a: Args<typeof importShape>) => {
     const input = await ctx.readInput(a.path);
-    const result = await ctx.library().importFile(basename(input.path), input.bytes);
+    const result = await ctx.library().importFile(basename(input.path), input.bytes, input.path);
     const lines = [
       `Imported ${result.added} new and ${result.updated} updated tool(s) from ${input.path}.`,
       ...result.notes,

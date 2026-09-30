@@ -1,6 +1,6 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { GeometryRef, JobCommand } from '@sponcam/core';
+import { createJob, type GeometryRef, type JobCommand, setModel, writeSpon } from '@sponcam/core';
 import { describe, expect, it } from 'vitest';
 import { FileSession, type FileSessionOptions } from '../src/fileSession';
 import { ToolLibraryFile } from '../src/library';
@@ -118,5 +118,22 @@ describe('FileSession', () => {
     const { model, stock } = await s.boxes();
     expect(stock!.max.x - stock!.min.x).toBeGreaterThan(model!.max.x - model!.min.x);
     expect(await s.previewSvg({ view: 'iso' })).toContain('<g id="op-0"');
+  });
+
+  it('saves over an existing file through a temporary file (finding 5)', async () => {
+    const s = await profiledDxf();
+    const dir = tempDir();
+    const path = await s.save(join(dir, 'part'));
+    await s.apply([{ type: 'renameJob', name: 'Renamed' }]);
+    expect(await s.save()).toBe(path);
+    expect(readdirSync(dir)).toEqual(['part.spon']);
+    expect((await (await FileSession.open(path, options())).job()).name).toBe('Renamed');
+  });
+
+  it('names the file when its model cannot be loaded (finding 9)', async () => {
+    const job = setModel(createJob('Bad'), { sourceName: 'bad.stl', blobId: 'b1', kind: 'mesh', importUnits: 'mm', format: 'stl' });
+    const path = join(tempDir(), 'bad.spon');
+    writeFileSync(path, writeSpon(job, { b1: new TextEncoder().encode('not an stl') }));
+    await expect(FileSession.open(path, options())).rejects.toThrow(`${path}: `);
   });
 });

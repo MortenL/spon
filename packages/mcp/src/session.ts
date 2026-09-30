@@ -35,7 +35,7 @@ export interface LibraryImportResult { added: number; updated: number; skipped: 
 export interface ToolLibraryAccess {
   list(): Promise<Tool[]>;
   add(tool: Tool): Promise<void>;
-  importFile(fileName: string, bytes: Uint8Array): Promise<LibraryImportResult>;
+  importFile(fileName: string, bytes: Uint8Array, label?: string): Promise<LibraryImportResult>;
 }
 
 /** One open job: a .spon file on disk (FileSession) or, in phase 2, the browser tab. */
