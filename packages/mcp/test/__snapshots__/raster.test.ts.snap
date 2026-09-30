@@ -1,0 +1,7 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`svgToPng > renders the front view deterministically 1`] = `"d9465eb245f1b2d04685a140f4c183e2241ae377028a360c19ce4f19f09c7e73"`;
+
+exports[`svgToPng > renders the iso view deterministically 1`] = `"2b4afb01c36ea4cd3f3dd6e3a1baca214297c34b7d60123c8ab8c10fc1413a0d"`;
+
+exports[`svgToPng > renders the top view deterministically 1`] = `"d60e8b0ee3611de118208f7009761b060cd16e7ea1dd62941dbd954f9c3d3881"`;
