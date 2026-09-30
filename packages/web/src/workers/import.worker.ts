@@ -1,9 +1,8 @@
 import {
-  type AnalysisContext, type AnalysisResult, analyzeTable, type CamGeometry, type CamRun, type ImportResult, importResultTransferables, type Job,
+  type AnalysisContext, type AnalysisResult, analyzeTable, type CamGeometry, type CamRun, type ImportResult, importModel, importResultTransferables, type Job,
   type MotionTable, type ParsedProgram, parsedProgramTransferables, parseProgram, PipelineCache, type ProgramContext, runPipeline,
 } from '@sponcam/core';
 import * as Comlink from 'comlink';
-import { importModel } from './modelImport';
 import { loadOcct } from './occtReader';
 
 let camGeometry: CamGeometry | null = null;
@@ -11,7 +10,7 @@ let pipeline = new PipelineCache();
 
 const api = {
   async import(fileName: string, bytes: Uint8Array, body?: number): Promise<ImportResult> {
-    const result = await importModel(fileName, bytes, body);
+    const result = await importModel(fileName, bytes, body, loadOcct);
     return Comlink.transfer(result, importResultTransferables(result));
   },
   /** Loads the STEP/IGES reader ahead of reading, so the UI can say so; a no-op once loaded. */

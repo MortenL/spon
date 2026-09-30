@@ -70,3 +70,4 @@ export * from './pipeline/model';
 export * from './pipeline/importFlow';
 export * from './pipeline/run';
 export * from './pipeline/export';
+export * from './pipeline/readModel';

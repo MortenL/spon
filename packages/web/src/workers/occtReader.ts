@@ -1,19 +1,4 @@
-import type { OcctResult } from '@sponcam/core';
-
-/** Tessellation settings. Fixed, so the same file always gives the same triangles (face references depend on it). */
-export const OCCT_PARAMS = {
-  linearUnit: 'millimeter',
-  linearDeflectionType: 'absolute_value',
-  linearDeflection: 0.01,
-  angularDeflection: (0.5 * Math.PI) / 180,
-} as const;
-
-export type OcctParams = typeof OCCT_PARAMS;
-
-export interface OcctReader {
-  ReadStepFile(bytes: Uint8Array, params: OcctParams): OcctResult;
-  ReadIgesFile(bytes: Uint8Array, params: OcctParams): OcctResult;
-}
+import type { OcctReader } from '@sponcam/core';
 
 let reader: Promise<OcctReader> | null = null;
 
