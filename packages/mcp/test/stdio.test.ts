@@ -24,6 +24,29 @@ describe('spon-mcp over stdio', () => {
     expect(bundle).not.toContain('occt-import-js.wasm');
   });
 
+  it('keeps the stream clean when reading IGES (occt-import-js prints to stdout by default)', async () => {
+    const dir = tempDir();
+    copyFileSync(fixturePath('box.iges'), join(dir, 'box.iges'));
+    const env = Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined));
+    const transport = new StdioClientTransport({
+      command: process.execPath, args: [DIST], cwd: dir, env: { ...env, SPON_TOOL_LIBRARY: join(dir, 'tools.json') }, stderr: 'pipe',
+    });
+    const errors: Error[] = [];
+    const client = new Client({ name: 'spon-e2e', version: '0.0.0' });
+    client.onerror = (e) => errors.push(e);
+    transport.onerror = (e) => errors.push(e);
+    await client.connect(transport);
+    try {
+      await client.callTool({ name: 'new_job', arguments: { name: 'Iges' } });
+      const r = (await client.callTool({ name: 'import_model', arguments: { path: 'box.iges' } })) as CallToolResult;
+      expect(r.isError).toBeFalsy();
+      await client.callTool({ name: 'session_info', arguments: {} });
+      expect(errors.map((e) => e.message)).toEqual([]);
+    } finally {
+      await client.close();
+    }
+  }, 120_000);
+
   it('runs the Milestone 3 flow: DXF → profile with tabs, pocket, drill → GRBL → export and save', async () => {
     const dir = tempDir();
     copyFileSync(fixturePath('cam-part.dxf'), join(dir, 'cam-part.dxf'));

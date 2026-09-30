@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { cadImport, importModel, type OcctResult } from '@sponcam/core';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { loadNodeOcct } from '../src/occt';
 import { fixture, fixturePath } from './helpers';
 
@@ -21,6 +21,20 @@ describe('loadNodeOcct', () => {
     expect(bodies.ok && bodies.kind === 'bodies' && bodies.bodies.length).toBe(2);
     const iges = await importModel('box.iges', fixture('box.iges'), undefined, loadNodeOcct);
     expect(iges.ok && iges.kind === 'mesh' && iges.source?.format).toBe('iges');
+  });
+
+  it('never writes to stdout (it carries the MCP protocol)', async () => {
+    // Emscripten binds console.log when the module starts, so spy first and load a fresh reader
+    vi.resetModules();
+    const { loadNodeOcct: fresh } = await import('../src/occt');
+    const spies = [vi.spyOn(process.stdout, 'write'), vi.spyOn(console, 'log'), vi.spyOn(console, 'info')];
+    try {
+      await importModel('box.iges', fixture('box.iges'), undefined, fresh);
+      await importModel('bad.step', new TextEncoder().encode('ISO-10303-21;\nnot a step file\n'), undefined, fresh);
+      for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
   });
 
   it('loads the reader once per process', () => {
