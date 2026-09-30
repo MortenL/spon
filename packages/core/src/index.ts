@@ -71,3 +71,6 @@ export * from './pipeline/importFlow';
 export * from './pipeline/run';
 export * from './pipeline/export';
 export * from './pipeline/readModel';
+export * from './preview/project';
+export * from './preview/simplify';
+export * from './preview/svg';
