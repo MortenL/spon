@@ -1,11 +1,11 @@
 ---
 name: spon-dev
-description: How to build, test and verify the Spon CAM tool (pnpm monorepo with @sponcam/core and @sponcam/web). Use before running tests, typechecking, building, running Playwright, regenerating fixtures, or when unsure which command verifies a change.
+description: How to build, test and verify the Spon CAM tool (pnpm monorepo with @sponcam/core, @sponcam/web and @sponcam/mcp). Use before running tests, typechecking, building, running Playwright, regenerating fixtures, or when unsure which command verifies a change.
 ---
 
 # Spon development workflow
 
-Spon is a browser-only CAM tool: `packages/core` (framework-free TypeScript: units, geometry, STL/DXF import, job model, `.spon` IO) and `packages/web` (Vite + React + react-three-fiber app).
+Spon is a browser-only CAM tool: `packages/core` (framework-free TypeScript: units, geometry, STL/DXF import, job model, `.spon` IO), `packages/web` (Vite + React + react-three-fiber app) and `packages/mcp` (the MCP server; Node, stdio).
 
 Authoritative docs:
 - Spec: `docs/superpowers/specs/2026-09-27-cam-foundation-import-setup-design.md`
@@ -18,6 +18,9 @@ Authoritative docs:
 | Install | `pnpm install` |
 | Core tests | `pnpm --filter @sponcam/core test` (focused: append a file-name filter, e.g. `test dxf`) |
 | Web unit tests | `pnpm --filter @sponcam/web test` |
+| MCP tests | `pnpm --filter @sponcam/mcp test` (the stdio test builds the bundle first) |
+| Build the MCP server | `pnpm mcp:build` → `packages/mcp/dist/spon-mcp.js` |
+| Register it with Claude Code | `claude mcp add spon -- node <repo>/packages/mcp/dist/spon-mcp.js` |
 | Typecheck everything | `pnpm typecheck` |
 | Build the app | `pnpm build` |
 | Dev server | `pnpm dev` → http://localhost:5173 |
@@ -32,5 +35,7 @@ Before claiming a change works: run the focused tests for the files you touched,
 - Stored lengths are mm, stored angles degrees; convert only at the UI boundary (`formatLength` / `parseLength`).
 - Job changes go through pure functions in `core/src/job/update.ts` and the store's `commit()` so undo works.
 - TypeScript runs with `verbatimModuleSyntax`: use `import type` for type-only imports.
+- The MCP server must never write to stdout (it carries the protocol): log with `log`/`debugLog` from `packages/mcp/src/log.ts`.
+- Tool failures are `isError` results thrown as `SessionError`/`CommandError` inside `guarded`, never protocol errors.
 - Commits end with the `Co-Authored-By:` trailer the session specifies.
 - Windows dev machine: commands must work in Git Bash and PowerShell; the repo normalises to LF via `.gitattributes`.
