@@ -1,6 +1,6 @@
 import {
-  type Adjacency, applyCommand, type CadBodySummary, type CadFormat, type CadSource, createJob, type Drawing, type GeometryCatalog, type Job,
-  type JobCommand, type LengthUnit, type Mesh, type MeshDiagnostics, type NewModel, type ParsedProgram, type ProgramRef, setModel, type Vec3,
+  applyCommand, type CadBodySummary, type CadFormat, createJob, type GeometryCatalog, type Job,
+  type JobCommand, type LengthUnit, type ModelGeometry, type NewModel, type ParsedProgram, type ProgramRef, setModel, type Vec3,
 } from '@sponcam/core';
 import { useStore } from 'zustand';
 import { createStore, type StoreApi } from 'zustand/vanilla';
@@ -10,9 +10,7 @@ import { allPrograms } from './programList';
 
 export const UNDO_LIMIT = 100;
 
-export type ModelGeometry =
-  | { kind: 'mesh'; mesh: Mesh; adjacency: Adjacency; diagnostics: MeshDiagnostics; rawPoints: Float32Array; source?: CadSource }
-  | { kind: 'drawing'; drawing: Drawing; rawPoints: Float32Array };
+export type { ModelGeometry } from '@sponcam/core';
 
 export type PickMode = 'none' | 'face' | 'edge';
 export type ViewPreset = 'fit' | 'top' | 'front' | 'right' | 'iso';

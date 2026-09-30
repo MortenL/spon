@@ -1,9 +1,9 @@
+import { defaultBody } from '@sponcam/core';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { formatSize } from '@/panels/format';
 import { cancelPendingBodies, importPendingBody } from '@/state/documents';
-import { defaultBody } from '@/state/importFlow';
 import { useApp } from '@/state/store';
 
 /** Asks which body of a multi-body STEP/IGES file becomes the model. */

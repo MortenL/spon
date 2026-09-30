@@ -1,9 +1,8 @@
-import type { ProgramRef } from '@sponcam/core';
+import { programContext, type ProgramRef } from '@sponcam/core';
 import { toast } from 'sonner';
 import type { StoreApi } from 'zustand/vanilla';
 import { generateInWorker, setCamModelInWorker, workerEpoch } from '../workers/importClient';
 import type { CamFile, CamRun, OperationSummary } from './camTypes';
-import { programContext } from './programContext';
 import { type AppState, appStore, type ModelGeometry, type ProgramData } from './store';
 
 export const GEN_PREFIX = 'gen:';

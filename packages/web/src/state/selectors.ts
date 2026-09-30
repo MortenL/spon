@@ -1,6 +1,5 @@
-import { type BBox, type Placement, stockBox, type Vec3, wcsPoint } from '@sponcam/core';
+import { type BBox, type Placement, placementFor, stockBox, type Vec3, wcsPoint } from '@sponcam/core';
 import { useMemo } from 'react';
-import { placementFor } from './placement';
 import { useApp } from './store';
 
 export function usePlacement(): Placement | null {

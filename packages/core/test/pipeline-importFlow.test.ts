@@ -1,9 +1,8 @@
 import { readFileSync } from 'node:fs';
-import { cadImport, importFile, type OcctResult } from '@sponcam/core';
 import { describe, expect, it } from 'vitest';
-import { defaultBody, importStep } from './importFlow';
+import { cadImport, defaultBody, importFile, importStep, type OcctResult } from '../src';
 
-const recorded = (name: string): OcctResult => JSON.parse(readFileSync(new URL(`../../../core/test/fixtures/${name}.occt.json`, import.meta.url), 'utf8'));
+const recorded = (name: string): OcctResult => JSON.parse(readFileSync(new URL(`./fixtures/${name}.occt.json`, import.meta.url), 'utf8'));
 const STL = new TextEncoder().encode(['solid t', 'facet normal 0 0 1', 'outer loop', 'vertex 0 0 0', 'vertex 2 0 0', 'vertex 0 1 0', 'endloop', 'endfacet', 'endsolid t'].join('\n'));
 
 describe('importStep', () => {

@@ -1,10 +1,9 @@
-import { bboxSize, type MotionTable, type ParsedProgram, type ProgramRef } from '@sponcam/core';
+import { bboxSize, type MotionTable, type ParsedProgram, type ProgramRef, programOrigin } from '@sponcam/core';
 import { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { splitVertex, usePlaybackCursor, useTimeline } from '@/gcode/playback';
 import { buildToolpathBuffers, toolpathGeometryKey } from '@/gcode/toolpath';
 import type { CamFile } from '@/state/camTypes';
-import { programOrigin } from '@/state/programContext';
 import { allPrograms } from '@/state/programList';
 import { useStockBox } from '@/state/selectors';
 import { useApp } from '@/state/store';

@@ -1,11 +1,10 @@
-import { allDiagnostics, bboxSize, formatLength, v3add, type CamCode, type Diagnostic } from '@sponcam/core';
+import { allDiagnostics, bboxSize, formatLength, programOrigin, v3add, type CamCode, type Diagnostic } from '@sponcam/core';
 import { CircleX, Info, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { seekToLine, useTimeline } from '@/gcode/playback';
 import { formatDuration, formatPoint, formatSize } from '@/panels/format';
 import type { InspectorTab } from '@/state/camTypes';
 import { findProgram } from '@/state/programList';
-import { programOrigin } from '@/state/programContext';
 import { appStore, useApp } from '@/state/store';
 
 const ICON = { error: CircleX, warning: TriangleAlert, info: Info } as const;

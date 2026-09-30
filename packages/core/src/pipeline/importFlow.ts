@@ -1,11 +1,12 @@
-import type { CadBodySummary, CadFormat, ImportResult, LengthUnit } from '@sponcam/core';
-import type { SuccessfulImport } from './geometry';
+import type { CadBodySummary, CadFormat, ImportResult } from '../import/importFile';
+import type { LengthUnit } from '../units/units';
+import type { SuccessfulImport } from './model';
 
-/** What the import flow does with a worker result. */
+/** What an import flow does with a reader result. */
 export type ImportStep =
   | { kind: 'error'; error: string }
   | { kind: 'chooseBody'; format: CadFormat; bodies: CadBodySummary[] }
-  /** `units` null: ask with the units dialog. */
+  /** `units` null: the units must be asked for. */
   | { kind: 'ready'; result: SuccessfulImport; units: LengthUnit | null };
 
 export function importStep(result: ImportResult): ImportStep {

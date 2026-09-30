@@ -1,14 +1,13 @@
 import {
   camContext, type CamContext, circleOf, type DxfPathRef, drawingPath, drawingPathToProgram, flattenPath, type GeometryRef,
   HEIGHT_NAMES, type HeightName, type Job, type LapPosition, type Operation, type OpOverlays, type Path2D, type ResolvedHeights,
-  resolveFaceRef, type Vec2, type Vec3,
+  programContext, programOrigin, resolveFaceRef, type Vec2, type Vec3,
 } from '@sponcam/core';
 import { Line } from '@react-three/drei';
 import type { ThreeEvent } from '@react-three/fiber';
 import { useEffect, useMemo, useState } from 'react';
 import * as THREE from 'three';
 import { runCommand } from '@/state/camView';
-import { programContext, programOrigin } from '@/state/programContext';
 import { type ModelGeometry, useApp } from '@/state/store';
 import { regionShape } from './convert';
 import { noRaycast } from './SceneObjects';

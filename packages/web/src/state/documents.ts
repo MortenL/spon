@@ -1,14 +1,12 @@
 import {
   type BlobMap,
-  CAD_LABEL, cadFormat, createJob, fileKind, type ImportResult, type Job, type LengthUnit, MAX_SOFT_IMPORT_BYTES, migrateJob, modelFilePath,
-  type ModelRef, readSpon, SPON_EXTENSION, writeSpon,
+  CAD_LABEL, cadFormat, createJob, fileKind, type ImportResult, importStep, type Job, type LengthUnit, MAX_SOFT_IMPORT_BYTES, migrateJob, modelFilePath,
+  type ModelRef, readSpon, SPON_EXTENSION, suggestedUnits, toModelGeometry, writeSpon,
 } from '@sponcam/core';
 import { toast } from 'sonner';
 import { cadReaderLoaded, importInWorker, loadCadReaderInWorker } from '../workers/importClient';
 import { getBlob, loadCurrentJob } from './autosave';
 import { downloadBytes, pickOpenFile, pickSaveHandle, safeFileName, supportsFsAccess, writeToHandle } from './fileio';
-import { suggestedUnits, toModelGeometry } from './geometry';
-import { importStep } from './importFlow';
 import { importProgramBytes, isProgramFile, loadPrograms, pruneBlobs, storeBlob } from './programs';
 import { appStore, type ModelGeometry, type PendingImport } from './store';
 

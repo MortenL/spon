@@ -1,10 +1,9 @@
-import { addProgram, decodeProgramText, type Job, jobBlobIds } from '@sponcam/core';
+import { addProgram, decodeProgramText, type Job, jobBlobIds, programContext } from '@sponcam/core';
 import { toast } from 'sonner';
 import type { StoreApi } from 'zustand/vanilla';
 import { analyzeInWorker, parseProgramInWorker } from '../workers/importClient';
 import { putBlob, removeOrphanBlobs } from './autosave';
 import { GEN_PREFIX } from './cam';
-import { programContext } from './programContext';
 import { type AppState, appStore } from './store';
 
 export const PROGRAM_EXTENSIONS = ['.nc', '.ngc', '.gcode', '.tap', '.cnc'] as const;
