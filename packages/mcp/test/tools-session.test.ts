@@ -75,4 +75,10 @@ describe('session tools', () => {
     await call('new_job');
     expect(data(await call('import_program', { path: 'drill-arc.nc' })).program).toMatchObject({ name: 'drill-arc.nc' });
   });
+
+  it('tells a DXF import to set the stock thickness (finding 4)', async () => {
+    const { call } = await connect({}, ['cam-part.dxf']);
+    await call('new_job');
+    expect(text(await call('import_model', { path: 'cam-part.dxf' }))).toContain('setStock');
+  });
 });

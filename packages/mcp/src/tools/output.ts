@@ -81,12 +81,13 @@ export function registerOutputTools(server: McpServer, ctx: ToolContext): void {
     for (const id of a.operations ?? []) if (!job.operations.some((o) => o.id === id)) throw new SessionError(`No operation with id ${id}`);
     const view = a.view ?? 'top';
     const png = await ctx.deps.rasterize(await session.previewSvg({ view, size: a.size, operations: a.operations }));
-    const shown = a.operations?.length ?? job.operations.filter((o) => o.enabled).length;
+    const drawn = job.operations.filter((o) => o.enabled && (!a.operations || a.operations.includes(o.id))).map((o) => o.id);
     return {
       content: [
         { type: 'image', data: Buffer.from(png).toString('base64'), mimeType: 'image/png' },
-        { type: 'text', text: `${view} view of "${job.name}" with ${shown} operation(s).` },
+        { type: 'text', text: `${view} view of "${job.name}" with ${drawn.length} operation(s).` },
       ],
+      structuredContent: { view, operations: drawn },
     };
   }));
 
@@ -101,6 +102,7 @@ export function registerOutputTools(server: McpServer, ctx: ToolContext): void {
     if (!file) throw new SessionError(`No posted file ${a.file}. Files: ${run.files.map((f) => f.name).join(', ')}`);
     const all = file.text.split('\n');
     if (all.at(-1) === '') all.pop();
+    if (a.lines && a.lines[1] < a.lines[0]) throw new SessionError('lines must be [from, to] with from <= to');
     const from = a.lines?.[0] ?? 1;
     if (from > all.length) throw new SessionError(`${file.name} has ${all.length} lines`);
     const to = Math.min(all.length, a.lines?.[1] ?? Infinity, from + MAX_GCODE_LINES - 1);

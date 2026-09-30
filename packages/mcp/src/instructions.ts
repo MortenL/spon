@@ -7,7 +7,7 @@ Units and coordinates
 Typical flow
 1. new_job (or open_job for an existing .spon).
 2. import_model with an STL, STEP, IGES or DXF file. If it answers needsUnits or needsBody, call it again with units or body.
-3. Set up with apply_commands: rotateQuarter / layFlat / setZSpin to orient, setStock, setWcs, applyMachinePreset, setPost { dialect: "grbl" | "linuxcnc" | "fanuc" }.
+3. Set up with apply_commands: rotateQuarter / layFlat / setZSpin to orient, setStock, setWcs, applyMachinePreset, setPost { dialect: "grbl" | "linuxcnc" | "fanuc" }. A DXF drawing is flat: give the stock its material thickness with setStock (auto stock margin zBottom = thickness).
 4. describe_geometry lists what can be machined, with short handles: faces F1, F2… (top down, horizontal and facing up), their loops F1.L0 (outer), F1.L1…, holes H1…, and DXF contours C1…. Call it again after importing or reorienting.
 5. add_operation for each operation: type profile, pocket or drill; a tool from list_tools (job tool id, T number, or library tool id); geometry handles; params.
 6. generate: read each operation's status and diagnostics and fix errors with apply_commands (updateOperation).

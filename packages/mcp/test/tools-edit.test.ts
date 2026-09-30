@@ -84,4 +84,26 @@ describe('editing tools', () => {
     expect(r.isError).toBe(true);
     expect(text(r)).toContain('stepovr');
   });
+
+  it('retries a "T6" string as T number 6 (finding 3)', async () => {
+    const { call } = await dxfJob();
+    const outline = handleOn(data(await call('describe_geometry')), 'OUTLINE');
+    const number = (await data(await call('add_operation', { type: 'profile', tool: 6, geometry: [outline] })).operation.toolId) as string;
+    for (const tool of ['T6', 't6', '6']) {
+      const r = await call('add_operation', { type: 'profile', tool, geometry: [outline] });
+      expect(r.isError, text(r)).toBeFalsy();
+      expect(data(r).operation.toolId).toBe(number);
+    }
+  });
+
+  it('words the empty result by filter (finding 8)', async () => {
+    const { call } = await dxfJob();
+    expect(text(await call('describe_geometry', { filter: 'faces' }))).toContain('No up-facing horizontal faces in this orientation.');
+    const stl = await connect({}, ['box-20x10x5.stl']);
+    await stl.call('new_job');
+    await stl.call('import_model', { path: 'box-20x10x5.stl', units: 'mm' });
+    expect(text(await stl.call('describe_geometry', { filter: 'holes' }))).toContain('No holes found.');
+    expect(text(await stl.call('describe_geometry', { filter: 'holes' }))).toContain('No holes found.');
+    expect(text(await stl.call('describe_geometry', { filter: 'contours' }))).toContain('No contours (only DXF drawings have contours).');
+  });
 });

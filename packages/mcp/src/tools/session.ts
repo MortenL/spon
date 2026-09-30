@@ -23,7 +23,9 @@ function importText(name: string, o: Exclude<ImportOutcome, { status: 'error' }>
       return [
         `Imported ${name} as a ${o.kind}, ${size(o.size)} mm (file units: ${o.units}).`,
         ...o.warnings.map((w) => `Warning: ${w}`),
-        'Next: orient and set up with apply_commands if needed, then describe_geometry.',
+        o.kind === 'drawing'
+          ? 'This drawing is flat: set the stock thickness with apply_commands setStock (margin zBottom), then describe_geometry.'
+          : 'Next: orient and set up with apply_commands if needed, then describe_geometry.',
       ].join('\n');
     case 'needsUnits':
       return `${name} does not say which units it uses. In file units it measures ${size(o.rawSize)}; ${o.suggested} looks likely. Call import_model again with units ("mm" or "in").`;

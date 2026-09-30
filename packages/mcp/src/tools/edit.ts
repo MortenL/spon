@@ -12,15 +12,30 @@ const box = (b: BBox | null) =>
 
 /** Finds the tool for add_operation; a library tool is copied into the job by pushing an addTool command. */
 async function resolveTool(job: Job, session: JobSession, tool: string | number, commands: JobCommand[]): Promise<string> {
-  const match = (t: { id: string; number: number }) => (typeof tool === 'number' ? t.number === tool : t.id === tool);
-  const inJob = job.tools.find(match);
-  if (inJob) return inJob.id;
-  const fromLibrary = (await session.tools.list()).find(match);
-  if (!fromLibrary) throw new SessionError(`No tool ${typeof tool === 'number' ? `T${tool}` : tool} in the job or the library — see list_tools`);
-  commands.push({ type: 'addTool', tool: fromLibrary });
-  return fromLibrary.id;
+  type Id = { id: string; number: number };
+  const find = async (match: (t: Id) => boolean): Promise<string | null> => {
+    const inJob = job.tools.find(match);
+    if (inJob) return inJob.id;
+    const fromLibrary = (await session.tools.list()).find(match);
+    if (!fromLibrary) return null;
+    commands.push({ type: 'addTool', tool: fromLibrary });
+    return fromLibrary.id;
+  };
+  const found = await find(typeof tool === 'number' ? (t) => t.number === tool : (t) => t.id === tool);
+  if (found) return found;
+  // "T6" or "6" that is no tool id means T number 6
+  const n = typeof tool === 'string' ? /^t?(\d+)$/i.exec(tool.trim()) : null;
+  const byNumber = n ? await find((t) => t.number === Number(n[1])) : null;
+  if (byNumber) return byNumber;
+  throw new SessionError(`No tool ${typeof tool === 'number' ? `T${tool}` : tool} in the job or the library — see list_tools`);
 }
 
+const EMPTY = {
+  faces: 'No up-facing horizontal faces in this orientation.',
+  holes: 'No holes found.',
+  contours: 'No contours (only DXF drawings have contours).',
+  all: 'Nothing to pick here (faces must be horizontal and face up).',
+};
 const describeShape = { filter: z.enum(['faces', 'holes', 'contours']).optional().describe('Only list one kind of geometry') };
 const applyShape = {
   commands: z.array(jobCommandSchema).min(1).describe('Job commands, applied in order, all or nothing'),
@@ -48,7 +63,7 @@ export function registerEditTools(server: McpServer, ctx: ToolContext): void {
     const handled = state.handles.assign(catalog);
     const shown: HandledCatalog = a.filter ? { faces: [], holes: [], contours: [], [a.filter]: handled[a.filter] } : handled;
     const { model, stock } = await session.boxes();
-    const listing = catalogText(shown) || 'Nothing to pick here (faces must be horizontal and face up).';
+    const listing = catalogText(shown) || EMPTY[a.filter ?? 'all'];
     return ok(`Model box: ${box(model)}. Stock box: ${box(stock)}.\n${listing}`, { ...shown, modelBox: model, stockBox: stock });
   }));
 

@@ -77,4 +77,24 @@ describe('output tools', () => {
     const prompt = await client.getPrompt({ name: 'spon-cam-basics' });
     expect((prompt.messages[0].content as { text: string }).text).toContain('import_model');
   });
+
+  it('rejects a reversed G-code range (finding 7)', async () => {
+    const { call } = await profiled();
+    await call('generate');
+    const r = await call('get_gcode', { lines: [5, 2] });
+    expect(r.isError).toBe(true);
+    expect(text(r)).toBe('lines must be [from, to] with from <= to');
+  });
+
+  it('counts the operations actually drawn and returns them as structured content (finding 11)', async () => {
+    const { call, op } = await profiled();
+    await call('apply_commands', { commands: [{ type: 'setOperationEnabled', id: op.id, enabled: false }] });
+    const none = await call('render_preview', { operations: [op.id] });
+    expect(text(none)).toContain('with 0 operation(s)');
+    expect(data(none)).toEqual({ view: 'top', operations: [] });
+    await call('apply_commands', { commands: [{ type: 'setOperationEnabled', id: op.id, enabled: true }] });
+    const one = await call('render_preview', { view: 'iso' });
+    expect(text(one)).toContain('with 1 operation(s)');
+    expect(data(one)).toEqual({ view: 'iso', operations: [op.id] });
+  });
 });
