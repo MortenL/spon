@@ -1,0 +1,25 @@
+{
+  "name": "@sponcam/mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": { "spon-mcp": "./dist/spon-mcp.js" },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.31.0",
+    "@resvg/resvg-wasm": "2.6.2",
+    "@sponcam/core": "workspace:^",
+    "occt-import-js": "0.0.23",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "esbuild": "^0.28.2",
+    "typescript": "^7",
+    "vitest": "^5"
+  }
+}
