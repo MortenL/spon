@@ -1,0 +1,82 @@
+import {
+  type Boxes, type ExportOutcome, fromBase64, type GeometryCatalog, type ImportOutcome, type Job, type JobCommand, type PreviewOptions, type ProgramRef,
+  type RunReport, type SessionInfo, toBase64,
+} from '@sponcam/core';
+import { withSponExtension, writeFileAtomic } from '../files';
+import { type JobSession, type ModelInput, SessionError, type ToolLibraryAccess } from '../session';
+import type { TabConnection } from './connection';
+
+const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+/** The job open in the browser tab. Every call is a request to the tab; each apply is one undo step there. */
+export class LiveSession implements JobSession {
+  readonly kind = 'live' as const;
+  readonly tools: ToolLibraryAccess;
+
+  constructor(readonly tab: TabConnection) {
+    this.tools = {
+      list: () => tab.request('tools.list', {}),
+      add: async (tool) => {
+        await tab.request('tools.add', { tool });
+      },
+      importFile: (fileName, bytes) => tab.request('tools.import', { fileName, bytes: toBase64(bytes) }),
+    };
+  }
+
+  describe(): Promise<SessionInfo> {
+    return this.tab.request('describe', {});
+  }
+
+  job(): Promise<Job> {
+    return this.tab.request('job', {});
+  }
+
+  apply(commands: readonly JobCommand[], label?: string): Promise<Job> {
+    return this.tab.request('apply', { commands: [...commands], label: label ?? `${commands.length} change(s)` });
+  }
+
+  importModel(input: ModelInput): Promise<ImportOutcome> {
+    return this.tab.request('importModel', {
+      fileName: input.fileName, bytes: toBase64(input.bytes),
+      ...(input.units ? { units: input.units } : {}), ...(input.body !== undefined ? { body: input.body } : {}),
+    });
+  }
+
+  run(): Promise<RunReport> {
+    return this.tab.request('run', {});
+  }
+
+  catalog(): Promise<GeometryCatalog | null> {
+    return this.tab.request('catalog', {});
+  }
+
+  boxes(): Promise<Boxes> {
+    return this.tab.request('boxes', {});
+  }
+
+  previewSvg(options: PreviewOptions): Promise<string> {
+    return this.tab.request('previewSvg', { ...options, ...(options.operations ? { operations: [...options.operations] } : {}) });
+  }
+
+  /** Without a path: the tab writes through its own file handle and its file name comes back. With a path: the server writes the tab's bytes. */
+  async save(path?: string): Promise<string> {
+    if (path === undefined) return (await this.tab.request('save', {})).name;
+    const { bytes, token } = await this.tab.request('saveBytes', {});
+    const file = withSponExtension(path);
+    try {
+      await writeFileAtomic(file, fromBase64(bytes));
+    } catch (err) {
+      throw new SessionError(`Could not write ${file}: ${message(err)}`);
+    }
+    await this.tab.request('markSaved', { token });
+    return file;
+  }
+
+  exportGcode(): Promise<ExportOutcome> {
+    return this.tab.request('exportGcode', {});
+  }
+
+  importProgram(fileName: string, bytes: Uint8Array): Promise<ProgramRef> {
+    return this.tab.request('importProgram', { fileName, bytes: toBase64(bytes) });
+  }
+}

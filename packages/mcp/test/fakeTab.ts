@@ -1,5 +1,6 @@
-import { BRIDGE_PROTOCOL } from '@sponcam/core';
+import { BRIDGE_PROTOCOL, fromBase64, toBase64 } from '@sponcam/core';
 import { WebSocket } from 'ws';
+import type { FileSession } from '../src/fileSession';
 
 export type Handle = (method: string, params: any) => unknown;
 
@@ -53,4 +54,31 @@ export function openTab(port: number, options: FakeTabOptions = {}): FakeTab {
     }
   });
   return { socket, opened, welcomed, closed, methods, send };
+}
+
+/** Answers bridge requests from a FileSession, so tests drive the whole wire path against real CAM results. */
+export function sessionHandler(session: FileSession): { handle: Handle; marked: number[] } {
+  const marked: number[] = [];
+  const handle: Handle = async (method, p) => {
+    switch (method) {
+      case 'describe': return { ...(await session.describe()), kind: 'live' };
+      case 'job': return session.job();
+      case 'apply': return session.apply(p.commands);
+      case 'importModel': return session.importModel({ fileName: p.fileName, bytes: fromBase64(p.bytes), units: p.units, body: p.body });
+      case 'run': return session.run();
+      case 'catalog': return session.catalog();
+      case 'boxes': return session.boxes();
+      case 'previewSvg': return session.previewSvg(p);
+      case 'save': throw new Error('This tab has no file yet — give a path');
+      case 'saveBytes': return { bytes: toBase64(new TextEncoder().encode('spon bytes')), token: 7 };
+      case 'markSaved': marked.push(p.token); return { saved: true };
+      case 'exportGcode': return session.exportGcode();
+      case 'importProgram': return session.importProgram(p.fileName, fromBase64(p.bytes));
+      case 'tools.list': return session.tools.list();
+      case 'tools.add': await session.tools.add(p.tool); return {};
+      case 'tools.import': return session.tools.importFile(p.fileName, fromBase64(p.bytes));
+      default: throw new Error(`Unknown method ${method}`);
+    }
+  };
+  return { handle, marked };
 }
