@@ -14,39 +14,41 @@ type Token = { cmd: string } | { num: number };
 
 function tokenize(d: string): { tokens: Token[]; error: string | null } {
   const tokens: Token[] = [];
-  const re = /\s*,?\s*(?:([MmLlHhVvCcSsQqTtAaZz])|([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?))/y;
+  const sep = /[\s,]*/y;
+  const cmdRe = /[MmLlHhVvCcSsQqTtAaZz]/y;
+  const numRe = /[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/y;
   let i = 0;
-  while (i < d.length) {
-    if (/^[\s,]*$/.test(d.slice(i))) break;
-    re.lastIndex = i;
-    const m = re.exec(d);
-    if (!m) return { tokens, error: `Unexpected "${d.slice(i).trim()[0]}" in path data` };
-    tokens.push(m[1] ? { cmd: m[1] } : { num: Number(m[2]) });
-    i = re.lastIndex;
+  let arc = false;
+  let slot = 0;
+  for (;;) {
+    sep.lastIndex = i;
+    sep.exec(d);
+    i = sep.lastIndex;
+    if (i >= d.length) break;
+    cmdRe.lastIndex = i;
+    if (cmdRe.test(d)) {
+      arc = d[i] === 'A' || d[i] === 'a';
+      slot = 0;
+      tokens.push({ cmd: d[i] });
+      i++;
+      continue;
+    }
+    if (arc && (slot % 7 === 3 || slot % 7 === 4)) {
+      // arc flags are single characters and may be glued to the next number
+      if (d[i] !== '0' && d[i] !== '1') return { tokens, error: `Unexpected "${d[i]}" in path data` };
+      tokens.push({ num: Number(d[i]) });
+      i++;
+      slot++;
+      continue;
+    }
+    numRe.lastIndex = i;
+    const m = numRe.exec(d);
+    if (!m) return { tokens, error: `Unexpected "${d[i]}" in path data` };
+    tokens.push({ num: Number(m[0]) });
+    i = numRe.lastIndex;
+    slot++;
   }
   return { tokens, error: null };
-}
-
-/** Re-splits numbers like "011" that hold two arc flags and an argument. */
-function splitArcFlags(d: string): string {
-  return d.replace(/([Aa])([^MmLlHhVvCcSsQqTtZz]*)/g, (_, cmd: string, args: string) => {
-    const nums = args.match(/[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/g) ?? [];
-    const out: string[] = [];
-    let slot = 0;
-    for (let n of nums) {
-      while (n.length) {
-        if (slot % 7 === 3 || slot % 7 === 4) {
-          out.push(n[0]);
-          n = n.slice(1);
-        } else {
-          out.push(n);
-          n = '';
-        }
-        slot++;
-      }
-    }
-    return `${cmd} ${out.join(' ')} `;
-  });
 }
 
 /** Points of an elliptical arc from the SVG endpoint parameterisation (spec F.6.5), or null for a straight line. */
@@ -83,7 +85,7 @@ function arcCenter(p0: Vec2, rx: number, ry: number, phiDeg: number, large: numb
  * A syntax error keeps the subpaths read so far.
  */
 export function parsePathData(d: string, m: Affine2D, tol: number): PathDataResult {
-  const { tokens, error } = tokenize(splitArcFlags(d));
+  const { tokens, error } = tokenize(d);
   const paths: Path2D[] = [];
   const similar = isSimilarity(m, 1e-9);
   const mirror = affineDeterminant(m) < 0;
@@ -190,7 +192,9 @@ export function parsePathData(d: string, m: Affine2D, tol: number): PathDataResu
       case 'A': {
         const p1 = pt(args[5], args[6]);
         const a = arcCenter(cur, args[0], args[1], args[2], args[3] ? 1 : 0, args[4] ? 1 : 0, p1);
-        if (!a) line(p1);
+        if (Math.hypot(p1.x - cur.x, p1.y - cur.y) <= 1e-12 * Math.max(1, Math.abs(cur.x), Math.abs(cur.y))) {
+          // an arc whose end equals its start is omitted (SVG F.6.2)
+        } else if (!a) line(p1);
         else if (similar && Math.abs(a.rx - a.ry) <= 1e-9 * Math.max(a.rx, a.ry)) {
           const center = T({ x: a.cx, y: a.cy });
           const s = T(cur);

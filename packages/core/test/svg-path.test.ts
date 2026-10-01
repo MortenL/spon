@@ -97,3 +97,27 @@ describe('shapeToPathData', () => {
     expect(shapeToPathData(el('<text>hi</text>'))).toBeNull();
   });
 });
+
+describe('parsePathData arc edge cases', () => {
+  it('handles mixed-case arcs, glued flags, degenerate arcs, junk and mirroring', () => {
+    const a = parsePathData('M0 0 A5 5 0 0 1 10 0 a5 5 0 0 1 10 0', AFFINE_IDENTITY, 0.01);
+    expect(a.error).toBeNull();
+    expect(kinds(a.paths[0])).toEqual(['arc', 'arc']);
+    close(ends(a.paths[0])[1], { x: 20, y: 0 });
+    const b = parsePathData('M0 0a5 5 0 1010 0', AFFINE_IDENTITY, 0.01);
+    expect(b.error).toBeNull();
+    close(ends(b.paths[0])[1], { x: 10, y: 0 });
+    const c = parsePathData('M3 4 A5 5 0 0 1 3 4 L10 4', AFFINE_IDENTITY, 0.01).paths[0];
+    expect(kinds(c)).toEqual(['line']);
+    close(ends(c)[0], { x: 3, y: 4 });
+    close(ends(c)[1], { x: 10, y: 4 });
+    const d = parsePathData('M0 0 A 5 5 0 0 1 10 0 ? 4', AFFINE_IDENTITY, 0.01);
+    expect(d.error).toMatch(/Unexpected/);
+    expect(d.paths).toHaveLength(1);
+    expect(kinds(d.paths[0])).toEqual(['arc']);
+    const e = parsePathData('M10 0 A10 10 0 0 1 0 10', affineScale(1, -1), 0.01).paths[0];
+    const arc = e.segments[0];
+    expect(arc.kind === 'arc' && arc.sweep).toBeLessThan(0);
+    close(ends(e)[1], { x: 0, y: -10 });
+  });
+});
