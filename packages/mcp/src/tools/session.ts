@@ -4,6 +4,7 @@ import type { Vec3 } from '@sponcam/core';
 import { z } from 'zod';
 import type { ToolContext } from '../context';
 import { FileSession } from '../fileSession';
+import { LiveSession } from '../live/liveSession';
 import { dialectSchema, lengthUnitSchema, machinePresetSchema } from '../schemas';
 import { type ImportOutcome, SessionError, type SessionInfo } from '../session';
 import { NO_JOB } from '../state';
@@ -49,6 +50,7 @@ const newJobShape = {
   discard: z.boolean().optional().describe('Drop unsaved changes to the current job'),
 };
 const openJobShape = { path: z.string().describe('A .spon file'), discard: z.boolean().optional().describe('Drop unsaved changes to the current job') };
+const useLiveShape = { discard: z.boolean().optional().describe('Drop unsaved changes to the current file job') };
 const saveJobShape = { path: z.string().optional().describe('Where to save; .spon is added. Required for the first save.') };
 const importModelShape = {
   path: z.string().describe('An STL, STEP/STP, IGES/IGS or DXF file'),
@@ -67,7 +69,15 @@ export function registerSessionTools(server: McpServer, ctx: ToolContext): void 
     inputSchema: {},
   }, guarded('status', async () => {
     const info = state.session ? await state.session.describe() : null;
-    return ok(info ? statusText(info) : NO_JOB, { session: info, liveTab: null });
+    const bridge = ctx.deps.bridge;
+    const tab = bridge?.tab ?? null;
+    const liveTab = tab ? { title: tab.title, dirty: tab.dirty } : null;
+    const bridgeText = bridge ? bridge.describe() : 'live bridge off';
+    const lines = [
+      info ? statusText(info) : NO_JOB,
+      tab ? `A Spon tab is connected: "${tab.title}"${info?.kind === 'live' ? '' : ' (use_live_tab to drive it)'}.` : `No Spon tab connected (${bridgeText}).`,
+    ];
+    return ok(lines.join('\n'), { session: info, liveTab, bridge: bridgeText });
   }));
 
   server.registerTool('new_job', {
@@ -90,6 +100,23 @@ export function registerSessionTools(server: McpServer, ctx: ToolContext): void 
     state.use(await FileSession.open(ctx.resolvePath(a.path), ctx.sessionOptions()));
     const info = await state.requireSession().describe();
     return ok(`${statusText(info)}\nNext: describe_geometry or generate.`, { session: info });
+  }));
+
+  server.registerTool('use_live_tab', {
+    title: 'Use live tab',
+    description: 'Drive the job open in the Spon web app tab. Every change shows there and is one undo step. Refused while a file job has unsaved changes, unless discard is true.',
+    inputSchema: useLiveShape,
+  }, guarded('use_live_tab', async (a: Args<typeof useLiveShape>) => {
+    const bridge = ctx.deps.bridge;
+    if (!bridge || bridge.state.status !== 'listening') {
+      throw new SessionError(`The live bridge is unavailable${bridge?.state.status === 'unavailable' ? `: ${bridge.state.reason}` : ''}`);
+    }
+    const tab = bridge.tab;
+    if (!tab) throw new SessionError('No Spon tab is connected. In the Spon web app, click "Claude" in the status bar to connect.');
+    await state.ensureCanSwitch(a.discard);
+    state.use(new LiveSession(tab));
+    const info = await state.requireSession().describe();
+    return ok(`${statusText(info)}\nEvery change appears in the tab and is one undo step there.`, { session: info });
   }));
 
   server.registerTool('save_job', {

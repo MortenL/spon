@@ -20,7 +20,7 @@ describe('session tools', () => {
 
   it('says when no job is open', async () => {
     const { call } = await connect();
-    expect(text(await call('status'))).toBe('No job open. Use new_job, open_job or use_live_tab.');
+    expect(text(await call('status'))).toBe('No job open. Use new_job, open_job or use_live_tab.\nNo Spon tab connected (live bridge off).');
     const r = await call('get_job');
     expect(r.isError).toBe(true);
     expect(text(r)).toBe('No job open. Use new_job, open_job or use_live_tab.');

@@ -2,6 +2,8 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type { OcctLoader } from '@sponcam/core';
 import type { FileSessionOptions } from './fileSession';
+import type { LiveBridge } from './live/bridge';
+import { LiveSession } from './live/liveSession';
 import { SessionError, type ToolLibraryAccess } from './session';
 import { ServerState } from './state';
 
@@ -13,6 +15,8 @@ export interface ServerDeps {
   rasterize(svg: string): Promise<Uint8Array>;
   /** A fixed date for posted file headers (tests). */
   postDate?: string;
+  /** The live bridge; null or absent: file sessions only. */
+  bridge?: LiveBridge | null;
 }
 
 export interface ToolContext {
@@ -28,6 +32,10 @@ export interface ToolContext {
 
 export function createContext(deps: ServerDeps): ToolContext {
   const state = new ServerState();
+  // a live session whose tab disconnected or was replaced is no longer a session
+  deps.bridge?.onTabGone((tab) => {
+    if (state.session instanceof LiveSession && state.session.tab === tab) state.clear();
+  });
   const resolvePath = (path: string) => resolve(deps.cwd, path);
   return {
     deps,

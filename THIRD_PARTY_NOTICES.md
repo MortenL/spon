@@ -23,6 +23,7 @@ The MCP server loads these packages from `node_modules` at run time; none of the
 
 - **@modelcontextprotocol/sdk** (MIT) and its dependencies (MIT/ISC/BSD-style).
 - **zod** (MIT).
+- **ws** (MIT), the WebSocket server for the live bridge.
 - **@resvg/resvg-wasm** 2.6.2 (MPL-2.0), unmodified; source at https://github.com/yisibl/resvg-js.
 - **occt-import-js** 0.0.23 (LGPL-2.1), the same package the web app uses (see above), loaded unmodified with its own
   WebAssembly file. To use a different build, replace `packages/mcp/node_modules/occt-import-js` or change the

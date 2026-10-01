@@ -21,4 +21,8 @@ Operation parameters (add_operation params, or updateOperation patch)
 - drill: cycle (drill | dwell | peck | chipbreak), peck, dwellSeconds, diameterFilter { min, max }.
 - feeds: { rpm, feed, plungeFeed, coolant }.
 
+Live mode
+- If the user has the Spon web app open and clicked "Claude" in its status bar, use_live_tab drives that tab instead of a file. Every change appears in the tab and is one undo step there. save_job without a path saves through the tab's own file; with a path the server writes it.
+- status says whether a tab is connected. If the tab closes, the job is no longer open: use new_job / open_job, or ask the user to reconnect.
+
 Always tell the user about export warnings: they do not block the export.`;

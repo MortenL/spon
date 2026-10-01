@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { copyFileSync, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -29,7 +29,7 @@ describe('spon-mcp over stdio', () => {
     copyFileSync(fixturePath('box.iges'), join(dir, 'box.iges'));
     const env = Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined));
     const transport = new StdioClientTransport({
-      command: process.execPath, args: [DIST], cwd: dir, env: { ...env, SPON_TOOL_LIBRARY: join(dir, 'tools.json') }, stderr: 'pipe',
+      command: process.execPath, args: [DIST, '--port', '0'], cwd: dir, env: { ...env, SPON_TOOL_LIBRARY: join(dir, 'tools.json') }, stderr: 'pipe',
     });
     const errors: Error[] = [];
     const client = new Client({ name: 'spon-e2e', version: '0.0.0' });
@@ -40,7 +40,7 @@ describe('spon-mcp over stdio', () => {
       await client.callTool({ name: 'new_job', arguments: { name: 'Iges' } });
       const r = (await client.callTool({ name: 'import_model', arguments: { path: 'box.iges' } })) as CallToolResult;
       expect(r.isError).toBeFalsy();
-      await client.callTool({ name: 'session_info', arguments: {} });
+      await client.callTool({ name: 'status', arguments: {} });
       expect(errors.map((e) => e.message)).toEqual([]);
     } finally {
       await client.close();
@@ -52,7 +52,7 @@ describe('spon-mcp over stdio', () => {
     copyFileSync(fixturePath('cam-part.dxf'), join(dir, 'cam-part.dxf'));
     const env = Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined));
     const transport = new StdioClientTransport({
-      command: process.execPath, args: [DIST], cwd: dir, env: { ...env, SPON_TOOL_LIBRARY: join(dir, 'tools.json') }, stderr: 'pipe',
+      command: process.execPath, args: [DIST, '--port', '0'], cwd: dir, env: { ...env, SPON_TOOL_LIBRARY: join(dir, 'tools.json') }, stderr: 'pipe',
     });
     const client = new Client({ name: 'spon-e2e', version: '0.0.0' });
     await client.connect(transport);
@@ -88,4 +88,17 @@ describe('spon-mcp over stdio', () => {
       await client.close();
     }
   }, 120_000);
+
+  it('exits when stdin closes, although the bridge is listening (review focus 2)', async () => {
+    const child = spawn(process.execPath, [DIST, '--port', '0'], { cwd: tempDir(), stdio: ['pipe', 'pipe', 'pipe'] });
+    let stderr = '';
+    child.stderr.on('data', (d) => { stderr += String(d); });
+    for (let i = 0; i < 100 && !stderr.includes('live bridge listening'); i++) await new Promise((r) => setTimeout(r, 50));
+    expect(stderr).toContain('live bridge listening');
+    const exited = new Promise<number | null>((resolve) => child.once('exit', (code) => resolve(code)));
+    child.stdin.end();
+    const code = await Promise.race([exited, new Promise<'hung'>((r) => setTimeout(() => r('hung'), 10_000))]);
+    if (code === 'hung') child.kill();
+    expect(code).toBe(0);
+  }, 30_000);
 });

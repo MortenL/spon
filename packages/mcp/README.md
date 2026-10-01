@@ -20,6 +20,8 @@ starts the server in.
 | Variable | Default | Meaning |
 |---|---|---|
 | `SPON_TOOL_LIBRARY` | `~/.spon/tools.json` | The tool library file (the web app's library export format). Created with the starter tools on first use. |
+| `SPON_BRIDGE_PORT` | `5197` | The live bridge port (also `--port <n>`). |
+| `SPON_ALLOWED_ORIGINS` | — | Extra comma-separated origins allowed to connect to the live bridge. |
 | `SPON_MCP_LOG` | — | `debug` logs every tool call to stderr. |
 
 To use your browser tool library headless, export it from the web app's tool library dialog and call
@@ -27,10 +29,19 @@ To use your browser tool library headless, export it from the web app's tool lib
 
 ## Tools
 
-`status`, `new_job`, `open_job`, `save_job`, `import_model`, `get_job`, `import_program`, `describe_geometry`,
+`status`, `new_job`, `open_job`, `use_live_tab`, `save_job`, `import_model`, `get_job`, `import_program`, `describe_geometry`,
 `apply_commands`, `add_operation`, `generate`, `render_preview`, `get_gcode`, `export_gcode`, `list_tools`,
 `add_library_tool`, `import_tool_library`. Resources: `spon://job`, `spon://catalog`, `spon://gcode/{file}`.
 Prompt: `spon-cam-basics`.
+
+## Live mode
+
+The server also listens on `ws://127.0.0.1:5197` (loopback only). In the Spon web app, click **Claude** in the status
+bar: the tab connects, and `use_live_tab` lets Claude drive the job open there. Every tool call is one undo step in the
+tab, and each change shows a short "Claude: …" toast. Only pages served from localhost on the dev, preview and test
+ports (5173, 4173, 5198, 5199) may connect, plus any origin in `SPON_ALLOWED_ORIGINS`. One tab at a time: clicking
+Claude in another tab takes over. If the port is taken (a second Claude session), the server runs file-only and
+`status` says so.
 
 ## Development
 
