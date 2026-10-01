@@ -1,4 +1,4 @@
-import { BRIDGE_CLOSE, BUSY_MESSAGE, type HelloParams, type JobChangedParams } from '@sponcam/core';
+import { BRIDGE_CLOSE, BRIDGE_IMPORT_TIMEOUT_MS, BRIDGE_TIMEOUT_MS, BUSY_MESSAGE, type HelloParams, type JobChangedParams } from '@sponcam/core';
 import type { BridgeStatus } from './status';
 
 export interface SocketLike {
@@ -33,6 +33,8 @@ export interface ClientOptions {
   onStopped(message: string): void;
   subscribeJob(listener: (params: JobChangedParams) => void): () => void;
   schedule?(fn: () => void, ms: number): () => void;
+  /** The clock used to drop requests that waited longer than the server's timeout. */
+  now?(): number;
 }
 
 const MIN_DELAY = 1000;
@@ -86,11 +88,11 @@ export class BridgeClient {
     this.socket = socket;
     const send = (msg: unknown) => socket.send(JSON.stringify(msg));
     socket.onopen = () => send({ jsonrpc: '2.0', method: 'hello', params: { ...this.options.hello(), takeover } });
-    socket.onmessage = (data) => this.receive(data, send);
+    socket.onmessage = (data) => this.receive(socket, data, send);
     socket.onclose = (code, reason) => this.closed(socket, code, reason);
   }
 
-  private receive(data: string, send: (msg: unknown) => void): void {
+  private receive(socket: SocketLike, data: string, send: (msg: unknown) => void): void {
     let msg: { id?: number; method?: string; params?: unknown };
     try {
       msg = JSON.parse(data);
@@ -106,7 +108,12 @@ export class BridgeClient {
     }
     if (typeof msg.id !== 'number' || !msg.method) return;
     const { id, method, params } = msg;
+    const arrived = (this.options.now ?? Date.now)();
     this.queue = this.queue.then(async () => {
+      // the server has already given up on a request from a dead connection or one that waited past its timeout
+      if (socket !== this.socket) return;
+      const limit = method === 'importModel' ? BRIDGE_IMPORT_TIMEOUT_MS : BRIDGE_TIMEOUT_MS;
+      if ((this.options.now ?? Date.now)() - arrived >= limit) return;
       const handler = this.options.handlers[method];
       if (!handler) {
         send({ jsonrpc: '2.0', id, error: { code: -32601, message: `Unknown method ${method}` } });
@@ -117,7 +124,7 @@ export class BridgeClient {
       } catch (err) {
         send({ jsonrpc: '2.0', id, error: { code: -32000, message: err instanceof Error ? err.message : String(err) } });
       }
-    });
+    }).catch(() => {});
   }
 
   private closed(socket: SocketLike, code: number, reason: string): void {

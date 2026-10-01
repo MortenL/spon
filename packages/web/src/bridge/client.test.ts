@@ -15,6 +15,7 @@ class FakeSocket implements SocketLike {
 
 function setup(handlers: ClientOptions['handlers'] = {}) {
   const sockets: FakeSocket[] = [];
+  const clock = { t: 0 };
   const timers: { fn: () => void; ms: number }[] = [];
   const statuses: [string, string | null][] = [];
   const stopped: string[] = [];
@@ -28,9 +29,10 @@ function setup(handlers: ClientOptions['handlers'] = {}) {
     onStopped: (message) => stopped.push(message),
     subscribeJob: (listener) => { jobListener = listener; return () => { jobListener = null; }; },
     schedule: (fn, ms) => { timers.push({ fn, ms }); return () => {}; },
+    now: () => clock.t,
   });
   const connect = (i = sockets.length - 1) => { sockets[i].onopen?.(); sockets[i].serverSays({ jsonrpc: '2.0', method: 'welcome', params: { protocol: 1, server: 'x' } }); };
-  return { client, sockets, timers, statuses, stopped, connect, job: (p: { title: string; dirty: boolean }) => jobListener?.(p) };
+  return { client, clock, sockets, timers, statuses, stopped, connect, job: (p: { title: string; dirty: boolean }) => jobListener?.(p) };
 }
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
@@ -71,6 +73,50 @@ describe('BridgeClient', () => {
       { jsonrpc: '2.0', id: 3, error: { code: -32000, message: 'commands[0] updateOperation: No operation with id x' } },
       { jsonrpc: '2.0', id: 4, error: { code: -32601, message: 'Unknown method nope' } },
     ]);
+  });
+
+  it('does not run a queued request from a replaced connection', async () => {
+    let release!: () => void;
+    const ran: string[] = [];
+    const { client, sockets, connect } = setup({
+      job: async () => { ran.push('job'); await new Promise<void>((r) => { release = r; }); return {}; },
+      describe: async () => { ran.push('describe'); return {}; },
+    } as never);
+    client.start(false);
+    connect();
+    sockets[0].serverSays({ jsonrpc: '2.0', id: 1, method: 'job', params: {} });
+    sockets[0].serverSays({ jsonrpc: '2.0', id: 2, method: 'describe', params: {} });
+    await flush();
+    client.start(true);
+    connect();
+    release();
+    await flush();
+    await flush();
+    expect(ran).toEqual(['job']);
+    expect(sockets[0].sent.some((m) => m.id === 2)).toBe(false);
+  });
+
+  it('does not run a request that waited past the bridge timeout', async () => {
+    let release!: () => void;
+    const ran: string[] = [];
+    const { client, clock, sockets, connect } = setup({
+      job: async () => { ran.push('job'); await new Promise<void>((r) => { release = r; }); return {}; },
+      apply: async () => { ran.push('apply'); return {}; },
+      importModel: async () => { ran.push('importModel'); return {}; },
+    } as never);
+    client.start(false);
+    connect();
+    const s = sockets[0];
+    s.serverSays({ jsonrpc: '2.0', id: 1, method: 'job', params: {} });
+    s.serverSays({ jsonrpc: '2.0', id: 2, method: 'apply', params: {} });
+    s.serverSays({ jsonrpc: '2.0', id: 3, method: 'importModel', params: {} });
+    await flush();
+    clock.t = 60_001;
+    release();
+    await flush();
+    await flush();
+    expect(ran).toEqual(['job', 'importModel']);
+    expect(s.sent.some((m) => m.id === 2)).toBe(false);
   });
 
   it('reconnects with backoff from 1 s to 10 s, never taking over', () => {
