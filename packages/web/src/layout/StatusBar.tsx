@@ -1,5 +1,6 @@
 import { formatLength } from '@sponcam/core';
 import { Loader2, TriangleAlert } from 'lucide-react';
+import { ClaudeStatus } from '@/bridge/ClaudeStatus';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useApp } from '@/state/store';
@@ -29,6 +30,7 @@ export function StatusBar() {
           {busy}
         </span>
       )}
+      <ClaudeStatus />
       <div className="ml-auto">
         {warnings.length > 0 && (
           <Popover>

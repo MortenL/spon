@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { resumeBridge } from '@/bridge/status';
 import { Toaster } from '@/components/ui/sonner';
 import { BottomDock } from '@/dock/BottomDock';
 import { usePlaybackLoop } from '@/gcode/playbackLoop';
@@ -27,6 +28,7 @@ export function App() {
   useEffect(() => {
     void restoreAutosave();
     void loadToolLibrary().catch((e) => console.error('Could not load the tool library', e));
+    resumeBridge();
     const stopAutosave = startAutosave(appStore);
     const stopAnalysis = startProgramAnalysis(appStore);
     const stopCam = startCamPipeline(appStore);
