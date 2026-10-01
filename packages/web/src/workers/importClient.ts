@@ -1,4 +1,4 @@
-import { type AnalysisContext, type AnalysisResult, cadFormat, type CamGeometry, type ImportResult, type Job, type MotionTable, type ParsedProgram, type ProgramContext } from '@sponcam/core';
+import { type AnalysisContext, type AnalysisResult, cadFormat, type CamGeometry, type GeometryCatalog, type ImportResult, type Job, type MotionTable, type ParsedProgram, type PreviewOptions, type ProgramContext } from '@sponcam/core';
 import * as Comlink from 'comlink';
 import type { CamRun } from '../state/camTypes';
 import type { ImportWorkerApi } from './import.worker';
@@ -91,4 +91,12 @@ export function setCamModelInWorker(geometry: CamGeometry | null): Promise<void>
 
 export function generateInWorker(job: Job, ctx: ProgramContext): Promise<CamRun> {
   return run((api) => api.generate(job, ctx), 'Generating toolpaths timed out');
+}
+
+export function catalogInWorker(job: Job): Promise<GeometryCatalog | null> {
+  return run((api) => api.catalog(job), 'Describing the geometry timed out');
+}
+
+export function previewSvgInWorker(job: Job, ctx: ProgramContext, options: PreviewOptions): Promise<string> {
+  return run((api) => api.previewSvg(job, ctx, options), 'Rendering the preview timed out');
 }

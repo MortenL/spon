@@ -1,4 +1,4 @@
-import { addProgram, createJob, type Job, renameJob } from '@sponcam/core';
+import { addProgram, CommandError, createJob, type Job, type JobCommand, renameJob } from '@sponcam/core';
 import { describe, expect, it } from 'vitest';
 import { createAppStore, type ModelGeometry, UNDO_LIMIT } from './store';
 
@@ -164,5 +164,21 @@ describe('program and playback state', () => {
     expect(s().dockTab).toBe('gcode');
     s().setDockTab('analysis');
     expect(s().dockTab).toBe('analysis');
+  });
+
+  it('applies a batch as one undo step, all or nothing', () => {
+    const store = createAppStore(createJob('A'));
+    const s = () => store.getState();
+    const add = (id: string): JobCommand => ({ type: 'addOperation', opType: 'drill', toolId: null, id });
+    s().dispatchBatch([add('a'), add('b')]);
+    expect(s().job.operations.map((o) => o.id)).toEqual(['a', 'b']);
+    expect(s().past).toHaveLength(1);
+    const before = s().job;
+    expect(() => s().dispatchBatch([add('c'), { type: 'updateOperation', id: 'nope', patch: { name: 'x' } }]))
+      .toThrow(new CommandError('commands[1] updateOperation: No operation with id nope'));
+    expect(s().job).toBe(before);
+    expect(s().past).toHaveLength(1);
+    s().undo();
+    expect(s().job.operations).toEqual([]);
   });
 });

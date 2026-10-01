@@ -1,5 +1,5 @@
 import {
-  applyCommand, type CadBodySummary, type CadFormat, createJob, type GeometryCatalog, type Job,
+  applyCommand, applyCommands, type CadBodySummary, type CadFormat, createJob, type GeometryCatalog, type Job,
   type JobCommand, type LengthUnit, type ModelGeometry, type NewModel, type ParsedProgram, type ProgramRef, setModel, type Vec3,
 } from '@sponcam/core';
 import { useStore } from 'zustand';
@@ -95,6 +95,8 @@ export interface AppState {
   commit(update: (job: Job) => Job): void;
   /** Applies a CAM job edit through applyCommand; CommandError propagates to the caller. */
   dispatch(command: JobCommand): void;
+  /** Applies several job commands as one undo step, all or none; a CommandError names the failing command. */
+  dispatchBatch(commands: readonly JobCommand[]): void;
   undo(): void;
   redo(): void;
   loadDocument(doc: LoadedDocument): void;
@@ -176,6 +178,9 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
     },
     dispatch(command) {
       get().commit((job) => applyCommand(job, command));
+    },
+    dispatchBatch(commands) {
+      get().commit((job) => applyCommands(job, commands));
     },
     undo() {
       const { job, past, future, activeProgramId, generatedPrograms } = get();

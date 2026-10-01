@@ -5,12 +5,14 @@ import type { CamRun } from './camTypes';
 const worker = vi.hoisted(() => ({
   setCamModelInWorker: vi.fn(async () => {}),
   generateInWorker: vi.fn(),
+  catalogInWorker: vi.fn(async () => null),
+  previewSvgInWorker: vi.fn(async () => '<svg/>'),
   epoch: 0,
   workerEpoch: () => worker.epoch,
 }));
 vi.mock('../workers/importClient', () => worker);
 
-const { regenerate, startCamPipeline, toCamOutput } = await import('./cam');
+const { camCatalog, camInputsChanged, camPreviewSvg, currentCamRun, regenerate, startCamPipeline, toCamOutput, waitForCamRun } = await import('./cam');
 const { appStore } = await import('./store');
 const { allPrograms } = await import('./programList');
 
@@ -128,5 +130,54 @@ describe('CAM pipeline', () => {
     expect(worker.generateInWorker).toHaveBeenCalledTimes(2);
     expect(s.generatedPrograms.map((p) => p.id)).toEqual(['gen:fresh.nc']);
     expect(s.camStatus).toBe('idle');
+  });
+
+  it('treats only toolpath inputs as changes', () => {
+    const job = withOp();
+    expect(camInputsChanged(job, { ...job, programs: [] }, null, null)).toBe(false);
+    expect(camInputsChanged(job, { ...job, name: 'Other' }, null, null)).toBe(true);
+    expect(camInputsChanged(job, job, null, { kind: 'drawing', drawing: { layers: [] }, rawPoints: new Float32Array() })).toBe(true);
+  });
+
+  it('waits for the run of the current job, also across an edit during generation (review focus 1)', async () => {
+    appStore.setState({ job: withOp(), camStatus: 'generating' });
+    let release!: (r: CamRun) => void;
+    worker.generateInWorker.mockImplementationOnce(() => new Promise((r) => { release = r; }));
+    const waiting = waitForCamRun();
+    const first = regenerate();
+    // regenerate sends the model first; wait until the generate call (and its release function) exists
+    await vi.waitFor(() => expect(worker.generateInWorker).toHaveBeenCalledTimes(1));
+    // the user renames the job while the first run is in flight: its output must not be returned
+    appStore.getState().commit((j) => ({ ...j, name: 'Renamed' }));
+    worker.generateInWorker.mockResolvedValueOnce(run(['renamed.nc']));
+    release(run(['old.nc']));
+    await first;
+    const { job, run: got } = await waiting;
+    expect(job.name).toBe('Renamed');
+    expect(got.files.map((f) => f.name)).toEqual(['renamed.nc']);
+    expect(currentCamRun(appStore.getState())).toBe(got);
+  });
+
+  it('rejects when generation failed for the current job', async () => {
+    appStore.setState({ job: withOp(), camStatus: 'generating' });
+    worker.generateInWorker.mockRejectedValueOnce(new Error('boom'));
+    const waiting = waitForCamRun();
+    await regenerate();
+    await expect(waiting).rejects.toThrow('Toolpath generation failed; see the tab');
+  });
+
+  it('answers at once for a job without operations', async () => {
+    appStore.setState({ job: createJob('Empty'), camStatus: 'generating' });
+    const waiting = waitForCamRun();
+    await regenerate();
+    expect((await waiting).run).toEqual({ results: [], files: [], catalog: null });
+  });
+
+  it('sends the model before asking the worker for the catalog and the preview', async () => {
+    appStore.setState({ job: withOp(), geometry: null });
+    await camCatalog();
+    expect(worker.catalogInWorker).toHaveBeenCalledWith(appStore.getState().job);
+    expect(await camPreviewSvg({ view: 'iso' })).toBe('<svg/>');
+    expect(worker.previewSvgInWorker).toHaveBeenCalledWith(appStore.getState().job, expect.anything(), { view: 'iso' });
   });
 });
