@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" viewBox="0 0 144 72" style="enable-background:new 0 0 144 72;">
+<style type="text/css">
+	.st0{fill:none;stroke:#FF0000;stroke-miterlimit:10;}
+	.st1{fill:none;stroke:#0000FF;stroke-miterlimit:10;}
+</style>
+<g id="Outline">
+	<rect x="9" y="9" class="st0" width="126" height="54"/>
+</g>
+<g id="Pocket">
+	<polygon class="st1" points="36,18 108,18 108,54 36,54"/>
+	<circle class="st1" cx="72" cy="36" r="9"/>
+</g>
+<text transform="matrix(1 0 0 1 20 70)" class="st1">LABEL</text>
+</svg>

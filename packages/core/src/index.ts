@@ -77,3 +77,4 @@ export * from './preview/svg';
 export * from './pipeline/report';
 export * from './pipeline/importOutcome';
 export * from './bridge/protocol';
+export * from './import/svg/svg';
