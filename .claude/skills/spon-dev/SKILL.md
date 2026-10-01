@@ -25,6 +25,7 @@ Authoritative docs:
 | Build the app | `pnpm build` |
 | Dev server | `pnpm dev` → http://localhost:5173 |
 | End-to-end (Playwright) | `pnpm e2e` (first time: `pnpm --filter @sponcam/web exec playwright install chromium`) |
+| Live bridge (dev) | run the MCP server, open http://localhost:5173 and click **Claude** in the status bar (port 5197; `--port` / `SPON_BRIDGE_PORT` to change) |
 | Regenerate e2e fixtures | `node packages/core/test/fixtures/make-fixtures.mjs` |
 
 Before claiming a change works: run the focused tests for the files you touched, then `pnpm typecheck && pnpm test` once. UI changes also need `pnpm build`, and user flows need `pnpm e2e`.
@@ -37,5 +38,8 @@ Before claiming a change works: run the focused tests for the files you touched,
 - TypeScript runs with `verbatimModuleSyntax`: use `import type` for type-only imports.
 - The MCP server must never write to stdout (it carries the protocol): log with `log`/`debugLog` from `packages/mcp/src/log.ts`.
 - Tool failures are `isError` results thrown as `SessionError`/`CommandError` inside `guarded`, never protocol errors.
+- MCP tests start bridges on port 0 and Playwright uses 5196: never bind 5197 in tests (the user's own Claude session may hold it).
+- The web bridge client (bridge/client.ts, handlers.ts, controller.ts) must only be reached through import(): the main bundle stays unchanged for users who never connect.
+- Bridge wire types live in core/src/bridge/protocol.ts; change them on both ends together and bump BRIDGE_PROTOCOL when a change is not backwards compatible.
 - Commits end with the `Co-Authored-By:` trailer the session specifies.
 - Windows dev machine: commands must work in Git Bash and PowerShell; the repo normalises to LF via `.gitattributes`.
