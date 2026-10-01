@@ -1,7 +1,7 @@
 import type { AddressInfo } from 'node:net';
 import { BRIDGE_CLOSE, BRIDGE_PROTOCOL, BUSY_MESSAGE, type HelloParams, REPLACED_MESSAGE } from '@sponcam/core';
 import { type WebSocket, WebSocketServer } from 'ws';
-import { log } from '../log';
+import { debugLog, log } from '../log';
 import { DEFAULT_TIMEOUTS, TabConnection, type Timeouts } from './connection';
 
 export const DEFAULT_ORIGINS: string[] = [5173, 4173, 5198, 5199].flatMap((p) => [`http://localhost:${p}`, `http://127.0.0.1:${p}`]);
@@ -81,6 +81,9 @@ export class LiveBridge {
 
   private accept(socket: WebSocket): void {
     const timer = setTimeout(() => socket.close(1008, 'Expected hello'), this.options.helloTimeoutMs ?? 10_000);
+    // ws emits 'error' on an invalid frame; with no listener that would crash the process
+    socket.on('error', (err) => debugLog(`socket error before hello: ${err.message}`));
+    socket.once('close', () => clearTimeout(timer));
     socket.once('message', (data) => {
       clearTimeout(timer);
       let hello: HelloParams | null = null;
