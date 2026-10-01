@@ -102,3 +102,11 @@ export function computeStyle(el: XmlElement, parent: ComputedStyle, rules: reado
     visible: vis === undefined || vis === 'inherit' ? parent.visible : vis === 'visible',
   };
 }
+
+/** True when a clip-path or mask applies to the element through an attribute, a matched rule or the inline style. */
+export function hasClip(el: XmlElement, rules: readonly CssRule[]): boolean {
+  const set = (d: Record<string, string>) => [d['clip-path'], d.mask].some((v) => v !== undefined && v.trim() !== '' && v.trim() !== 'none');
+  return Boolean(el.attrs['clip-path'] || el.attrs.mask) && set({ 'clip-path': el.attrs['clip-path'] ?? '', mask: el.attrs.mask ?? '' })
+    || matching(el, rules).some((r) => set(r.decls))
+    || (el.attrs.style !== undefined && set(parseDeclarations(el.attrs.style)));
+}

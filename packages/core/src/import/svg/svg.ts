@@ -4,7 +4,7 @@ import { bboxOfPoints, bboxSize } from '../../geometry/bbox';
 import { type Path2D, pathsToPoints, type Vec2 } from '../../geometry/path2d';
 import { parsePathData } from './pathData';
 import { shapeToPathData } from './shapes';
-import { type ComputedStyle, computeStyle, type CssRule, INITIAL_STYLE, parseCss } from './style';
+import { type ComputedStyle, computeStyle, type CssRule, hasClip, INITIAL_STYLE, parseCss } from './style';
 import { parseTransform } from './transform';
 import { svgViewport } from './units';
 import { localName, parseXml, type XmlElement, XmlError } from './xml';
@@ -47,7 +47,9 @@ function collect(root: XmlElement, rules: readonly CssRule[], userToPx: Affine2D
   };
   index(root);
   const items: Item[] = [];
-  const counts = { text: 0, image: 0, clip: 0, transform: 0 };
+  const counts = { text: 0, image: 0, clip: 0, transform: 0, foreign: 0, circular: 0 };
+  const active = new Set<XmlElement>(); // elements being walked, so a <use> cannot reach its own ancestors
+  let visits = 0;
   let inkscapeLayers = false;
   const isLayer = (el: XmlElement) => localName(el.name) === 'g' && el.attrs['inkscape:groupmode'] === 'layer';
   const scan = (el: XmlElement) => {
@@ -61,12 +63,13 @@ function collect(root: XmlElement, rules: readonly CssRule[], userToPx: Affine2D
     if (prefix && prefix !== 'svg') return; // inkscape:, sodipodi: and other metadata
     const type = localName(el.name);
     if (SKIPPED.has(type) && el !== root) return;
-    if (type === 'text') return void counts.text++;
-    if (type === 'image') return void counts.image++;
-    if (type === 'foreignObject') return;
+    if (++visits > MAX_DXF_SEGMENTS) throw new SvgParseError(`SVG expands to more than ${MAX_DXF_SEGMENTS} segments`);
     const style = computeStyle(el, parent, rules);
     if (style.hidden) return;
-    if (el.attrs['clip-path'] || el.attrs.mask) counts.clip++;
+    if (type === 'text') return void counts.text++;
+    if (type === 'image') return void counts.image++;
+    if (type === 'foreignObject') return void counts.foreign++;
+    if (hasClip(el, rules)) counts.clip++;
     let t = parseTransform(el.attrs.transform);
     if (!t) {
       counts.transform++;
@@ -80,17 +83,24 @@ function collect(root: XmlElement, rules: readonly CssRule[], userToPx: Affine2D
       lay = layer ? `${layer}/${label}` : label;
     }
     if (CONTAINERS.has(type)) {
+      active.add(el);
       for (const c of el.children) walk(c, mm, style, lay, depth);
+      active.delete(el);
       return;
     }
     if (type === 'use') {
       const href = el.attrs.href ?? el.attrs['xlink:href'] ?? '';
       const target = href.startsWith('#') ? ids.get(href.slice(1)) : undefined;
       if (!target || depth >= MAX_USE_DEPTH) return;
+      if (active.has(target)) return void counts.circular++;
       const placed = affineMultiply(mm, affineTranslate(Number(el.attrs.x) || 0, Number(el.attrs.y) || 0));
+      active.add(target);
       // a referenced symbol's own viewBox is not applied: its children are placed at the use position
-      if (localName(target.name) === 'symbol') for (const c of target.children) walk(c, placed, style, lay, depth + 1);
-      else walk(target, placed, style, lay, depth + 1);
+      if (localName(target.name) === 'symbol') {
+        const symStyle = computeStyle(target, style, rules);
+        for (const c of target.children) walk(c, placed, symStyle, lay, depth + 1);
+      } else walk(target, placed, style, lay, depth + 1);
+      active.delete(target);
       return;
     }
     if (!SHAPES.has(type) || !style.visible) return;
@@ -160,6 +170,8 @@ export function parseSvg(text: string, options: SvgOptions = {}): SvgImport {
   const warnings: string[] = [];
   if (counts.text) warnings.push(`${plural(counts.text, 'text element was', 'text elements were')} skipped — convert text to paths before exporting`);
   if (counts.image) warnings.push(`${plural(counts.image, 'embedded image was', 'embedded images were')} skipped`);
+  if (counts.foreign) warnings.push(`${plural(counts.foreign, 'foreign object was', 'foreign objects were')} skipped`);
+  if (counts.circular) warnings.push(`${plural(counts.circular, 'circular reference was', 'circular references were')} ignored`);
   if (counts.clip) warnings.push('Clip paths and masks were ignored; the full shapes were imported');
   if (counts.transform) warnings.push(`${plural(counts.transform, 'element has', 'elements have')} an invalid transform, which was ignored`);
 
@@ -176,8 +188,14 @@ export function parseSvg(text: string, options: SvgOptions = {}): SvgImport {
   }
   const svgScale = options.svgScale === undefined ? ABSOLUTE_SCALE : resolveSvgScale(options.svgScale, rawSize ?? { x: 0, y: 0 });
   // px → mm, then Y up: flip about the viewport (or the x axis), so the drawing keeps its place
-  const height = (vp.size?.y ?? 0) * svgScale;
-  const toOut = affineMultiply({ a: 1, b: 0, c: 0, d: -1, e: 0, f: height }, affineScale(svgScale, svgScale));
+  const flip = (f: number) => affineMultiply({ a: 1, b: 0, c: 0, d: -1, e: 0, f }, affineScale(svgScale, svgScale));
+  let toOut = flip((vp.size?.y ?? 0) * svgScale);
+  if (!vp.size) {
+    // no viewport to flip about: mirror about the content box so it keeps its place
+    const first = build(items, inkscapeLayers, toOut, chordTol).layers;
+    const box = bboxOfPoints(pathsToPoints(first.flatMap((l) => l.paths)));
+    if (box) toOut = flip(-(box.min.y + box.max.y));
+  }
   const { layers, errors } = build(items, inkscapeLayers, toOut, chordTol);
   warnings.push(...errors);
   if (!layers.length) throw new SvgParseError(['No shapes found in this SVG', ...warnings].join('. '));

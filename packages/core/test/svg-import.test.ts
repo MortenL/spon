@@ -109,4 +109,46 @@ describe('parseSvg', () => {
     expect(() => parseSvg('<svg><g>')).toThrow(/Not a valid SVG file: Unclosed <g> at line 1/);
     expect(() => parseSvg('<svg width="10mm" height="10mm"><text>x</text></svg>')).toThrow(/^No shapes found in this SVG/);
   });
+
+  describe('robustness', () => {
+    const svg = (body: string, attrs = '') => `<svg xmlns="http://www.w3.org/2000/svg" ${attrs}>${body}</svg>`;
+    const count = (r: ReturnType<typeof drawing>) => r.drawing.layers.reduce((n, l) => n + l.paths.length, 0);
+
+    it('ignores circular <use> references and warns', () => {
+      const r = drawing(parseSvg(svg('<g id="g"><rect width="5" height="5"/><use href="#g" x="2"/></g>'), { svgScale: 1 }));
+      expect(count(r)).toBe(1);
+      expect(r.warnings).toContain('1 circular reference was ignored');
+    });
+
+    it('does not blow up on exponentially self-referencing groups', () => {
+      const t = Date.now();
+      const r = drawing(parseSvg(svg('<g id="g"><rect width="5" height="5"/><use href="#g"/><use href="#g"/><use href="#g"/></g>'), { svgScale: 1 }));
+      expect(Date.now() - t).toBeLessThan(1000);
+      expect(count(r)).toBe(1);
+      expect(r.warnings).toContain('3 circular references were ignored');
+    });
+
+    it('keeps the drawing in place when there is no viewport to flip about', () => {
+      const r = drawing(parseSvg(svg('<rect x="10" y="10" width="20" height="5"/>'), { svgScale: 1 }));
+      const box = bboxOfPoints(pathsToPoints(r.drawing.layers.flatMap((l) => l.paths)))!;
+      expect(box.min.y).toBeCloseTo(10, 6);
+      expect(box.max.y).toBeCloseTo(15, 6);
+    });
+
+    it('applies the symbol own style to its children', () => {
+      const r = drawing(parseSvg(svg('<symbol id="s" fill="#ff0000"><rect width="5" height="5"/></symbol><use href="#s"/>'), { svgScale: 1 }));
+      expect(names(r.drawing)).toEqual(['#ff0000']);
+    });
+
+    it('warns about clip paths set through style, and foreign objects', () => {
+      const r = drawing(parseSvg(svg('<rect width="5" height="5" style="clip-path:url(#c)"/><foreignObject width="5" height="5"/>'), { svgScale: 1 }));
+      expect(r.warnings).toContain('Clip paths and masks were ignored; the full shapes were imported');
+      expect(r.warnings).toContain('1 foreign object was skipped');
+    });
+
+    it('does not count hidden text', () => {
+      const r = drawing(parseSvg(svg('<rect width="5" height="5"/><text style="display:none">x</text>'), { svgScale: 1 }));
+      expect(r.warnings.some((w) => w.includes('text element'))).toBe(false);
+    });
+  });
 });
