@@ -52,6 +52,7 @@ export * from './job/commands';
 export * from './geometry/offset/pathOps';
 export * from './geometry/offset/clipper';
 export * from './geometry/offset/arcFit';
+export * from './geometry/offset/openOffset';
 export * from './cam/ops/writer';
 export * from './cam/ops/leads';
 export * from './cam/ops/tabs';
