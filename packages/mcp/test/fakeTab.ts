@@ -64,7 +64,7 @@ export function sessionHandler(session: FileSession): { handle: Handle; marked: 
       case 'describe': return { ...(await session.describe()), kind: 'live' };
       case 'job': return session.job();
       case 'apply': return session.apply(p.commands);
-      case 'importModel': return session.importModel({ fileName: p.fileName, bytes: fromBase64(p.bytes), units: p.units, body: p.body });
+      case 'importModel': return session.importModel({ fileName: p.fileName, bytes: fromBase64(p.bytes), units: p.units, body: p.body, svgScale: p.svgScale });
       case 'run': return session.run();
       case 'catalog': return session.catalog();
       case 'boxes': return session.boxes();

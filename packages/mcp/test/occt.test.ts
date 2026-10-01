@@ -8,7 +8,7 @@ const recorded = (name: string) => cadImport(JSON.parse(readFileSync(fixturePath
 
 describe('loadNodeOcct', () => {
   it('reads STEP in Node exactly like the recorded browser output', async () => {
-    const live = await importModel('box-hole.step', fixture('box-hole.step'), undefined, loadNodeOcct);
+    const live = await importModel('box-hole.step', fixture('box-hole.step'), {}, loadNodeOcct);
     const saved = recorded('box-hole.step');
     if (!live.ok || live.kind !== 'mesh' || !saved.ok || saved.kind !== 'mesh') throw new Error('expected meshes');
     expect(live.source).toEqual(saved.source);
@@ -17,9 +17,9 @@ describe('loadNodeOcct', () => {
   });
 
   it('lists the bodies of a multi-body STEP file and reads IGES', async () => {
-    const bodies = await importModel('two-bodies.step', fixture('two-bodies.step'), undefined, loadNodeOcct);
+    const bodies = await importModel('two-bodies.step', fixture('two-bodies.step'), {}, loadNodeOcct);
     expect(bodies.ok && bodies.kind === 'bodies' && bodies.bodies.length).toBe(2);
-    const iges = await importModel('box.iges', fixture('box.iges'), undefined, loadNodeOcct);
+    const iges = await importModel('box.iges', fixture('box.iges'), {}, loadNodeOcct);
     expect(iges.ok && iges.kind === 'mesh' && iges.source?.format).toBe('iges');
   });
 
@@ -29,8 +29,8 @@ describe('loadNodeOcct', () => {
     const { loadNodeOcct: fresh } = await import('../src/occt');
     const spies = [vi.spyOn(process.stdout, 'write'), vi.spyOn(console, 'log'), vi.spyOn(console, 'info')];
     try {
-      await importModel('box.iges', fixture('box.iges'), undefined, fresh);
-      await importModel('bad.step', new TextEncoder().encode('ISO-10303-21;\nnot a step file\n'), undefined, fresh);
+      await importModel('box.iges', fixture('box.iges'), {}, fresh);
+      await importModel('bad.step', new TextEncoder().encode('ISO-10303-21;\nnot a step file\n'), {}, fresh);
       for (const spy of spies) expect(spy).not.toHaveBeenCalled();
     } finally {
       for (const spy of spies) spy.mockRestore();

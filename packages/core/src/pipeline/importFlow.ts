@@ -1,4 +1,5 @@
 import type { CadBodySummary, CadFormat, ImportResult } from '../import/importFile';
+import type { Vec2 } from '../geometry/path2d';
 import type { LengthUnit } from '../units/units';
 import type { SuccessfulImport } from './model';
 
@@ -6,12 +7,14 @@ import type { SuccessfulImport } from './model';
 export type ImportStep =
   | { kind: 'error'; error: string }
   | { kind: 'chooseBody'; format: CadFormat; bodies: CadBodySummary[] }
+  | { kind: 'needsScale'; rawSize: Vec2 }
   /** `units` null: the units must be asked for. */
   | { kind: 'ready'; result: SuccessfulImport; units: LengthUnit | null };
 
 export function importStep(result: ImportResult): ImportStep {
   if (!result.ok) return { kind: 'error', error: result.error };
   if (result.kind === 'bodies') return { kind: 'chooseBody', format: result.format, bodies: result.bodies };
+  if (result.kind === 'needsScale') return { kind: 'needsScale', rawSize: result.rawSize };
   return { kind: 'ready', result, units: result.detectedUnits };
 }
 

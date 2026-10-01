@@ -32,6 +32,12 @@ function importText(name: string, o: Exclude<ImportOutcome, { status: 'error' }>
       ].join('\n');
     case 'needsUnits':
       return `${name} does not say which units it uses. In file units it measures ${size(o.rawSize)}; ${o.suggested} looks likely. Call import_model again with units ("mm" or "in").`;
+    case 'needsScale': {
+      const mm = (dpi: number) => `${((o.rawSize.x * 25.4) / dpi).toFixed(1)} × ${((o.rawSize.y * 25.4) / dpi).toFixed(1)} mm`;
+      return `${name} does not say how large it is: its content measures ${o.rawSize.x.toFixed(1)} × ${o.rawSize.y.toFixed(1)} px. `
+        + `That is ${mm(96)} at 96 dpi (CSS, Inkscape, Affinity) or ${mm(72)} at 72 dpi (Illustrator). `
+        + 'Call import_model again with svgDpi: 96 or 72, or svgWidth: <mm>.';
+    }
     case 'needsBody':
       return [
         `${name} has ${o.bodies.length} bodies:`,
@@ -53,9 +59,11 @@ const openJobShape = { path: z.string().describe('A .spon file'), discard: z.boo
 const useLiveShape = { discard: z.boolean().optional().describe('Drop unsaved changes to the current file job') };
 const saveJobShape = { path: z.string().optional().describe('Where to save; .spon is added. Required for the first save.') };
 const importModelShape = {
-  path: z.string().describe('An STL, STEP/STP, IGES/IGS or DXF file'),
+  path: z.string().describe('An STL, STEP/STP, IGES/IGS, DXF or SVG file'),
   units: lengthUnitSchema.optional().describe('Only used when the file does not declare its units (STL, DXF without $INSUNITS)'),
   body: z.number().int().min(0).optional().describe('Which body of a multi-body STEP file'),
+  svgDpi: z.union([z.literal(96), z.literal(72)]).optional().describe('SVG without real-world units: 96 (CSS, Inkscape, Affinity) or 72 (Illustrator) px per inch'),
+  svgWidth: z.number().positive().optional().describe('SVG without real-world units: scale so the drawing is this wide (mm)'),
 };
 const getJobShape = { section: z.enum(SECTIONS).optional().describe('Return one part of the job instead of all of it') };
 const importProgramShape = { path: z.string().describe('A G-code file (.nc, .ngc, .gcode, .tap, .cnc)') };
@@ -131,13 +139,15 @@ export function registerSessionTools(server: McpServer, ctx: ToolContext): void 
 
   server.registerTool('import_model', {
     title: 'Import model',
-    description: 'Load a model into the job (replacing any model). Answers needsUnits or needsBody when it needs a choice; call again with it.',
+    description: 'Load a model into the job (replacing any model). Answers needsUnits, needsBody or needsScale (SVG) when it needs a choice; call again with it.',
     inputSchema: importModelShape,
   }, guarded('import_model', async (a: Args<typeof importModelShape>) => {
     const session = state.requireSession();
     const input = await ctx.readInput(a.path);
     const name = basename(input.path);
-    const outcome = await session.importModel({ fileName: name, bytes: input.bytes, units: a.units, body: a.body });
+    if (a.svgDpi !== undefined && a.svgWidth !== undefined) throw new SessionError('Give svgDpi or svgWidth, not both');
+    const svgScale = a.svgDpi !== undefined ? { dpi: a.svgDpi } : a.svgWidth !== undefined ? { width: a.svgWidth } : undefined;
+    const outcome = await session.importModel({ fileName: name, bytes: input.bytes, units: a.units, body: a.body, svgScale });
     if (outcome.status === 'error') throw new SessionError(`Could not import ${input.path}: ${outcome.error}`);
     if (outcome.status === 'imported') state.handles.clear();
     return ok(importText(name, outcome), { ...outcome });

@@ -146,4 +146,20 @@ describe('FileSession', () => {
     writeFileSync(path, writeSpon(job, { b1: new TextEncoder().encode('not an stl') }));
     await expect(FileSession.open(path, options())).rejects.toThrow(`${path}: `);
   });
+
+  it('reopens an SVG job at the same scale with an identical catalog and G-code (review focus 3)', async () => {
+    const s = FileSession.create({ name: 'Svg' }, options());
+    expect((await s.importModel({ fileName: 'art.svg', bytes: fixture('svg/illustrator.svg'), svgScale: { dpi: 72 } })).status).toBe('imported');
+    const outline = (await s.catalog())!.contours[0].ref as GeometryRef;
+    await s.apply([
+      { type: 'addTool', tool: tool6 },
+      { type: 'addOperation', opType: 'profile', toolId: 't6', id: 'p' },
+      { type: 'updateOperation', id: 'p', patch: { geometry: [outline] } },
+    ]);
+    const path = await s.save(join(tempDir(), 'svg-job'));
+    const reopened = await FileSession.open(path, options());
+    expect((await reopened.job()).model).toMatchObject({ format: 'svg', svgScale: 25.4 / 72 });
+    expect(await reopened.catalog()).toEqual(await s.catalog());
+    expect((await reopened.run()).files.map((f) => f.text)).toEqual((await s.run()).files.map((f) => f.text));
+  });
 });

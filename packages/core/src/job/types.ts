@@ -26,9 +26,11 @@ export interface ModelRef {
   importUnits: LengthUnit;
   transform: ModelTransform;
   /** Source format when it is not implied by `kind` (missing: STL for meshes, DXF for drawings). */
-  format?: 'stl' | 'step' | 'iges';
+  format?: 'stl' | 'step' | 'iges' | 'svg';
   /** STEP/IGES: which body of the file (0-based) is the model. */
   body?: number;
+  /** SVG: mm per CSS px, as chosen or read at import. */
+  svgScale?: number;
 }
 
 export interface AutoStock {

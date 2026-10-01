@@ -13,7 +13,7 @@ import type { LengthUnit } from '../units/units';
 /** The loaded model as the web app and the MCP server keep it (a CamGeometry plus import details). */
 export type ModelGeometry =
   | { kind: 'mesh'; mesh: Mesh; adjacency: Adjacency; diagnostics: MeshDiagnostics; rawPoints: Float32Array; source?: CadSource }
-  | { kind: 'drawing'; drawing: Drawing; rawPoints: Float32Array };
+  | { kind: 'drawing'; drawing: Drawing; rawPoints: Float32Array; svgScale?: number };
 
 export type SuccessfulImport = Extract<ImportResult, { ok: true; kind: 'mesh' | 'drawing' }>;
 
@@ -24,7 +24,10 @@ export function toModelGeometry(result: SuccessfulImport): ModelGeometry {
       ...(result.source ? { source: result.source } : {}),
     };
   }
-  return { kind: 'drawing', drawing: result.drawing, rawPoints: pathsToPoints(result.drawing.layers.flatMap((l) => l.paths)) };
+  return {
+    kind: 'drawing', drawing: result.drawing, rawPoints: pathsToPoints(result.drawing.layers.flatMap((l) => l.paths)),
+    ...(result.svgScale !== undefined ? { svgScale: result.svgScale } : {}),
+  };
 }
 
 /** Units to pre-select in the units dialog: detected units if any, else a guess from the size. */

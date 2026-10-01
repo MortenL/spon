@@ -16,6 +16,7 @@ export type ImportDecision =
 export function decideImport(step: ImportStep, units?: LengthUnit): ImportDecision {
   if (step.kind === 'error') return { status: 'error', error: step.error };
   if (step.kind === 'chooseBody') return { status: 'needsBody', bodies: step.bodies, suggested: defaultBody(step.bodies) };
+  if (step.kind === 'needsScale') return { status: 'needsScale', rawSize: step.rawSize, suggestedDpi: 96 };
   const geometry = toModelGeometry(step.result);
   const chosen = step.units ?? units;
   if (!chosen) {
@@ -26,8 +27,9 @@ export function decideImport(step: ImportStep, units?: LengthUnit): ImportDecisi
 }
 
 export function newModelRef(fileName: string, geometry: ModelGeometry, units: LengthUnit, blobId: string): NewModel {
-  const source = geometry.kind === 'mesh' ? geometry.source : undefined;
-  return { sourceName: fileName, blobId, kind: geometry.kind, importUnits: units, ...(source ? { format: source.format, body: source.body } : {}) };
+  const base = { sourceName: fileName, blobId, kind: geometry.kind, importUnits: units };
+  if (geometry.kind === 'drawing') return geometry.svgScale !== undefined ? { ...base, format: 'svg', svgScale: geometry.svgScale } : base;
+  return geometry.source ? { ...base, format: geometry.source.format, body: geometry.source.body } : base;
 }
 
 /** Operations that pick geometry; importing a new model breaks their references. */

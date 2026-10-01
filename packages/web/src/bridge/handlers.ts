@@ -32,7 +32,7 @@ export const handlers: Handlers = {
     if (s().job !== before) toast(`Claude: ${label}`);
     return s().job;
   },
-  importModel: ({ fileName, bytes, units, body }) => importModelOutcome(fileName, fromBase64(bytes), units, body),
+  importModel: ({ fileName, bytes, units, body, svgScale }) => importModelOutcome(fileName, fromBase64(bytes), { units, body, svgScale }),
   run: () => currentReport(),
   catalog: () => camCatalog(),
   boxes: async () => {

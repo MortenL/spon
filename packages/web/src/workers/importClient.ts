@@ -1,4 +1,4 @@
-import { type AnalysisContext, type AnalysisResult, cadFormat, type CamGeometry, type GeometryCatalog, type ImportResult, type Job, type MotionTable, type ParsedProgram, type PreviewOptions, type ProgramContext } from '@sponcam/core';
+import { type AnalysisContext, type AnalysisResult, cadFormat, type CamGeometry, type GeometryCatalog, type ImportOptions, type ImportResult, type Job, type MotionTable, type ParsedProgram, type PreviewOptions, type ProgramContext } from '@sponcam/core';
 import * as Comlink from 'comlink';
 import type { CamRun } from '../state/camTypes';
 import type { ImportWorkerApi } from './import.worker';
@@ -61,11 +61,11 @@ function run<T>(call: (api: Comlink.Remote<ImportWorkerApi>) => Promise<T>, mess
  * that load happened implicitly (not via `loadCadReaderInWorker`) — so the next drop of such a file skips the
  * "Loading STEP reader…" busy text.
  */
-export function importInWorker(fileName: string, bytes: Uint8Array, body?: number): Promise<ImportResult> {
+export function importInWorker(fileName: string, bytes: Uint8Array, options: ImportOptions = {}): Promise<ImportResult> {
   const copy = bytes.slice();
   const isCad = cadFormat(fileName) !== null;
   const startEpoch = epoch;
-  const result = run<ImportResult>((api) => api.import(fileName, Comlink.transfer(copy, [copy.buffer]), body), 'Import timed out');
+  const result = run<ImportResult>((api) => api.import(fileName, Comlink.transfer(copy, [copy.buffer]), options), 'Import timed out');
   if (!isCad) return result;
   return result.then((value) => {
     if (epoch === startEpoch) cadReaderEpoch = startEpoch;

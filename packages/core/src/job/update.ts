@@ -11,8 +11,9 @@ export interface NewModel {
   blobId: string;
   kind: ModelKind;
   importUnits: LengthUnit;
-  format?: 'stl' | 'step' | 'iges';
+  format?: 'stl' | 'step' | 'iges' | 'svg';
   body?: number;
+  svgScale?: number;
 }
 
 export function renameJob(job: Job, name: string): Job {

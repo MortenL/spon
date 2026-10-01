@@ -57,9 +57,10 @@ export class FileSession implements JobSession {
     }
     let geometry: ModelGeometry | null = null;
     if (job.model) {
-      const step = importStep(await importModel(modelFilePath(job.model), blobs[job.model.blobId], job.model.body, options.loadReader));
+      const step = importStep(await importModel(modelFilePath(job.model), blobs[job.model.blobId], { body: job.model.body, svgScale: job.model.svgScale }, options.loadReader));
       if (step.kind === 'error') throw new SessionError(`${path}: Could not load the job's model: ${step.error}`);
       if (step.kind === 'chooseBody') throw new SessionError(`${path}: Could not load the job's model: the file has several bodies and the job does not say which one`);
+      if (step.kind === 'needsScale') throw new SessionError(`${path}: Could not load the job's model: the SVG's scale is missing`);
       geometry = toModelGeometry(step.result);
     }
     return new FileSession(job, blobs, geometry, path, false, options);
@@ -83,7 +84,7 @@ export class FileSession implements JobSession {
   }
 
   async importModel(input: ModelInput): Promise<ImportOutcome> {
-    const step = importStep(await importModel(input.fileName, input.bytes, input.body, this.options.loadReader));
+    const step = importStep(await importModel(input.fileName, input.bytes, { body: input.body, svgScale: input.svgScale }, this.options.loadReader));
     const decision = decideImport(step, input.units);
     if (decision.status !== 'ready') return decision;
     const affected = operationsWithGeometry(this.current);

@@ -40,6 +40,7 @@ export class LiveSession implements JobSession {
     return this.tab.request('importModel', {
       fileName: input.fileName, bytes: toBase64(input.bytes),
       ...(input.units ? { units: input.units } : {}), ...(input.body !== undefined ? { body: input.body } : {}),
+      ...(input.svgScale !== undefined ? { svgScale: input.svgScale } : {}),
     });
   }
 

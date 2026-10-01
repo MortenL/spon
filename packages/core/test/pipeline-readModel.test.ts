@@ -15,15 +15,15 @@ beforeEach(() => {
 
 describe('importModel', () => {
   it('never loads the reader for STL or DXF', async () => {
-    const r = await importModel('part.stl', STL, undefined, loadReader);
+    const r = await importModel('part.stl', STL, {}, loadReader);
     expect(r.ok && r.kind).toBe('mesh');
-    await importModel('part.dxf', new TextEncoder().encode('0\nEOF\n'), undefined, loadReader);
+    await importModel('part.dxf', new TextEncoder().encode('0\nEOF\n'), {}, loadReader);
     expect(loadReader).not.toHaveBeenCalled();
   });
 
   it('reads STEP with the fixed parameters and returns the body with its source', async () => {
     reader.ReadStepFile.mockReturnValue(recorded('box-hole.step'));
-    const r = await importModel('bracket.STP', BYTES, undefined, loadReader);
+    const r = await importModel('bracket.STP', BYTES, {}, loadReader);
     expect(loadReader).toHaveBeenCalledOnce();
     expect(reader.ReadStepFile).toHaveBeenCalledWith(BYTES, OCCT_PARAMS);
     expect(reader.ReadIgesFile).not.toHaveBeenCalled();
@@ -33,24 +33,24 @@ describe('importModel', () => {
 
   it('reads IGES with ReadIgesFile', async () => {
     reader.ReadIgesFile.mockReturnValue(recorded('box.iges'));
-    const r = await importModel('box.igs', BYTES, undefined, loadReader);
+    const r = await importModel('box.igs', BYTES, {}, loadReader);
     expect(reader.ReadIgesFile).toHaveBeenCalledWith(BYTES, OCCT_PARAMS);
     expect(r.ok && r.kind === 'mesh' && r.source?.format).toBe('iges');
   });
 
   it('lists bodies until one is chosen', async () => {
     reader.ReadStepFile.mockReturnValue(recorded('two-bodies.step'));
-    const list = await importModel('two.step', BYTES, undefined, loadReader);
+    const list = await importModel('two.step', BYTES, {}, loadReader);
     expect(list.ok && list.kind).toBe('bodies');
-    const chosen = await importModel('two.step', BYTES, 1, loadReader);
+    const chosen = await importModel('two.step', BYTES, { body: 1 }, loadReader);
     expect(chosen.ok && chosen.kind === 'mesh' && chosen.source?.name).toBe('Large block');
   });
 
   it('reports reader crashes and load failures', async () => {
     reader.ReadStepFile.mockImplementation(() => { throw new Error('abort'); });
-    expect(await importModel('bad.step', BYTES, undefined, loadReader)).toEqual({ ok: false, error: 'Not a readable STEP file' });
+    expect(await importModel('bad.step', BYTES, {}, loadReader)).toEqual({ ok: false, error: 'Not a readable STEP file' });
     loadReader.mockRejectedValue(new Error('offline'));
-    expect(await importModel('bad.iges', BYTES, undefined, loadReader)).toEqual({ ok: false, error: 'Could not load the IGES reader: offline' });
+    expect(await importModel('bad.iges', BYTES, {}, loadReader)).toEqual({ ok: false, error: 'Could not load the IGES reader: offline' });
   });
 
   it('keeps the tessellation parameters fixed', () => {

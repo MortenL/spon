@@ -1,4 +1,5 @@
 import { CAD_LABEL, cadImport, type OcctResult } from '../import/cad';
+import type { SvgScale } from '../import/svg/svg';
 import { cadFormat, type ImportResult, importFile } from '../import/importFile';
 
 /** Tessellation settings. Fixed, so the same file always gives the same triangles (face references depend on it). */
@@ -21,10 +22,16 @@ export type OcctLoader = () => Promise<OcctReader>;
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
+/** How to read a model: which STEP/IGES body, and an SVG's scale. */
+export interface ImportOptions {
+  body?: number;
+  svgScale?: SvgScale;
+}
+
 /** Reads a model file. STEP/IGES go through the injected reader (loaded on first use); STL and DXF never touch it. */
-export async function importModel(fileName: string, bytes: Uint8Array, body: number | undefined, loadReader: OcctLoader): Promise<ImportResult> {
+export async function importModel(fileName: string, bytes: Uint8Array, options: ImportOptions, loadReader: OcctLoader): Promise<ImportResult> {
   const format = cadFormat(fileName);
-  if (!format) return importFile(fileName, bytes);
+  if (!format) return importFile(fileName, bytes, { svgScale: options.svgScale });
   let reader: OcctReader;
   try {
     reader = await loadReader();
@@ -37,5 +44,5 @@ export async function importModel(fileName: string, bytes: Uint8Array, body: num
   } catch {
     result = { success: false }; // the WASM reader aborts on some malformed files
   }
-  return cadImport(result, format, body);
+  return cadImport(result, format, options.body);
 }
