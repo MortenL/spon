@@ -45,6 +45,16 @@ describe('FileSession', () => {
     expect((await reopened.describe()).path).toBe(path);
   });
 
+  it('reports the run as JSON with line counts and the export verdict', async () => {
+    const s = await profiledDxf();
+    const report = await s.run();
+    expect(JSON.parse(JSON.stringify(report))).toEqual(report);
+    expect(report.files[0].lineCount).toBeGreaterThan(5);
+    expect(report.files[0].seconds).toBeGreaterThan(0);
+    expect(report.export.errors).toEqual([]);
+    expect(await s.run()).toBe(report); // cached until the job changes
+  });
+
   it('asks for a body, then reopens a STEP job through the Node reader (review focus 2)', async () => {
     const s = FileSession.create({}, options());
     const ask = await s.importModel({ fileName: 'two-bodies.step', bytes: fixture('two-bodies.step') });

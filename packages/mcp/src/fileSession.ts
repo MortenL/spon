@@ -1,13 +1,11 @@
-import { randomBytes } from 'node:crypto';
-import { readFile, rename, rm, writeFile } from 'node:fs/promises';
-import { extname } from 'node:path';
+import { readFile } from 'node:fs/promises';
 import {
-  addProgram, applyCommand, applyMachinePreset, type BBox, bboxOfPoints, bboxSize, type BlobMap, camContext, type CamRun, CommandError, createJob,
-  defaultBody, defaultPostSettings, type DialectId, exportInputFromRun, exportProblems, type GeometryCatalog, importModel, importStep, type Job,
-  type JobCommand, type MachinePresetName, type ModelGeometry, modelFilePath, type OcctLoader, PipelineCache, type PipelineResult, placementFor,
-  type PreviewOptions, previewInput, type ProgramRef, programContext, readSpon, renderPreviewSvg, runPipeline, setModel, SPON_EXTENSION,
-  suggestedUnits, toModelGeometry, vec3, writeSpon,
+  addProgram, applyCommands, applyMachinePreset, type BlobMap, type Boxes, camContext, createJob, decideImport, defaultPostSettings, type DialectId,
+  exportOutcome, type GeometryCatalog, importedOutcome, importModel, importStep, type Job, type JobCommand, type MachinePresetName, type ModelGeometry,
+  modelFilePath, modelSummary, newModelRef, type OcctLoader, operationsWithGeometry, PipelineCache, type PipelineResult, type PreviewOptions,
+  previewInput, type ProgramRef, programContext, readSpon, renderPreviewSvg, type RunReport, runPipeline, runReport, setModel, toModelGeometry, writeSpon,
 } from '@sponcam/core';
+import { withSponExtension, writeFileAtomic } from './files';
 import {
   type ExportOutcome, type ImportOutcome, type JobSession, type ModelInput, SessionError, type SessionInfo, type ToolLibraryAccess,
 } from './session';
@@ -22,7 +20,7 @@ export class FileSession implements JobSession {
   readonly kind = 'file' as const;
   readonly tools: ToolLibraryAccess;
   private readonly cache = new PipelineCache();
-  private last: { job: Job; geometry: ModelGeometry | null; result: PipelineResult } | null = null;
+  private last: { job: Job; geometry: ModelGeometry | null; result: PipelineResult; report: RunReport } | null = null;
 
   private constructor(
     private current: Job,
@@ -68,12 +66,7 @@ export class FileSession implements JobSession {
   }
 
   async describe(): Promise<SessionInfo> {
-    const m = this.current.model;
-    return {
-      kind: 'file', name: this.current.name, path: this.path, dirty: this.dirty,
-      model: m ? { sourceName: m.sourceName, kind: m.kind, format: m.format ?? (m.kind === 'mesh' ? 'stl' : 'dxf'), body: m.body ?? null } : null,
-      operations: this.current.operations.length,
-    };
+    return { kind: 'file', name: this.current.name, path: this.path, dirty: this.dirty, model: modelSummary(this.current.model), operations: this.current.operations.length };
   }
 
   async job(): Promise<Job> {
@@ -81,14 +74,7 @@ export class FileSession implements JobSession {
   }
 
   async apply(commands: readonly JobCommand[]): Promise<Job> {
-    let next = this.current;
-    commands.forEach((c, i) => {
-      try {
-        next = applyCommand(next, c);
-      } catch (err) {
-        throw new CommandError(`commands[${i}] ${c.type}: ${message(err)}`);
-      }
-    });
+    const next = applyCommands(this.current, commands);
     if (next !== this.current) {
       this.current = next;
       this.dirty = true;
@@ -98,66 +84,50 @@ export class FileSession implements JobSession {
 
   async importModel(input: ModelInput): Promise<ImportOutcome> {
     const step = importStep(await importModel(input.fileName, input.bytes, input.body, this.options.loadReader));
-    if (step.kind === 'error') return { status: 'error', error: step.error };
-    if (step.kind === 'chooseBody') return { status: 'needsBody', bodies: step.bodies, suggested: defaultBody(step.bodies) };
-    const geometry = toModelGeometry(step.result);
-    const units = step.units ?? input.units;
-    if (!units) {
-      const raw = bboxOfPoints(geometry.rawPoints);
-      return { status: 'needsUnits', suggested: suggestedUnits(step.result), rawSize: raw ? bboxSize(raw) : vec3(0, 0, 0) };
-    }
-    const affected = this.current.operations.filter((op) => op.geometry.length > 0).length;
+    const decision = decideImport(step, input.units);
+    if (decision.status !== 'ready') return decision;
+    const affected = operationsWithGeometry(this.current);
     const blobId = crypto.randomUUID();
-    const source = geometry.kind === 'mesh' ? geometry.source : undefined;
     const oldBlob = this.current.model?.blobId;
-    this.current = setModel(this.current, {
-      sourceName: input.fileName, blobId, kind: geometry.kind, importUnits: units, ...(source ? { format: source.format, body: source.body } : {}),
-    });
+    this.current = setModel(this.current, newModelRef(input.fileName, decision.geometry, decision.units, blobId));
     this.blobs = { ...Object.fromEntries(Object.entries(this.blobs).filter(([id]) => id !== oldBlob)), [blobId]: input.bytes };
-    this.geometry = geometry;
+    this.geometry = decision.geometry;
     this.dirty = true;
-    const placement = placementFor(this.current.model!, geometry);
-    const warnings = [...step.result.warnings];
-    if (affected) warnings.push(`${affected} operation(s) referred to the previous model; their geometry no longer resolves`);
-    return { status: 'imported', kind: geometry.kind, size: placement ? bboxSize(placement.bbox) : vec3(0, 0, 0), units, warnings };
+    return importedOutcome(this.current, decision.geometry, decision.units, decision.warnings, affected);
   }
 
-  private pipeline(): PipelineResult {
-    if (this.last && this.last.job === this.current && this.last.geometry === this.geometry) return this.last.result;
+  private pipeline(): { result: PipelineResult; report: RunReport } {
+    if (this.last && this.last.job === this.current && this.last.geometry === this.geometry) return this.last;
     const opts = this.options.postDate ? { date: this.options.postDate } : {};
     const result = runPipeline(this.current, this.geometry, programContext(this.current, this.geometry), this.cache, opts);
-    this.last = { job: this.current, geometry: this.geometry, result };
-    return result;
+    this.last = { job: this.current, geometry: this.geometry, result, report: runReport(this.current, result.run) };
+    return this.last;
   }
 
-  async run(): Promise<CamRun> {
-    return this.pipeline().run;
+  async run(): Promise<RunReport> {
+    return this.pipeline().report;
   }
 
   async catalog(): Promise<GeometryCatalog | null> {
     return this.cache.catalogFor(this.current, this.geometry);
   }
 
-  async boxes(): Promise<{ model: BBox | null; stock: BBox | null }> {
+  async boxes(): Promise<Boxes> {
     const ctx = camContext(this.current, this.geometry);
     return { model: ctx.model, stock: ctx.stock };
   }
 
   async previewSvg(options: PreviewOptions): Promise<string> {
-    return renderPreviewSvg(previewInput(this.current, this.geometry, this.pipeline()), options);
+    return renderPreviewSvg(previewInput(this.current, this.geometry, this.pipeline().result), options);
   }
 
   async save(path?: string): Promise<string> {
     const target = path ?? this.path;
     if (!target) throw new SessionError('This job has not been saved yet — give a path');
-    const file = extname(target).toLowerCase() === SPON_EXTENSION ? target : `${target}${SPON_EXTENSION}`;
-    // a temporary file renamed over the target, so a failed write never leaves a half-written .spon
-    const tmp = `${file}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`;
+    const file = withSponExtension(target);
     try {
-      await writeFile(tmp, writeSpon(this.current, this.blobs));
-      await rename(tmp, file);
+      await writeFileAtomic(file, writeSpon(this.current, this.blobs));
     } catch (err) {
-      await rm(tmp, { force: true }).catch(() => undefined);
       throw new SessionError(`Could not write ${file}: ${message(err)}`);
     }
     this.path = file;
@@ -166,10 +136,7 @@ export class FileSession implements JobSession {
   }
 
   async exportGcode(): Promise<ExportOutcome> {
-    const run = this.pipeline().run;
-    const { errors, warnings } = exportProblems(exportInputFromRun(this.current, run));
-    if (errors.length) return { ok: false, errors, warnings };
-    return { ok: true, files: run.files.map((f) => ({ name: f.name, text: f.text })), warnings };
+    return exportOutcome(this.pipeline().report);
   }
 
   async importProgram(fileName: string, bytes: Uint8Array): Promise<ProgramRef> {

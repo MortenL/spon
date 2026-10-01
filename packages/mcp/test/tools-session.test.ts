@@ -4,6 +4,14 @@ import { describe, expect, it } from 'vitest';
 import { connect, data, text } from './connect';
 
 describe('session tools', () => {
+  it('describes a live session by its tab', async () => {
+    const { statusText } = await import('../src/tools/session');
+    expect(statusText({ kind: 'live', name: 'Bracket', path: 'bracket.spon', dirty: true, model: null, operations: 2 }))
+      .toBe('Live tab: job "Bracket" (bracket.spon), unsaved changes. Model: none. Operations: 2.');
+    expect(statusText({ kind: 'live', name: 'New', path: null, dirty: false, model: null, operations: 0 }))
+      .toBe('Live tab: job "New" (no file yet). Model: none. Operations: 0.');
+  });
+
   it('registers the session tools', async () => {
     const { client } = await connect();
     const names = (await client.listTools()).tools.map((t) => t.name);
@@ -12,10 +20,10 @@ describe('session tools', () => {
 
   it('says when no job is open', async () => {
     const { call } = await connect();
-    expect(text(await call('status'))).toBe('No job open. Use new_job or open_job.');
+    expect(text(await call('status'))).toBe('No job open. Use new_job, open_job or use_live_tab.');
     const r = await call('get_job');
     expect(r.isError).toBe(true);
-    expect(text(r)).toBe('No job open. Use new_job or open_job.');
+    expect(text(r)).toBe('No job open. Use new_job, open_job or use_live_tab.');
   });
 
   it('imports by a relative path and names absolute paths in errors (review focus 1)', async () => {

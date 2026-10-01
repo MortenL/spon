@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { type BBox, exportInputFromRun, exportProblems } from '@sponcam/core';
+import type { BBox } from '@sponcam/core';
 import { z } from 'zod';
 import type { ToolContext } from '../context';
 import { SessionError } from '../session';
@@ -53,11 +53,11 @@ export function registerOutputTools(server: McpServer, ctx: ToolContext): void {
       const status = !op.enabled ? 'disabled' : diagnostics.some((d) => d.severity === 'error') ? 'error' : diagnostics.length ? 'warning' : 'ok';
       return { id: op.id, name: op.name, type: op.type, status, diagnostics, heights: r?.heights ?? null };
     });
-    const files = run.files.map((f) => ({ name: f.name, lines: f.parsed.analysis.summary.lineCount, tools: f.tools, seconds: f.parsed.analysis.summary.totalSeconds }));
+    const files = run.files.map((f) => ({ name: f.name, lines: f.lineCount, tools: f.tools, seconds: f.seconds }));
     const cycleSeconds = files.reduce((t, f) => t + f.seconds, 0);
     let extents: BBox | null = null;
-    for (const f of run.files) if (f.parsed.analysis.summary.extents) extents = union(extents, f.parsed.analysis.summary.extents);
-    const verdict = exportProblems(exportInputFromRun(job, run));
+    for (const f of run.files) if (f.extents) extents = union(extents, f.extents);
+    const verdict = run.export;
     const lines = [
       ...operations.map((o) => `${o.status.toUpperCase()} ${o.name} (${o.type}, ${o.id})${o.diagnostics.map((d) => `\n  ${d.severity}: ${d.message}`).join('')}`),
       ...files.map((f) => `${f.name}: ${f.lines} lines, ${f.tools.length ? `T${f.tools.join(', T')}` : 'no tool change'}, ${fmtTime(f.seconds)}`),

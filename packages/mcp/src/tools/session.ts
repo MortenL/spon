@@ -12,9 +12,11 @@ import { type Args, guarded, ok } from './result';
 const size = (v: Vec3) => `${v.x.toFixed(2)} × ${v.y.toFixed(2)} × ${v.z.toFixed(2)}`;
 
 export function statusText(info: SessionInfo): string {
-  const where = info.path ?? 'not saved yet';
   const model = info.model ? `${info.model.sourceName} (${info.model.format}${info.model.body !== null ? `, body ${info.model.body}` : ''})` : 'none';
-  return `Job "${info.name}" (${where})${info.dirty ? ', unsaved changes' : ''}. Model: ${model}. Operations: ${info.operations}.`;
+  const head = info.kind === 'live'
+    ? `Live tab: job "${info.name}" (${info.path ?? 'no file yet'})`
+    : `Job "${info.name}" (${info.path ?? 'not saved yet'})`;
+  return `${head}${info.dirty ? ', unsaved changes' : ''}. Model: ${model}. Operations: ${info.operations}.`;
 }
 
 function importText(name: string, o: Exclude<ImportOutcome, { status: 'error' }>): string {

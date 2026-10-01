@@ -1,8 +1,8 @@
-import { randomBytes } from 'node:crypto';
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { exportToolLibrary, importToolLibrary, mergeToolLibrary, parseToolLibraryFile, sortTools, starterLibrary, type Tool, validateTool } from '@sponcam/core';
+import { writeFileAtomic } from './files';
 import { type LibraryImportResult, SessionError, type ToolLibraryAccess } from './session';
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
@@ -70,15 +70,11 @@ export class ToolLibraryFile implements ToolLibraryAccess {
     });
   }
 
-  /** Writes a temporary file and renames it over the library, so a crash never leaves half a file. */
   private async write(tools: readonly Tool[]): Promise<void> {
-    const tmp = `${this.path}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`;
     try {
       await mkdir(dirname(this.path), { recursive: true });
-      await writeFile(tmp, exportToolLibrary(tools));
-      await rename(tmp, this.path);
+      await writeFileAtomic(this.path, exportToolLibrary(tools));
     } catch (err) {
-      await rm(tmp, { force: true }).catch(() => undefined);
       throw new SessionError(`Could not write the tool library ${this.path}: ${message(err)}`);
     }
   }

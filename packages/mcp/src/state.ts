@@ -1,7 +1,7 @@
 import { HandleMap } from './handles';
 import { type JobSession, SessionError } from './session';
 
-export const NO_JOB = 'No job open. Use new_job or open_job.';
+export const NO_JOB = 'No job open. Use new_job, open_job or use_live_tab.';
 
 /** The one current session and the geometry handles of its latest catalog. */
 export class ServerState {
@@ -21,6 +21,12 @@ export class ServerState {
 
   use(session: JobSession): void {
     this.session = session;
+    this.handles.clear();
+  }
+
+  /** No current session (the live tab went away). */
+  clear(): void {
+    this.session = null;
     this.handles.clear();
   }
 }

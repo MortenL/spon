@@ -1,36 +1,16 @@
 import type {
-  BBox, CadBodySummary, CamRun, GeometryCatalog, Job, JobCommand, LengthUnit, ModelFormat, ModelKind, PreviewOptions, ProgramRef, Tool, Vec3,
+  Boxes, ExportOutcome, GeometryCatalog, ImportOutcome, Job, JobCommand, LengthUnit, LibraryImportResult, PreviewOptions, ProgramRef, RunReport,
+  SessionInfo, Tool,
 } from '@sponcam/core';
+
+export type { Boxes, ExportOutcome, ImportOutcome, LibraryImportResult, SessionInfo } from '@sponcam/core';
 
 /** A failure with a message meant for Claude; the tool layer turns it into an isError result. */
 export class SessionError extends Error {
   override name = 'SessionError';
 }
 
-export interface SessionInfo {
-  kind: 'file' | 'live';
-  name: string;
-  /** Absolute .spon path once opened or saved, else null. */
-  path: string | null;
-  dirty: boolean;
-  model: { sourceName: string; kind: ModelKind; format: ModelFormat; body: number | null } | null;
-  operations: number;
-}
-
 export interface ModelInput { fileName: string; bytes: Uint8Array; units?: LengthUnit; body?: number }
-
-export type ImportOutcome =
-  | { status: 'imported'; kind: ModelKind; size: Vec3; units: LengthUnit; warnings: string[] }
-  /** STL/DXF that doesn't declare its units; `rawSize` is in file units. */
-  | { status: 'needsUnits'; suggested: LengthUnit; rawSize: Vec3 }
-  | { status: 'needsBody'; bodies: CadBodySummary[]; suggested: number }
-  | { status: 'error'; error: string };
-
-export type ExportOutcome =
-  | { ok: true; files: { name: string; text: string }[]; warnings: string[] }
-  | { ok: false; errors: string[]; warnings: string[] };
-
-export interface LibraryImportResult { added: number; updated: number; skipped: { name: string; reason: string }[]; notes: string[] }
 
 export interface ToolLibraryAccess {
   list(): Promise<Tool[]>;
@@ -38,7 +18,7 @@ export interface ToolLibraryAccess {
   importFile(fileName: string, bytes: Uint8Array, label?: string): Promise<LibraryImportResult>;
 }
 
-/** One open job: a .spon file on disk (FileSession) or, in phase 2, the browser tab. */
+/** One open job: a .spon file on disk (FileSession) or the browser tab (LiveSession). */
 export interface JobSession {
   readonly kind: 'file' | 'live';
   readonly tools: ToolLibraryAccess;
@@ -47,10 +27,11 @@ export interface JobSession {
   /** Atomic: all commands apply or none do. */
   apply(commands: readonly JobCommand[], label?: string): Promise<Job>;
   importModel(input: ModelInput): Promise<ImportOutcome>;
-  run(): Promise<CamRun>;
+  /** Pipeline output for the current job, as plain JSON; cached per job version. */
+  run(): Promise<RunReport>;
   catalog(): Promise<GeometryCatalog | null>;
   /** Placed model box and stock box in program coordinates. */
-  boxes(): Promise<{ model: BBox | null; stock: BBox | null }>;
+  boxes(): Promise<Boxes>;
   previewSvg(options: PreviewOptions): Promise<string>;
   /** Returns the absolute path written. */
   save(path?: string): Promise<string>;
