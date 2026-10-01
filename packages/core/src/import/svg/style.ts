@@ -43,7 +43,7 @@ export function parseDeclarations(text: string): Record<string, string> {
 
 /** Rules with simple selectors only: type, .class, #id and type.class; anything else (combinators, pseudo, @-rules) is skipped. */
 export function parseCss(text: string): CssRule[] {
-  const css = text.replace(/\/\*[\s\S]*?\*\//g, '');
+  const css = text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/@[\w-]+[^{;]*;/g, '');
   const rules: CssRule[] = [];
   let order = 0;
   let i = 0;

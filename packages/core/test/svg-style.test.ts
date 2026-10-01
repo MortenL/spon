@@ -19,6 +19,12 @@ describe('SVG styles', () => {
     expect(rules.map((r) => [r.type, r.cls, r.id])).toEqual([[null, 'cls-1', null], [null, 'cls-2', null], [null, null, 'x'], ['path', null, null]]);
   });
 
+  it('skips statement at-rules without losing the next rule', () => {
+    const rules = parseCss('@charset "utf-8"; @import url(x.css); .st0{fill:#f00} @media print { .p{fill:red} }');
+    expect(rules).toHaveLength(1);
+    expect(rules[0]).toMatchObject({ cls: 'st0', decls: { fill: '#f00' } });
+  });
+
   it('resolves precedence and inheritance', () => {
     const doc = parseXml(`<svg><g fill="blue" visibility="hidden">
       <path id="x" class="a" fill="red" style="stroke:#00f"/>
