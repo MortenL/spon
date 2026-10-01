@@ -1,3 +1,4 @@
+import { connect } from 'node:net';
 import { BRIDGE_CLOSE, REPLACED_MESSAGE } from '@sponcam/core';
 import { afterEach, describe, expect, it } from 'vitest';
 import { DEFAULT_ORIGINS, LiveBridge } from '../src/live/bridge';
@@ -116,5 +117,34 @@ describe('LiveBridge', () => {
     const silent = new WebSocket(`ws://127.0.0.1:${port}`, { origin: 'http://localhost:5173' });
     const code = await new Promise<number>((resolve) => silent.once('close', (c) => resolve(c)));
     expect(code).toBe(1008);
+  });
+
+  it('survives an invalid frame before hello and still accepts a tab', async () => {
+    const { bridge, port } = await started();
+    const raw = connect(port, '127.0.0.1');
+    raw.on('error', () => {});
+    const upgrade = [
+      'GET / HTTP/1.1', `Host: 127.0.0.1:${port}`, 'Upgrade: websocket', 'Connection: Upgrade',
+      'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==', 'Sec-WebSocket-Version: 13', 'Origin: http://localhost:5173', '', '',
+    ].join('\r\n');
+    raw.write(upgrade);
+    await new Promise<void>((resolve) => raw.once('data', () => resolve()));
+    raw.write(Buffer.from([0x81, 0x01, 0x41])); // unmasked client text frame: protocol error
+    await new Promise<void>((resolve) => { raw.once('close', () => resolve()); setTimeout(resolve, 500); });
+    raw.destroy();
+    const tab = openTab(port);
+    await tab.welcomed;
+    expect(bridge.tab).not.toBeNull();
+  });
+
+  it('ignores malformed messages from a connected tab', async () => {
+    const { bridge, port } = await started();
+    const tab = openTab(port);
+    await tab.welcomed;
+    tab.socket.send('null');
+    tab.socket.send('"text"');
+    tab.socket.send(JSON.stringify({ jsonrpc: '2.0', method: 'jobChanged' }));
+    expect(await bridge.tab!.request('describe', {})).toEqual({});
+    expect(bridge.tab!.title).toBe('Tab job');
   });
 });
