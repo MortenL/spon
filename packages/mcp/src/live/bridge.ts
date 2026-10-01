@@ -4,6 +4,9 @@ import { type WebSocket, WebSocketServer } from 'ws';
 import { debugLog, log } from '../log';
 import { DEFAULT_TIMEOUTS, TabConnection, type Timeouts } from './connection';
 
+/** A saveBytes reply carries a whole .spon base64-encoded; the web app accepts models up to 200 MB. */
+export const MAX_PAYLOAD_BYTES = 512 * 1024 * 1024;
+
 export const DEFAULT_ORIGINS: string[] = [5173, 4173, 5198, 5199].flatMap((p) => [`http://localhost:${p}`, `http://127.0.0.1:${p}`]);
 
 export interface BridgeOptions {
@@ -35,7 +38,7 @@ export class LiveBridge {
   start(): Promise<BridgeState> {
     return new Promise((resolve) => {
       const server = new WebSocketServer({
-        host: '127.0.0.1', port: this.options.port,
+        host: '127.0.0.1', port: this.options.port, maxPayload: MAX_PAYLOAD_BYTES,
         // browsers always send a truthful Origin; no Origin means a non-browser client, which is refused too
         verifyClient: (info: { origin?: string }) => info.origin !== undefined && this.origins.has(info.origin),
       });
@@ -76,7 +79,11 @@ export class LiveBridge {
     const server = this.server;
     this.server = null;
     this.state = { status: 'closed' };
-    if (server) await new Promise<void>((resolve) => server.close(() => resolve()));
+    if (!server) return;
+    const closed = new Promise<void>((resolve) => server.close(() => resolve()));
+    // a frozen tab or a socket that never said hello would keep close() waiting for ws's 30 s timeout
+    for (const client of server.clients) client.terminate();
+    await closed;
   }
 
   private accept(socket: WebSocket): void {

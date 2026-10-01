@@ -15,6 +15,8 @@ export class ServerState {
 
   async ensureCanSwitch(discard = false): Promise<void> {
     if (!this.session || discard) return;
+    // a live tab is never discarded by switching, so there is nothing to ask it
+    if (this.session.kind === 'live') return;
     const info = await this.session.describe();
     if (info.kind === 'file' && info.dirty) throw new SessionError('The current job has unsaved changes — save_job first, or pass discard: true');
   }

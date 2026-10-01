@@ -114,6 +114,7 @@ export function registerSessionTools(server: McpServer, ctx: ToolContext): void 
     const tab = bridge.tab;
     if (!tab) throw new SessionError('No Spon tab is connected. In the Spon web app, click "Claude" in the status bar to connect.');
     await state.ensureCanSwitch(a.discard);
+    if (!tab.open) throw new SessionError('Tab disconnected');
     state.use(new LiveSession(tab));
     const info = await state.requireSession().describe();
     return ok(`${statusText(info)}\nEvery change appears in the tab and is one undo step there.`, { session: info });

@@ -64,6 +64,20 @@ describe('LiveSession', () => {
     await expect(session.save()).rejects.toThrow('This tab has no file yet — give a path');
   });
 
+  it('still reports the path when the tab fails to mark the file saved', async () => {
+    const { backing } = await live();
+    const base = sessionHandler(backing).handle;
+    const bridge = bridges[0];
+    const tab = openTab((bridge.state as { port: number }).port, {
+      takeover: true,
+      handle: (method, p) => { if (method === 'markSaved') throw new Error('boom'); return base(method, p); },
+    });
+    await tab.welcomed;
+    const path = join(tempDir(), 'x.spon');
+    await expect(new LiveSession(bridge.tab!).save(path)).resolves.toBe(path);
+    expect(readFileSync(path, 'utf8')).toBe('spon bytes');
+  });
+
   it('reaches the tab\'s tool library and programs', async () => {
     const { session } = await live();
     await session.tools.add({ ...tool6, number: 50 });

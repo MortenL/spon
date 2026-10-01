@@ -4,6 +4,7 @@ import {
 } from '@sponcam/core';
 import { withSponExtension, writeFileAtomic } from '../files';
 import { type JobSession, type ModelInput, SessionError, type ToolLibraryAccess } from '../session';
+import { debugLog } from '../log';
 import type { TabConnection } from './connection';
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
@@ -68,7 +69,12 @@ export class LiveSession implements JobSession {
     } catch (err) {
       throw new SessionError(`Could not write ${file}: ${message(err)}`);
     }
-    await this.tab.request('markSaved', { token });
+    try {
+      await this.tab.request('markSaved', { token });
+    } catch (err) {
+      // the file is on disk; the tab just keeps showing unsaved changes
+      debugLog(`markSaved failed after writing ${file}: ${message(err)}`);
+    }
     return file;
   }
 

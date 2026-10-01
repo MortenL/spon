@@ -20,6 +20,7 @@ let stopping = false;
 const shutdown = () => {
   if (stopping) return;
   stopping = true;
+  setTimeout(() => process.exit(0), 2000).unref();
   void bridge.close().finally(() => process.exit(0));
 };
 process.stdin.on('end', shutdown);

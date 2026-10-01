@@ -1,7 +1,7 @@
 import { connect } from 'node:net';
 import { BRIDGE_CLOSE, REPLACED_MESSAGE } from '@sponcam/core';
 import { afterEach, describe, expect, it } from 'vitest';
-import { DEFAULT_ORIGINS, LiveBridge } from '../src/live/bridge';
+import { DEFAULT_ORIGINS, LiveBridge, MAX_PAYLOAD_BYTES } from '../src/live/bridge';
 import { openTab } from './fakeTab';
 
 const bridges: LiveBridge[] = [];
@@ -83,6 +83,16 @@ describe('LiveBridge', () => {
     await expect(bridge.tab!.request('importModel', { fileName: 'a.stl', bytes: '' })).rejects.toThrow('The tab did not answer within 0.4 s');
     expect(Date.now() - started_).toBeGreaterThanOrEqual(350);
   });
+
+  it('takes a tab reply larger than the default 100 MiB', async () => {
+    const { bridge, port } = await started();
+    const big = 'A'.repeat(101 * 1024 * 1024);
+    const tab = openTab(port, { handle: (method) => (method === 'saveBytes' ? { bytes: big, token: 1 } : {}) });
+    await tab.welcomed;
+    const reply = await bridge.tab!.request('saveBytes', {});
+    expect(reply.bytes.length).toBe(big.length);
+    expect(MAX_PAYLOAD_BYTES).toBeGreaterThan(100 * 1024 * 1024);
+  }, 60_000);
 
   it('fails a pending request when the tab disconnects (review focus 5)', async () => {
     const { bridge, port } = await started();

@@ -1,5 +1,5 @@
 import { mkdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, join, win32 } from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { BBox } from '@sponcam/core';
 import { z } from 'zod';
@@ -8,6 +8,12 @@ import { SessionError } from '../session';
 import { type Args, guarded, message, ok } from './result';
 
 export const MAX_GCODE_LINES = 400;
+
+/** File names come from the tab over the socket: only a plain file name may be joined onto the output folder. */
+export function safeOutputName(name: string): string {
+  if (!name || name.includes('..') || basename(name) !== name || win32.basename(name) !== name) throw new SessionError(`Refusing to write ${name}: not a plain file name`);
+  return name;
+}
 
 const fmtTime = (seconds: number) => {
   const m = Math.floor(seconds / 60);
@@ -128,7 +134,7 @@ export function registerOutputTools(server: McpServer, ctx: ToolContext): void {
     }
     const paths: string[] = [];
     for (const f of outcome.files) {
-      const path = join(dir, f.name);
+      const path = join(dir, safeOutputName(f.name));
       try {
         await writeFile(path, f.text);
       } catch (err) {

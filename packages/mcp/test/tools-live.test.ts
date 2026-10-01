@@ -72,6 +72,18 @@ describe('live tools', () => {
     expect((await call('new_job')).isError).toBeFalsy();
   });
 
+  it('leaves a live tab without asking it, even when it never answers', async () => {
+    const bridge = await withBridge();
+    const { call } = await connect({ bridge });
+    if (bridge.state.status !== 'listening') throw new Error('bridge is not listening');
+    let described = 0;
+    const tab = openTab(bridge.state.port, { handle: (method) => (method === 'describe' && described++ > 0 ? new Promise(() => {}) : { kind: 'live', path: null, dirty: false, name: 'Tab job' }) });
+    await tab.welcomed;
+    expect((await call('use_live_tab')).isError).toBeFalsy();
+    expect((await call('new_job')).isError).toBeFalsy();
+    expect(described).toBe(1);
+  });
+
   it('drops the session when the tab goes, and headless keeps working (review focus 5)', async () => {
     const bridge = await withBridge();
     const { call } = await connect({ bridge });
