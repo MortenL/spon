@@ -1,4 +1,4 @@
-import { addProgram, decodeProgramText, type Job, jobBlobIds, programContext } from '@sponcam/core';
+import { addProgram, decodeProgramText, type Job, jobBlobIds, programContext, type ProgramRef } from '@sponcam/core';
 import { toast } from 'sonner';
 import type { StoreApi } from 'zustand/vanilla';
 import { analyzeInWorker, parseProgramInWorker } from '../workers/importClient';
@@ -74,7 +74,7 @@ async function parseBlob(blobId: string): Promise<void> {
 }
 
 /** Adds a G-code file to the job's program list (never replaces anything). */
-export async function importProgramBytes(name: string, bytes: Uint8Array): Promise<void> {
+export async function importProgramBytes(name: string, bytes: Uint8Array): Promise<ProgramRef | null> {
   const blobId = crypto.randomUUID();
   state().setProgramBytes(blobId, bytes);
   state().setProgramData(blobId, { status: 'parsing', text: decodeProgramText(bytes), parsed: null, error: null });
@@ -84,6 +84,7 @@ export async function importProgramBytes(name: string, bytes: Uint8Array): Promi
   await storeBlob(blobId, bytes);
   await pruneBlobs();
   await parseBlob(blobId);
+  return added ?? null;
 }
 
 /** Parses every program of the current job (after open/restore). */

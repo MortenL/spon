@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto';
 import { exportToolLibrary, starterLibrary } from '@sponcam/core';
 import { openDB } from 'idb';
 import { describe, expect, it, vi } from 'vitest';
-import { defaultToolFor, deleteLibraryTool, importLibraryFile, loadToolLibrary, resetStarterLibrary, saveLibraryTool, toolLibraryStore } from './toolLibrary';
+import { defaultToolFor, deleteLibraryTool, importLibraryBytes, importLibraryFile, listLibraryTools, loadToolLibrary, resetStarterLibrary, saveLibraryTool, toolLibraryStore } from './toolLibrary';
 
 vi.mock('idb', async (importOriginal) => {
   const actual = await importOriginal<typeof import('idb')>();
@@ -62,6 +62,16 @@ describe('tool library', () => {
     expect(new Set(numbers).size).toBe(numbers.length);
     expect(res.notes).toHaveLength(2);
     expect(res.notes[0]).toMatch(/Imported A.*T2.*T\d+/);
+  });
+
+  it('lists and imports for the live bridge', async () => {
+    await loadToolLibrary();
+    const listed = await listLibraryTools();
+    expect(listed.map((t) => t.id)).toEqual(tools().map((t) => t.id));
+    const mine = { ...starterLibrary()[1], id: 'bridge-tool', name: 'Bridge 6 mm', number: 77 };
+    const result = await importLibraryBytes('lib.json', new TextEncoder().encode(exportToolLibrary([mine])));
+    expect(result.added).toBe(1);
+    expect((await listLibraryTools()).some((t) => t.id === 'bridge-tool')).toBe(true);
   });
 
   it('picks default tools per operation type', () => {

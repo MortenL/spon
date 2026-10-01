@@ -1,5 +1,5 @@
 import {
-  exportToolLibrary, mergeToolLibrary, type OperationType, parseToolLibraryFile, sortTools, starterLibrary, type Tool, validateTool,
+  exportToolLibrary, type LibraryImportResult, mergeToolLibrary, type OperationType, parseToolLibraryFile, sortTools, starterLibrary, type Tool, validateTool,
 } from '@sponcam/core';
 import { type DBSchema, type IDBPDatabase, openDB } from 'idb';
 import { useStore } from 'zustand';
@@ -70,10 +70,12 @@ export async function resetStarterLibrary(): Promise<void> {
   await refresh();
 }
 
-export async function importLibraryFile(
-  file: File,
-): Promise<{ added: number; updated: number; skipped: { name: string; reason: string }[]; notes: string[] }> {
-  const result = parseToolLibraryFile(new Uint8Array(await file.arrayBuffer()), file.name);
+export async function listLibraryTools(): Promise<Tool[]> {
+  return sortTools(await (await db()).getAll('tools'));
+}
+
+export async function importLibraryBytes(fileName: string, bytes: Uint8Array): Promise<LibraryImportResult> {
+  const result = parseToolLibraryFile(bytes, fileName);
   const d = await db();
   const merge = mergeToolLibrary(await d.getAll('tools'), result.tools);
   const tx = d.transaction('tools', 'readwrite');
@@ -81,6 +83,10 @@ export async function importLibraryFile(
   await tx.done;
   await refresh();
   return { added: merge.added, updated: merge.updated, skipped: result.skipped, notes: merge.notes };
+}
+
+export async function importLibraryFile(file: File): ReturnType<typeof importLibraryBytes> {
+  return importLibraryBytes(file.name, new Uint8Array(await file.arrayBuffer()));
 }
 
 export function exportLibraryFile(): void {

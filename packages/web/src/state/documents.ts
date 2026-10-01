@@ -1,7 +1,7 @@
 import {
   type BlobMap,
-  CAD_LABEL, cadFormat, createJob, fileKind, type ImportResult, importStep, type Job, type LengthUnit, MAX_SOFT_IMPORT_BYTES, migrateJob, modelFilePath,
-  type ModelRef, readSpon, SPON_EXTENSION, suggestedUnits, toModelGeometry, writeSpon,
+  CAD_LABEL, cadFormat, createJob, decideImport, fileKind, type ImportOutcome, importedOutcome, type ImportStep, importStep, type Job, type LengthUnit,
+  MAX_SOFT_IMPORT_BYTES, migrateJob, modelFilePath, type ModelRef, newModelRef, operationsWithGeometry, readSpon, SPON_EXTENSION, suggestedUnits, toModelGeometry, writeSpon,
 } from '@sponcam/core';
 import { toast } from 'sonner';
 import { cadReaderLoaded, importInWorker, loadCadReaderInWorker } from '../workers/importClient';
@@ -65,9 +65,9 @@ export async function openFile(file: File, handle: FileSystemFileHandle | null =
   else await importModelBytes(file.name, bytes);
 }
 
-export async function importModelBytes(fileName: string, bytes: Uint8Array, body?: number): Promise<void> {
+/** Reads a model file in the worker, loading the STEP/IGES reader first; shows busy text. Throws with a message. */
+async function readModelFile(fileName: string, bytes: Uint8Array, body?: number): Promise<ImportStep> {
   const cad = cadFormat(fileName);
-  let result: ImportResult;
   try {
     if (cad && !cadReaderLoaded()) {
       state().setBusy(`Loading ${CAD_LABEL[cad]} reader…`);
@@ -78,14 +78,20 @@ export async function importModelBytes(fileName: string, bytes: Uint8Array, body
       }
     }
     state().setBusy(cad ? `Reading ${CAD_LABEL[cad]} file…` : `Importing ${fileName}…`);
-    result = await importInWorker(fileName, bytes, body);
-  } catch (err) {
-    toast.error(`Could not import ${fileName}: ${message(err)}`);
-    return;
+    return importStep(await importInWorker(fileName, bytes, body));
   } finally {
     state().setBusy(null);
   }
-  const step = importStep(result);
+}
+
+export async function importModelBytes(fileName: string, bytes: Uint8Array, body?: number): Promise<void> {
+  let step: ImportStep;
+  try {
+    step = await readModelFile(fileName, bytes, body);
+  } catch (err) {
+    toast.error(`Could not import ${fileName}: ${message(err)}`);
+    return;
+  }
   if (step.kind === 'error') {
     toast.error(`Could not import ${fileName}: ${step.error}`);
     return;
@@ -119,13 +125,9 @@ export function cancelPendingBodies(): void {
 
 export async function finishImport(pending: PendingImport, units: LengthUnit): Promise<void> {
   const blobId = crypto.randomUUID();
-  const source = pending.geometry.kind === 'mesh' ? pending.geometry.source : undefined;
   state().setPendingImport(null);
   state().applyImportedModel(
-    {
-      sourceName: pending.fileName, blobId, kind: pending.geometry.kind, importUnits: units,
-      ...(source ? { format: source.format, body: source.body } : {}),
-    },
+    newModelRef(pending.fileName, pending.geometry, units, blobId),
     pending.geometry,
     pending.bytes,
     pending.warnings,
@@ -133,6 +135,55 @@ export async function finishImport(pending: PendingImport, units: LengthUnit): P
   state().requestView('fit');
   if (pending.warnings.length) toast.warning(`${pending.fileName} imported with ${pending.warnings.length} warning(s); see the Model panel`);
   await persistModelBlob(blobId, pending.bytes);
+}
+
+/** The live bridge's import: never opens a dialog, answers needsUnits / needsBody instead. */
+export async function importModelOutcome(fileName: string, bytes: Uint8Array, units?: LengthUnit, body?: number): Promise<ImportOutcome> {
+  let step: ImportStep;
+  try {
+    step = await readModelFile(fileName, bytes, body);
+  } catch (err) {
+    return { status: 'error', error: message(err) };
+  }
+  const decision = decideImport(step, units);
+  if (decision.status !== 'ready') return decision;
+  const affected = operationsWithGeometry(state().job);
+  await finishImport({ fileName, bytes, geometry: decision.geometry, warnings: decision.warnings, suggestedUnits: decision.units }, decision.units);
+  const outcome = importedOutcome(state().job, decision.geometry, decision.units, decision.warnings, affected);
+  return outcome.status === 'imported' ? { ...outcome, warnings: [...outcome.warnings, 'Importing a model starts a new undo history in the tab'] } : outcome;
+}
+
+function currentSponBytes(): Uint8Array {
+  const { job, modelBytes, programBytes } = state();
+  const blobs: BlobMap = { ...programBytes };
+  if (job.model && modelBytes) blobs[job.model.blobId] = modelBytes;
+  return writeSpon(job, blobs);
+}
+
+/** The live bridge's save without a path: writes through the tab's file handle. Returns the file name. */
+export async function saveToCurrentHandle(): Promise<string> {
+  const { fileHandle } = state();
+  if (!fileHandle) throw new Error('This tab has no file yet — give a path');
+  await writeToHandle(fileHandle, currentSponBytes());
+  state().markSaved(fileHandle);
+  return fileHandle.name;
+}
+
+let saveToken = 0;
+let pendingSave: { token: number; job: Job } | null = null;
+
+/** The job as .spon bytes for the MCP server to write; markSavedIfCurrent(token) follows once it is on disk. */
+export function sponBytesForSave(): { bytes: Uint8Array; token: number } {
+  pendingSave = { token: ++saveToken, job: state().job };
+  return { bytes: currentSponBytes(), token: pendingSave.token };
+}
+
+/** Clears the dirty flag (and the file handle: the file now lives where the server wrote it) if the job is what was saved. */
+export function markSavedIfCurrent(token: number): boolean {
+  if (!pendingSave || pendingSave.token !== token || state().job !== pendingSave.job) return false;
+  pendingSave = null;
+  state().markSaved(null);
+  return true;
 }
 
 export function cancelPendingImport(): void {
@@ -170,13 +221,10 @@ async function openSponBytes(bytes: Uint8Array, handle: FileSystemFileHandle | n
 }
 
 export async function saveDocument(saveAs = false): Promise<boolean> {
-  const { job, modelBytes, fileHandle } = state();
+  const { job, fileHandle } = state();
   const fileName = `${safeFileName(job.name)}${SPON_EXTENSION}`;
   try {
-    const { programBytes } = state();
-    const blobs: BlobMap = { ...programBytes };
-    if (job.model && modelBytes) blobs[job.model.blobId] = modelBytes;
-    const bytes = writeSpon(job, blobs);
+    const bytes = currentSponBytes();
     if (supportsFsAccess()) {
       const handle = (!saveAs && fileHandle) || (await pickSaveHandle(fileName));
       if (!handle) return false;
