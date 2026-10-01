@@ -159,3 +159,16 @@ export function applyCommand(job: Job, c: JobCommand): Job {
       return { ...job, tolerance: c.tolerance };
   }
 }
+
+/** Applies commands in order, all or none; a failure names the command: `commands[2] updateOperation: …`. */
+export function applyCommands(job: Job, commands: readonly JobCommand[]): Job {
+  let next = job;
+  commands.forEach((c, i) => {
+    try {
+      next = applyCommand(next, c);
+    } catch (err) {
+      throw new CommandError(`commands[${i}] ${c.type}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
+  return next;
+}

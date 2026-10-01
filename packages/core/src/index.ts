@@ -74,3 +74,6 @@ export * from './pipeline/readModel';
 export * from './preview/project';
 export * from './preview/simplify';
 export * from './preview/svg';
+export * from './pipeline/report';
+export * from './pipeline/importOutcome';
+export * from './bridge/protocol';
