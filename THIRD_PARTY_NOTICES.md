@@ -1,5 +1,7 @@
 # Third-party notices
 
+Spon itself is released under the MIT License (see `LICENSE`). The third-party components below keep their own licences.
+
 ## occt-import-js 0.0.23 (LGPL-2.1)
 
 Spon reads STEP and IGES files with [occt-import-js](https://github.com/kovacsv/occt-import-js), a WebAssembly build of

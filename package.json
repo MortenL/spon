@@ -1,6 +1,7 @@
 {
   "name": "spon",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@9.15.1",
   "engines": { "node": ">=22" },
