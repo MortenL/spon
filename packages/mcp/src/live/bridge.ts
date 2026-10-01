@@ -84,9 +84,6 @@ export class LiveBridge {
     // ws emits 'error' on an invalid frame; with no listener that would crash the process
     socket.on('error', (err) => debugLog(`socket error before hello: ${err.message}`));
     socket.once('close', () => clearTimeout(timer));
-    // ws emits 'error' on an invalid frame; with no listener that would crash the process
-    socket.on('error', (err) => debugLog(`socket error before hello: ${err.message}`));
-    socket.once('close', () => clearTimeout(timer));
     socket.once('message', (data) => {
       clearTimeout(timer);
       let hello: HelloParams | null = null;

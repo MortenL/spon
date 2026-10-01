@@ -68,7 +68,6 @@ export class TabConnection {
       return;
     }
     if (!msg || typeof msg !== 'object') return;
-    if (!msg || typeof msg !== 'object') return;
     if (typeof msg.id === 'number' && !msg.method) {
       const p = this.pending.get(msg.id);
       if (!p) return;
@@ -79,7 +78,6 @@ export class TabConnection {
       return;
     }
     if (msg.method === 'jobChanged') {
-      if (!msg.params || typeof msg.params !== 'object') return;
       if (!msg.params || typeof msg.params !== 'object') return;
       const { title, dirty } = msg.params as JobChangedParams;
       this.title = title;
