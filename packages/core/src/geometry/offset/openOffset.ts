@@ -1,6 +1,6 @@
 import type { Path2D, Vec2 } from '../path2d';
 import { fitArcs } from './arcFit';
-import { flattenPath } from './pathOps';
+import { flattenPath, pathLength, pointAt } from './pathOps';
 
 /**
  * The tool-centre paths beside an open line. `paths` are the pieces that remain, in order along the line and each
@@ -14,7 +14,7 @@ export interface OpenOffset { paths: Path2D[]; rounded: boolean }
  * was cut by an edge of the line other than the one the raw edge came from or its neighbours (more than an inside
  * corner was lost there).
  */
-interface Piece { pts: Vec2[]; t0: number; t1: number; far: boolean }
+interface Piece { pts: Vec2[]; t0: number; t1: number; k0: number; k1: number; far: boolean }
 
 /**
  * The tool-centre path `distance` to the left or right of an open path, seen along its direction.
@@ -42,10 +42,13 @@ export function offsetOpenPath(path: Path2D, side: 'left' | 'right', distance: n
   if (pts.length < 2) return null;
   const want = side === 'left' ? 1 : -1;
 
-  const raw = rawOffset(pts, want, d, joinTol / 4);
+  // the two ends sit level with the line's own ends, square to its true direction there (not the end chords')
+  const ends = [pointAt(path, 0).tangent, pointAt(path, pathLength(path)).tangent];
+  const raw = rawOffset(pts, want, d, joinTol / 4, ends);
   // Clip at d − joinTol/2: the raw offset sits at d, its own round joins at most joinTol/4 inside that, so it is
   // never clipped where no other part of the line comes near; what survives is at least d − joinTol/2 away.
-  const pieces = clipRaw(raw, pts, d - joinTol / 2).filter((p) => p.t1 - p.t0 >= tol); // drop slivers
+  const index = new LineIndex(pts, d);
+  const pieces = clipRaw(raw, index, d - joinTol / 2).filter((p) => p.t1 - p.t0 >= tol); // drop slivers
   if (!pieces.length) return null;
 
   // An inside corner clips each shifted edge only where the neighbouring edge comes within the distance. A cut by
@@ -57,19 +60,30 @@ export function offsetOpenPath(path: Path2D, side: 'left' | 'right', distance: n
     const a = prev.pts, b = next.pts;
     const end = a[a.length - 1];
     let joined = false;
-    if (Math.hypot(b[0].x - end.x, b[0].y - end.y) <= joinTol) {
-      prev.pts = [...a, ...b.slice(1)];
-      joined = true;
-    } else {
-      // two pieces whose end edges cross (an inside corner whose shifted edges were joined by a connector):
-      // cut both back to the crossing
-      const x = crossing(a[a.length - 2], end, b[0], b[1]);
-      if (x) {
-        prev.pts = [...a.slice(0, -1), x, ...b.slice(1)];
-        joined = true;
+    // Two pieces of one shifted edge were cut apart by something in between: never bridge them. Any other join
+    // must stay clear of the line (by the distance less the join budget), which it checks.
+    if (prev.k1 !== next.k0) {
+      if (Math.hypot(b[0].x - end.x, b[0].y - end.y) <= joinTol) {
+        const mid = { x: (b[0].x + end.x) / 2, y: (b[0].y + end.y) / 2 };
+        if (index.clearance(mid) >= d - joinTol) {
+          prev.pts = [...a, ...b.slice(1)];
+          joined = true;
+        }
+      } else {
+        // two pieces whose end edges cross (the shifted edges of an inside corner that were joined by a connector,
+        // or of edges either side of a short one): cut both back to the crossing
+        const x = crossing(a[a.length - 2], end, b[0], b[1]);
+        if (x && index.clearance(x) >= d - joinTol) {
+          prev.pts = [...a.slice(0, -1), x, ...b.slice(1)];
+          joined = true;
+        }
       }
     }
-    if (joined) prev.t1 = next.t1;
+    if (joined) {
+      prev.t1 = next.t1;
+      prev.k1 = next.k1;
+      prev.far ||= next.far;
+    }
     else merged.push(next);
   }
   if (merged.length > 1) rounded = true;
@@ -80,7 +94,7 @@ export function offsetOpenPath(path: Path2D, side: 'left' | 'right', distance: n
 /** The raw one-sided offset: its points and, per edge, a key (2i for edge i's shifted copy, 2i + 1 for the join after it). */
 interface Raw { pts: Vec2[]; keys: number[]; acc: number[]; total: number }
 
-function rawOffset(pts: readonly Vec2[], want: number, d: number, joinTol: number): Raw {
+function rawOffset(pts: readonly Vec2[], want: number, d: number, joinTol: number, ends: readonly Vec2[]): Raw {
   const m = pts.length - 1;
   const normals: Vec2[] = [];
   const dirs: Vec2[] = [];
@@ -99,9 +113,11 @@ function rawOffset(pts: readonly Vec2[], want: number, d: number, joinTol: numbe
     out.push(p);
   };
   const step = 2 * Math.acos(Math.max(-1, 1 - joinTol / d));
-  push({ x: pts[0].x + d * normals[0].x, y: pts[0].y + d * normals[0].y }, 0);
+  const side = (t: Vec2): Vec2 => ({ x: -t.y * want, y: t.x * want });
+  const n0 = side(ends[0]), nEnd = side(ends[1]);
+  push({ x: pts[0].x + d * n0.x, y: pts[0].y + d * n0.y }, 0);
   for (let i = 0; i < m; i++) {
-    const n = normals[i], q = pts[i + 1];
+    const n = i === m - 1 ? nEnd : normals[i], q = pts[i + 1];
     push({ x: q.x + d * n.x, y: q.y + d * n.y }, 2 * i);
     if (i === m - 1) break;
     const n1 = normals[i + 1];
@@ -135,46 +151,115 @@ function rawOffset(pts: readonly Vec2[], want: number, d: number, joinTol: numbe
 }
 
 /**
- * The pieces of the raw offset that lie at least `r` from every edge of the line, in order along the raw offset.
- * Each raw edge is tested against the capsule (the disc swept along the edge) of every line edge near it; a grid
- * of the line's edges keeps that local.
+ * The line's edges in a uniform grid, for finding the edges near a point or a segment. An edge is entered only in
+ * the cells it passes through (sampled every half cell), not every cell of its bounding box, so one long diagonal
+ * edge among many short ones costs cells in proportion to its length, not its area.
  */
-function clipRaw(raw: Raw, line: readonly Vec2[], r: number): Piece[] {
-  const h = Math.max(r, raw.total / Math.max(1, raw.pts.length - 1));
-  const grid = new Map<number, number[]>();
-  const key = (x: number, y: number) => x * 1_000_003 + y;
-  const span = (lo: number, hi: number) => [Math.floor(lo / h), Math.floor(hi / h)];
-  for (let k = 0; k < line.length - 1; k++) {
-    const a = line[k], b = line[k + 1];
-    const [x0, x1] = span(Math.min(a.x, b.x), Math.max(a.x, b.x));
-    const [y0, y1] = span(Math.min(a.y, b.y), Math.max(a.y, b.y));
-    for (let x = x0; x <= x1; x++) {
-      for (let y = y0; y <= y1; y++) {
-        const list = grid.get(key(x, y));
-        if (list) list.push(k);
-        else grid.set(key(x, y), [k]);
-      }
+class LineIndex {
+  private readonly h: number;
+  private readonly reachCells: number;
+  private readonly grid = new Map<number, number[]>();
+  private readonly stamp: Int32Array;
+  private query = 0;
+
+  /** `reach`: the largest distance queries look for (it sets the cell size together with the edge lengths). */
+  private readonly reach: number;
+
+  constructor(readonly pts: readonly Vec2[], reach: number) {
+    const lens = pts.slice(1).map((p, k) => Math.hypot(p.x - pts[k].x, p.y - pts[k].y)).sort((x, y) => x - y);
+    // cells a third of the reach (or the typical edge, when longer) keep the candidates near what is really in reach
+    this.h = Math.max(reach / 3, lens[lens.length >> 1] ?? 0, 1e-6);
+    // a point within reach of a sample's neighbourhood: reach, plus a quarter cell either side for the sampling
+    this.reachCells = Math.ceil(reach / this.h + 0.5);
+    this.reach = reach;
+    this.stamp = new Int32Array(pts.length).fill(-1);
+    for (let k = 0; k < pts.length - 1; k++) {
+      let last = NaN;
+      this.walk(pts[k], pts[k + 1], (cx, cy) => {
+        const key = cellKey(cx, cy);
+        if (key === last) return;
+        last = key;
+        const list = this.grid.get(key);
+        if (list) {
+          if (list[list.length - 1] !== k) list.push(k);
+        } else {
+          this.grid.set(key, [k]);
+        }
+      });
     }
   }
-  const seen = new Int32Array(line.length).fill(-1);
+
+  /** Calls `fn` once for every point sampled every half cell along a–b, with its cell. */
+  private walk(a: Vec2, b: Vec2, fn: (cx: number, cy: number) => void) {
+    const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / (this.h / 2)));
+    for (let i = 0; i <= n; i++) {
+      fn(Math.floor((a.x + ((b.x - a.x) * i) / n) / this.h), Math.floor((a.y + ((b.y - a.y) * i) / n) / this.h));
+    }
+  }
+
+  /**
+   * Calls `fn` once for every edge that may come within the reach of segment a–b. A point of an edge within reach
+   * of the segment is within reach plus a quarter cell of one of the segment's samples, and a quarter cell from one
+   * of its own edge's samples, so the cells within reach + half a cell around each sample's cell cover it.
+   */
+  near(a: Vec2, b: Vec2, fn: (k: number) => void) {
+    const q = this.query++;
+    let lx = NaN, ly = NaN;
+    this.walk(a, b, (cx, cy) => {
+      if (cx === lx && cy === ly) return;
+      lx = cx;
+      ly = cy;
+      const R = this.reachCells;
+      for (let x = cx - R; x <= cx + R; x++) {
+        for (let y = cy - R; y <= cy + R; y++) {
+          for (const k of this.grid.get(cellKey(x, y)) ?? []) {
+            if (this.stamp[k] === q) continue;
+            this.stamp[k] = q;
+            fn(k);
+          }
+        }
+      }
+    });
+  }
+
+  /** The distance from p to the line, or the reach when nothing is nearer. */
+  clearance(p: Vec2): number {
+    let best = this.reach;
+    this.near(p, p, (k) => { best = Math.min(best, segmentDistance(p, this.pts[k], this.pts[k + 1])); });
+    return best;
+  }
+}
+
+const cellKey = (x: number, y: number) => x * 1_000_003 + y;
+
+function segmentDistance(p: Vec2, a: Vec2, b: Vec2): number {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const len2 = dx * dx + dy * dy;
+  const u = len2 > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2)) : 0;
+  return Math.hypot(p.x - a.x - dx * u, p.y - a.y - dy * u);
+}
+
+/**
+ * The pieces of the raw offset that lie at least `r` from every edge of the line, in order along the raw offset.
+ * Each raw edge is tested against the capsule (the disc swept along the edge) of every line edge near it.
+ */
+function clipRaw(raw: Raw, index: LineIndex, r: number): Piece[] {
+  const line = index.pts;
   const pieces: Piece[] = [];
   let cur: Piece | null = null;
   let open = false; // cur runs on to the end of the previous raw edge
   for (let j = 0; j < raw.pts.length - 1; j++) {
     const a = raw.pts[j], b = raw.pts[j + 1];
     const hits: [number, number, number][] = [];
-    const [x0, x1] = span(Math.min(a.x, b.x) - r, Math.max(a.x, b.x) + r);
-    const [y0, y1] = span(Math.min(a.y, b.y) - r, Math.max(a.y, b.y) + r);
-    for (let x = x0; x <= x1; x++) {
-      for (let y = y0; y <= y1; y++) {
-        for (const k of grid.get(key(x, y)) ?? []) {
-          if (seen[k] === j) continue;
-          seen[k] = j;
-          const hit = capsuleInterval(a, b, line[k], line[k + 1], r);
-          if (hit) hits.push([hit[0], hit[1], k]);
-        }
-      }
-    }
+    const minX = Math.min(a.x, b.x) - r, maxX = Math.max(a.x, b.x) + r;
+    const minY = Math.min(a.y, b.y) - r, maxY = Math.max(a.y, b.y) + r;
+    index.near(a, b, (k) => {
+      const c = line[k], e = line[k + 1];
+      // boxes apart: the capsule cannot reach the edge
+      if (Math.max(c.x, e.x) <= minX || Math.min(c.x, e.x) >= maxX || Math.max(c.y, e.y) <= minY || Math.min(c.y, e.y) >= maxY) return;
+      const hit = capsuleInterval(a, b, c, e, r);
+      if (hit) hits.push([hit[0], hit[1], k]);
+    });
     // the parts of [0, 1] outside every capsule, with the line edge that cut each end (−1: not cut)
     hits.sort((p, q) => p[0] - q[0]);
     const kept: [number, number, number, number][] = [];
@@ -197,9 +282,10 @@ function clipRaw(raw: Raw, line: readonly Vec2[], r: number): Piece[] {
         cur.pts.push(at(u1));
       } else {
         if (cur) pieces.push(cur);
-        cur = { pts: [at(u0), at(u1)], t0: raw.acc[j] + u0 * len, t1: 0, far: !near(by0) };
+        cur = { pts: [at(u0), at(u1)], t0: raw.acc[j] + u0 * len, t1: 0, k0: src, k1: src, far: !near(by0) };
       }
       cur.t1 = raw.acc[j] + u1 * len;
+      cur.k1 = src;
       if (!near(by1)) cur.far = true;
       open = u1 === 1;
     }
@@ -248,7 +334,8 @@ function capsuleInterval(a: Vec2, b: Vec2, c: Vec2, d: Vec2, r: number): [number
 function crossing(a: Vec2, b: Vec2, c: Vec2, d: Vec2): Vec2 | null {
   const rx = b.x - a.x, ry = b.y - a.y, sx = d.x - c.x, sy = d.y - c.y;
   const den = rx * sy - ry * sx;
-  if (Math.abs(den) < 1e-15) return null;
+  // parallel, relative to the lengths: collinear pieces must never be found to cross through float noise
+  if (Math.abs(den) <= 1e-9 * Math.hypot(rx, ry) * Math.hypot(sx, sy)) return null;
   const qx = c.x - a.x, qy = c.y - a.y;
   const t = (qx * sy - qy * sx) / den, u = (qx * ry - qy * rx) / den;
   return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? { x: a.x + t * rx, y: a.y + t * ry } : null;

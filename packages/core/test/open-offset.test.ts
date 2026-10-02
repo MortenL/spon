@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { flattenPath, nearestS, type Path2D, pathFromPoints, pathLength, segmentEnd, segmentStart, type Vec2 } from '../src';
+import { flattenPath, nearestS, type Path2D, pathFromPoints, pathLength, pointAt, segmentEnd, segmentStart, type Vec2 } from '../src';
 import { type OpenOffset, offsetOpenPath } from '../src/geometry/offset/openOffset';
 
 const L: Path2D = pathFromPoints([{ x: 0, y: 0 }, { x: 50, y: 0 }, { x: 50, y: 30 }], false);
@@ -18,22 +18,37 @@ const first = (r: OpenOffset) => segmentStart(r.paths[0].segments[0]);
 const last = (r: OpenOffset) => segmentEnd(r.paths.at(-1)!.segments.at(-1)!);
 const total = (r: OpenOffset) => r.paths.reduce((sum, p) => sum + pathLength(p), 0);
 
+/** Every point along the result, every 0.01 mm along each straight piece too, is at least `distance` from the line. */
+function checkDense(line: Path2D, r: OpenOffset, distance: number) {
+  for (const lap of r.paths) {
+    const f = flattenPath(lap, 0.001);
+    for (let i = 1; i < f.length; i++) {
+      const n = Math.max(1, Math.ceil(Math.hypot(f[i].x - f[i - 1].x, f[i].y - f[i - 1].y) / 0.01));
+      for (let k = 0; k <= n; k++) {
+        const p = { x: f[i - 1].x + ((f[i].x - f[i - 1].x) * k) / n, y: f[i - 1].y + ((f[i].y - f[i - 1].y) * k) / n };
+        expect(nearestS(line, p).distance).toBeGreaterThanOrEqual(distance - 1e-6);
+      }
+    }
+  }
+}
+
 /**
- * No point of the result sits on an end cap: none lies behind an end of the line (along its end edge) unless the
- * rest of the line is just as near (where the tool touches the end and another edge at once).
+ * No point of the result sits on an end cap: none lies behind an end of the line (along the line's true direction
+ * there) unless the rest of the line is just as near (where the tool touches the end and another edge at once).
  */
 function withinEnds(line: Path2D, r: OpenOffset) {
   const pts = flattenPath(line, 0.001);
   const P2 = (q: Vec2[]) => pathFromPoints(q, false);
   const [head, tail] = [P2(pts.slice(1)), P2(pts.slice(0, -1))];
-  const [a, a1, b0, b] = [pts[0], pts[1], pts[pts.length - 2], pts[pts.length - 1]];
-  const along = (p: Vec2, o: Vec2, q: Vec2) => ((p.x - o.x) * (q.x - o.x) + (p.y - o.y) * (q.y - o.y)) / Math.hypot(q.x - o.x, q.y - o.y);
+  const len = pathLength(line);
+  const a = pointAt(line, 0), b = pointAt(line, len);
+  const along = (p: Vec2, o: Vec2, t: Vec2) => (p.x - o.x) * t.x + (p.y - o.y) * t.y;
   const dist = (p: Vec2, q: Vec2) => Math.hypot(p.x - q.x, p.y - q.y);
   for (const lap of r.paths) {
     for (const p of flattenPath(lap, 0.001)) {
       // within tol: the clip boundary where a piece starts at the end disc
-      if (along(p, a, a1) < -1e-6) expect(nearestS(head, p).distance).toBeLessThanOrEqual(dist(p, a) + tol);
-      if (along(p, b, b0) < -1e-6) expect(nearestS(tail, p).distance).toBeLessThanOrEqual(dist(p, b) + tol);
+      if (along(p, a.point, a.tangent) < -1e-6) expect(nearestS(head, p).distance).toBeLessThanOrEqual(dist(p, a.point) + tol);
+      if (along(p, b.point, b.tangent) > 1e-6) expect(nearestS(tail, p).distance).toBeLessThanOrEqual(dist(p, b.point) + tol);
     }
   }
 }
@@ -105,8 +120,8 @@ describe('offsetOpenPath', () => {
 
   it('starts and ends level with the ends of a curved line', () => {
     const arc: Path2D = { closed: false, segments: [{ kind: 'arc', center: { x: 0, y: 0 }, radius: 20, startAngle: 0, sweep: Math.PI / 2 }] };
-    for (const side of ['left', 'right'] as const) {
-      const out = offsetOpenPath(arc, side, 2, tol)!;
+    for (const [side, dist] of [['left', 2], ['right', 2], ['left', 3]] as const) {
+      const out = offsetOpenPath(arc, side, dist, tol)!;
       expect(Math.abs(first(out).y)).toBeLessThan(0.05);
       expect(Math.abs(last(out).x)).toBeLessThan(0.05);
       expect(out.rounded).toBe(false);
@@ -184,5 +199,31 @@ describe('offsetOpenPath', () => {
     expect(performance.now() - t0).toBeLessThan(1000);
     expect(r.rounded).toBe(false);
     expect(r.paths).toHaveLength(1);
+  });
+
+  it('never bridges a stretch clipped out of the middle of a shifted edge', () => {
+    // a hook whose tip points at the middle of the first edge's left offset: that offset is cut in two there
+    const hook = P([[0, 0], [43.879, 23.971], [38.126, 34.502], [11.799, 20.12], [17.312, 10.027]]);
+    const r = offsetOpenPath(hook, 'left', 3, tol)!;
+    checkDense(hook, r, 3);
+    // the same spike, turned through 50 angles (float noise differs with each)
+    for (let k = 0; k < 50; k++) {
+      const th = (k * 2 * Math.PI) / 50, c = Math.cos(th), s = Math.sin(th);
+      const spike = P([[0, 0], [50, 0], [50, 12], [22, 12], [22, 1.2]].map(([x, y]) => [7 + c * x - s * y, -3 + s * x + c * y]));
+      const out = offsetOpenPath(spike, 'left', 3, tol)!;
+      expect(out.rounded).toBe(true);
+      checkDense(spike, out, 3);
+    }
+  });
+
+  it('handles one long diagonal edge among many short ones quickly', () => {
+    const pts: number[][] = [];
+    for (let i = 0; i < 4000; i++) pts.push([i * 0.05, Math.sin(i * 0.05)]);
+    pts.push([200 + 2000 / Math.SQRT2, 2000 / Math.SQRT2]);
+    const line = P(pts);
+    const t0 = performance.now();
+    const r = offsetOpenPath(line, 'left', 0.5, tol);
+    expect(performance.now() - t0).toBeLessThan(1000);
+    expect(r).not.toBeNull();
   });
 });
