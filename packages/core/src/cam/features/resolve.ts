@@ -46,10 +46,10 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
     for (const k of loops) out.sagitta = Math.max(out.sagitta, f.sagittas[k] ?? 0);
   };
   const holeFromLoop = (f: FaceGeometry, loop: number, ref: number): boolean => {
-    usesLoops(f, [loop]);
-    const path = f.loops[loop];
-    const c = loop > 0 && path ? circleOf(path) : null;
+    const c = loop > 0 ? f.circles[loop] ?? null : null;
     if (!c) return false;
+    // the hole is cut as the circle through the facet corners, so its facets may sit this far inside the cut
+    out.sagitta = Math.max(out.sagitta, f.circleSagittas[loop] ?? 0);
     const hb = holeBottom(ctx, c.center, c.diameter / 2, f.z);
     out.holes.push({ center: c.center, diameter: c.diameter, top: f.z, bottom: hb.bottom, through: hb.through, ref });
     return true;

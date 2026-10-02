@@ -1,5 +1,5 @@
 import {
-  camContext, type CamContext, circleOf, type DxfPathRef, drawingPath, drawingPathToProgram, flattenPath, type GeometryRef,
+  camContext, type CamContext, type DxfPathRef, drawingPath, drawingPathToProgram, flattenPath, type GeometryRef,
   HEIGHT_NAMES, type HeightName, type Job, offsetOpenPath, pathLength, pointAt, type LapPosition, type Operation, type OpOverlays, type Path2D, type ResolvedHeights,
   programContext, programOrigin, resolveFaceRef, type Vec2, type Vec3,
 } from '@sponcam/core';
@@ -130,7 +130,7 @@ function refLoops(ctx: CamContext, ref: GeometryRef): Point3[][] {
   const loop = face.loops[ref.loop];
   if (!loop) return [];
   if (ref.kind === 'meshHole') {
-    const circle = circleOf(loop);
+    const circle = face.circles[ref.loop];
     if (circle) return [circlePoints(circle.center, circle.diameter / 2, face.z)];
   }
   return [closedLoopPoints(loop, face.z)];

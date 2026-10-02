@@ -108,6 +108,21 @@ describe('gouge check: chamfers', () => {
     }
   });
 
+  it.each([[16, 8], [24, 12]])('a coarse %i-gon hole (R %i) is still a hole: drillable, countersunk without a gouge', (sides, R) => {
+    const { geometry, job, top } = pocketBlock(circle(sides, R));
+    const hole = { kind: 'meshHole' as const, face: top, loop: 1 };
+    const drill = applyCommands(job, [
+      { type: 'addTool', tool: t3 }, { type: 'addOperation', opType: 'drill', toolId: 't3', id: 'd' },
+      { type: 'updateOperation', id: 'd', patch: { geometry: [hole] } as never },
+    ]);
+    const holes = resolveGeometry(drill.operations[0], camContext(drill, geometry as never)).holes;
+    expect(holes).toHaveLength(1);
+    expect(holes[0].diameter).toBeCloseTo(2 * R, 6);
+    const r = run(job, geometry, chamferCmds([hole], { width: 0.5 }))[0];
+    expect(r.toolpath).not.toBeNull();
+    expect(gouges(r)).toEqual([]);
+  });
+
   it('the allowance does not hide a cone dipping well below the edge it cuts', () => {
     const { geometry, job } = steppedSetup();
     const ctx = camContext(job, geometry as never);

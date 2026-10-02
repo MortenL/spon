@@ -73,13 +73,13 @@ export function pickMesh(op: Operation, ctx: CamContext, tri: number, q: Vec2, a
   let best = -1;
   let bestD = Infinity;
   res.face.loops.forEach((loop, i) => {
-    if (op.type === 'drill' && (i === 0 || !circleOf(loop))) return;
+    if (op.type === 'drill' && (i === 0 || !res.face.circles[i])) return;
     const d = nearestS(loop, q).distance;
     if (d < bestD) { bestD = d; best = i; }
   });
   if (best < 0) return { error: 'This face has no round holes' };
   // a chamfer treats a round inner loop as a hole (a countersink) and any other loop as an edge
-  const asHole = op.type === 'drill' || (op.type === 'chamfer' && best > 0 && circleOf(res.face.loops[best]) !== null);
+  const asHole = op.type === 'drill' || (op.type === 'chamfer' && best > 0 && res.face.circles[best] !== null);
   return { refs: [asHole ? { kind: 'meshHole', face, loop: best } : { kind: 'meshLoop', face, loop: best }] };
 }
 
