@@ -22,7 +22,7 @@ Operation parameters (add_operation params, or updateOperation patch)
 - drill: cycle (drill | dwell | peck | chipbreak), peck, dwellSeconds, diameterFilter { min, max }.
 - face: area (stock | picked), stepoverPct, overlap, pattern (zigzag | spiral), angleDeg, oneWay, finishStepoverPct, stepdown, finishPass, direction (climb | conventional).
 - chamfer: width, tipOffset, side (outside | inside | auto), openSide (left | right, for open lines), stepdown, direction (climb | conventional); the depth comes from the width and the tool's tip angle (a V-bit or chamfer mill).
-- slot: width (drawn centrelines), strategy (auto | toolWidth | wider | trochoidal), trochoidal { stepPct }, squareEnds (inside | endWall | dogbone), stepdown, direction.
+- slot: width (drawn centrelines), strategy (auto | toolWidth | wider | trochoidal), trochoidal { stepPct }, squareEnds (inside | endWall | dogbone), stepdown, direction, stepoverPct, stockRadial, stockAxial, finishWalls, entry.
 - feeds: { rpm, feed, plungeFeed, coolant }.
 
 Facing

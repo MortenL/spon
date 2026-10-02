@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { offsetPolys, pathFromPoints, type Path2D, type Toolpath } from '../src';
 import { tool6 } from './fixtures/camSetup';
-import { cutsAt, drawingSlotJob, plunges, slotOutline, sweptAt, uncovered } from './fixtures/slotSetup';
+import { cutsAt, drawingSlotJob, plunges, slotOutline, overcut, sweptAt, uncovered } from './fixtures/slotSetup';
 
 const straight = pathFromPoints([{ x: 0, y: 0 }, { x: 40, y: 0 }], false);
 const arc: Path2D = { closed: false, segments: [{ kind: 'arc', center: { x: 0, y: 0 }, radius: 30, startAngle: 0, sweep: Math.PI / 2 }] };
@@ -16,7 +16,7 @@ function expectExactSlot(r: ReturnType<typeof drawingSlotJob>, w: number) {
   const target = slotOutline(r.program(0), w);
   const swept = sweptAt(r.tp!, -3, 3);
   expect(uncovered(target, swept)).toBeLessThan(1e-3);
-  expect(uncovered(swept, offsetPolys(target, 0.02, 0.005))).toBeLessThan(1e-3);
+  expect(overcut(swept, offsetPolys(target, 0.005, 0.001))).toBeLessThan(1e-3);
   expect(plunges(r.tp!, 0)).toEqual([]);
 }
 
@@ -44,6 +44,17 @@ describe('tool-width slots', () => {
   });
 });
 
+describe('entry into a centreline too short to ramp', () => {
+  it('plunges at the plunge feed with one warning, instead of thousands of passes', () => {
+    const { diagnostics, tp } = drawingSlotJob([pathFromPoints([{ x: 0, y: 0 }, { x: 0.005, y: 0 }], false)], { width: 6, ...bottom });
+    expect(errors(diagnostics)).toEqual([]);
+    expect(diagnostics.filter((d) => d.code === 'entry-plunge').map((d) => d.message)).toEqual(['Slots are entered with a plunge']);
+    expect(tp!.moves.length).toBeLessThan(200);
+    expect(plunges(tp!, 0).length).toBeGreaterThan(0);
+    for (const m of plunges(tp!, 0)) expect((m as { feed: number }).feed).toBeLessThan(drawingSlotJob([straight], { width: 6, ...bottom }).job.operations[0].feeds.feed);
+  });
+});
+
 describe('wider slots', () => {
   for (const [name, path] of [['straight', straight], ['arc', arc], ['freeform', freeform], ['ring', ring]] as const) {
     it(`clears a ${name} slot 10 mm wide with a 6 mm tool`, () => expectExactSlot(drawingSlotJob([path], { width: 10, ...bottom }), 10));
@@ -58,7 +69,7 @@ describe('wider slots', () => {
   it('leaves radial stock, and the finish pass takes it to the wall', () => {
     const rough = drawingSlotJob([straight], { width: 10, stockRadial: 0.5, ...bottom });
     expect(uncovered(slotOutline(rough.program(0), 9), sweptAt(rough.tp!, -3, 3))).toBeLessThan(1e-3);
-    expect(uncovered(sweptAt(rough.tp!, -3, 3), offsetPolys(slotOutline(rough.program(0), 9), 0.02, 0.005))).toBeLessThan(1e-3);
+    expect(overcut(sweptAt(rough.tp!, -3, 3), offsetPolys(slotOutline(rough.program(0), 9), 0.005, 0.001))).toBeLessThan(1e-3);
     expectExactSlot(drawingSlotJob([straight], { width: 10, stockRadial: 0.5, finishWalls: true, ...bottom }), 10);
   });
 

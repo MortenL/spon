@@ -61,6 +61,12 @@ export const sweptAt = (tp: Toolpath, z: number, r: number): Poly[] => sweepPoly
 /** Area of `a` not covered by `b`, ignoring slivers thinner than 0.05 mm (sweep and flattening error). */
 export const uncovered = (a: Poly[], b: Poly[]): number => polysArea(offsetPolys(offsetPolys(differencePolys(a, b), -0.025, 0.005), 0.025, 0.005));
 
+/**
+ * Area of `swept` outside `allowed`, ignoring slivers thinner than 0.005 mm (the sweep's own chord error is 0.005 at most). Callers
+ * pass an allowed area that is the exact target grown by at most 0.005, so an overcut of 0.02 mm or more shows up.
+ */
+export const overcut = (swept: Poly[], allowed: Poly[]): number => polysArea(offsetPolys(offsetPolys(differencePolys(swept, allowed), -0.0025, 0.001), 0.0025, 0.001));
+
 /** The outline of a round-ended slot of width w around a centreline (program coordinates). */
 export const slotOutline = (centre: Path2D, w: number): Poly[] =>
   sweepPolylines([{ points: flattenPath(centre, 0.001), closed: centre.closed }], w / 2, 0.005);

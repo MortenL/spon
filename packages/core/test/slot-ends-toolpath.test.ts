@@ -3,7 +3,7 @@ import {
   camContext, createJob, newOperation, offsetPolys, pathFromPoints, type ResolvedSlot, setStock, slotToolpath, type SlotOp, type Poly, differencePolys, polysArea, sweepPolylines, unionPolys,
 } from '../src';
 import { geoOf, tool6 } from './fixtures/camSetup';
-import { cutsAt, sweptAt, uncovered } from './fixtures/slotSetup';
+import { cutsAt, overcut, sweptAt, uncovered } from './fixtures/slotSetup';
 
 const ctx = camContext(setStock(createJob(), { mode: 'fixed', size: { x: 200, y: 200, z: 20 }, modelOffset: { x: 0, y: 0, z: 0 } }), null);
 const rect = (x0: number, y0: number, x1: number, y1: number): Poly[] => [[{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }]];
@@ -22,7 +22,7 @@ function dogboneAllowance(stock: number): Poly[] {
     const tip = { x: c.x + dx * (stock + k), y: c.y + dy * (stock + k) };
     return { points: [tip, { x: tip.x + dx * 1.5, y: tip.y + dy * 1.5 }], closed: false as const };
   });
-  return unionPolys(offsetPolys(rect(0, -5, 40, 5), 0.02, 0.005), sweepPolylines(reliefs, 3.05, 0.005));
+  return unionPolys(offsetPolys(rect(0, -5, 40, 5), 0.005, 0.001), sweepPolylines(reliefs, 3.05, 0.005));
 }
 const messages = (o: ReturnType<typeof cut>) => o.diagnostics.map((d) => d.message);
 
@@ -38,7 +38,7 @@ describe('square slot ends', () => {
       const o = cut(['square', 'square'], { squareEnds: 'inside', strategy });
       expect(messages(o)).toContain('Square slot ends keep the tool radius in their corners');
       const swept = sweptAt(o.toolpath!, -3, 3);
-      expect(uncovered(swept, offsetPolys(rect(0, -5, 40, 5), 0.02, 0.005))).toBeLessThan(1e-3);
+      expect(overcut(swept, offsetPolys(rect(0, -5, 40, 5), 0.005, 0.001))).toBeLessThan(1e-3);
       expect(uncovered(rect(0.1, -0.5, 39.9, 0.5), swept)).toBeLessThan(1e-3); // the end walls are reached across their middle
       expect(o.intended).toEqual([]);
     });
@@ -48,7 +48,7 @@ describe('square slot ends', () => {
       const swept = sweptAt(o.toolpath!, -3, 3);
       // wider loops reach the square corners' edges; trochoidal circles cannot (the finish-wall pass would), so they are checked across the middle
       expect(uncovered(strategy === 'wider' ? rect(0, -5, 40, 5) : rect(0, -0.5, 40, 0.5), swept)).toBeLessThan(1e-3);
-      expect(uncovered(swept, offsetPolys(rect(-3, -5, 43, 5), 0.02, 0.005))).toBeLessThan(1e-3);
+      expect(overcut(swept, offsetPolys(rect(-3, -5, 43, 5), 0.005, 0.001))).toBeLessThan(1e-3);
       expect(o.intended!.map((i) => i.message)).toEqual([
         'Square slot end cut past the model wall by up to 3.00 mm, as chosen', 'Square slot end cut past the model wall by up to 3.00 mm, as chosen',
       ]);
@@ -60,7 +60,7 @@ describe('square slot ends', () => {
       const pts = cutsAt(o.toolpath!, -3).flatMap((c) => c.points);
       for (const c of corners) expect(Math.min(...pts.map((p) => Math.hypot(p.x - c.x, p.y - c.y)))).toBeLessThanOrEqual(3 + 0.01);
       const allowed = dogboneAllowance(0);
-      expect(uncovered(sweptAt(o.toolpath!, -3, 3), allowed)).toBeLessThan(1e-3);
+      expect(overcut(sweptAt(o.toolpath!, -3, 3), allowed)).toBeLessThan(1e-3);
       expect(o.intended).toHaveLength(2);
     });
   }
@@ -93,7 +93,7 @@ describe('dogbone reliefs and the intended-overcut zones', () => {
         }
         if (stock === 0) return;
         // with stock the walls are not reached: only the relief bodies cross the inset corner, never beyond the finished wall + relief bound
-        expect(uncovered(sweptAt(o.toolpath!, -3, 3), dogboneAllowance(stock))).toBeLessThan(1e-3);
+        expect(overcut(sweptAt(o.toolpath!, -3, 3), dogboneAllowance(stock))).toBeLessThan(1e-3);
       });
     }
   }

@@ -198,6 +198,11 @@ describe('editing tools', () => {
       const generated = await call('generate');
       expect(generated.isError).toBeFalsy();
       expect(data(generated).export.errors).toEqual([]);
+      const gen = data(generated) as { operations: { status: string; diagnostics: unknown[] }[]; files: { lines: number }[]; extents: unknown };
+      expect(gen.operations[0].status).not.toBe('error');
+      expect(gen.files.length).toBeGreaterThan(0);
+      expect(gen.files[0].lines).toBeGreaterThan(10);
+      expect(gen.extents).not.toBeNull();
     });
   });
 });

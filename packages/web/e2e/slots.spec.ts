@@ -42,6 +42,7 @@ test('STL plate: a recognised square keyway blocks export until its ends are cho
   await page.getByTestId('inspector-tab-geometry').click();
   await page.locator('[data-testid^="catalog-slot-"]', { hasText: /8\.00 × 40\.00/ }).first().locator('input').check();
   await expect(lastRow(page)).toHaveAttribute('data-status', 'error');
+  await expect(page.getByTestId('op-diagnostic').filter({ hasText: 'Choose how square slot ends are cut' }).first()).toBeVisible();
   await page.getByTestId('inspector-tab-passes').click();
   await page.getByTestId('pass-slot-ends').selectOption('inside');
   await expect(lastRow(page)).toHaveAttribute('data-status', /ok|warning/);

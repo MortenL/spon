@@ -25,7 +25,13 @@ export function slotToolpath(op: SlotOp, tool: Tool, ctx: CamContext, geo: Resol
     return out;
   }
   if (op.squareEnds === null && geo.slots.some(hasSquareEnd)) diag('error', 'slot-ends-unset', 'Choose how square slot ends are cut');
-  if (op.entry.mode === 'plunge' && geo.slots.length) diag('warning', 'entry-plunge', 'Slots are entered with a plunge');
+  let plungeWarned = false;
+  const warnPlunge = () => {
+    if (plungeWarned) return;
+    plungeWarned = true;
+    diag('warning', 'entry-plunge', 'Slots are entered with a plunge');
+  };
+  if (op.entry.mode === 'plunge' && geo.slots.length) warnPlunge();
   const tol = ctx.tolerance;
   const fitTol = tol / 2;
   /** Region offsets are pulled in by this much, so arc fitting and the sweep's chords never push the tool past a wall (as in pockets). */
@@ -46,6 +52,22 @@ export function slotToolpath(op: SlotOp, tool: Tool, ctx: CamContext, geo: Resol
     w.travel(xy, first ? h.clearance : newSlot ? h.retract : h.feed, downZ);
     first = false;
     newSlot = false;
+  };
+  /**
+   * Layers after the first start from a lift and a drop. On an endWall slot those rapids must not happen inside the end-wall
+   * overcut: the tool first retreats along the centreline (`leaveEnds`), and drops at a point a tool radius clear of every
+   * square end, then feeds on at the entry height to where the layer starts.
+   */
+  const nextLayer = (slot: ResolvedSlot, xy: Vec2, h: ResolvedHeights, entryZ: number) => {
+    if (op.squareEnds !== 'endWall' || slot.centreline.closed || !hasSquareEnd(slot)) { liftAcross(xy, h, entryZ); return; }
+    leaveEnds(slot);
+    const L = pathLength(slot.centreline);
+    const clear = r + margin;
+    const lo = slot.startEnd === 'square' ? clear : 0;
+    const hi = L - (slot.endEnd === 'square' ? clear : 0);
+    const s = lo > hi ? L / 2 : Math.min(hi, Math.max(lo, nearestS(slot.centreline, xy).s));
+    liftAcross(pointAt(slot.centreline, s).point, h, entryZ);
+    if (Math.hypot(w.pos!.x - xy.x, w.pos!.y - xy.y) > 1e-9) w.line({ ...xy, z: entryZ }, feed);
   };
   /** A straight feed move to `xy` at the current Z when it stays inside `region`, else lift across. */
   const linkTo = (xy: Vec2, region: Poly[], h: ResolvedHeights, z: number, safeZ: number) => {
@@ -92,20 +114,21 @@ export function slotToolpath(op: SlotOp, tool: Tool, ctx: CamContext, geo: Resol
    * Gets the tool to depth `z` on `centre` (entering at `entryZ`) and cuts the whole centreline once. Helix when `room`
    * (the region's half-width) allows it, else a ramp along the centreline, or a plunge if asked for.
    */
-  const enterAndCut = (centre: Path2D, room: number, cuts: SlotCuts, entryZ: number, z: number, h: ResolvedHeights) => {
+  const enterAndCut = (slot: ResolvedSlot, li: number, centre: Path2D, room: number, cuts: SlotCuts, entryZ: number, z: number, h: ResolvedHeights) => {
+    const lift = (xy: Vec2) => (li > 0 ? nextLayer(slot, xy, h, entryZ) : liftAcross(xy, h, entryZ));
     const rh = (tool.diameter * op.entry.helixDiameterPct) / 200;
     const L = pathLength(centre);
     const startCut = !centre.closed && cuts.start !== null;
     const helixFits = (op.entry.mode === 'auto' || op.entry.mode === 'helix') && rh > 0 && rh <= room - margin && (!startCut || L >= 2 * rh);
     if (helixFits) {
       const c = startCut ? pointAt(centre, rh).point : pathStart(centre);
-      liftAcross({ x: c.x + rh, y: c.y }, h, entryZ);
+      lift({ x: c.x + rh, y: c.y });
       emitHelix(w, c, rh, entryZ, z, angle, feed);
       w.line({ ...pathStart(centre), z }, feed);
       emitLap(w, centre, z, z, feed, null);
       return;
     }
-    liftAcross(pathStart(centre), h, entryZ);
+    lift(pathStart(centre));
     if (op.entry.mode === 'plunge') {
       w.line({ ...pathStart(centre), z }, plunge);
       emitLap(w, centre, z, z, feed, null);
@@ -113,7 +136,8 @@ export function slotToolpath(op: SlotOp, tool: Tool, ctx: CamContext, geo: Resol
       emitRampLaps(w, centre, entryZ, z, angle, feed, null);
       emitLap(w, centre, z, z, feed, null);
     } else {
-      const atEnd = emitRampOpen(w, centre, entryZ, z, angle, feed);
+      const { atEnd, plunged } = emitRampOpen(w, centre, entryZ, z, angle, feed, false, plunge);
+      if (plunged) warnPlunge();
       emitLap(w, atEnd ? reversePath(centre) : centre, z, z, feed, null);
     }
   };
@@ -156,7 +180,13 @@ export function slotToolpath(op: SlotOp, tool: Tool, ctx: CamContext, geo: Resol
         levels.forEach((z, li) => {
           if (li === 0) liftAcross(pathStart(cur), h, h.feed);
           const from = li === 0 ? h.feed : levels[li - 1];
-          const atEnd = op.entry.mode === 'plunge' ? (w.line({ ...pathStart(cur), z }, plunge), false) : emitRampOpen(w, cur, from, z, angle, feed, true);
+          let atEnd = false;
+          if (op.entry.mode === 'plunge') w.line({ ...pathStart(cur), z }, plunge);
+          else {
+            const ramp = emitRampOpen(w, cur, from, z, angle, feed, true, plunge);
+            atEnd = ramp.atEnd;
+            if (ramp.plunged) warnPlunge();
+          }
           const cut = atEnd ? reversePath(cur) : cur;
           emitLap(w, cut, z, z, feed, null);
           cur = reversePath(cut);
@@ -184,7 +214,7 @@ export function slotToolpath(op: SlotOp, tool: Tool, ctx: CamContext, geo: Resol
       let prev = h.feed;
       levels.forEach((z, li) => {
         const entryZ = li === 0 ? h.feed : Math.min(h.feed, prev + LIFT);
-        enterAndCut(centre, dn, cuts, entryZ, z, h);
+        enterAndCut(slot, li, centre, dn, cuts, entryZ, z, h);
         for (const ring of loops) {
           for (const path of ring) {
             const start = rotateStart(path, nearestS(path, w.pos!).s);
@@ -217,11 +247,13 @@ export function slotToolpath(op: SlotOp, tool: Tool, ctx: CamContext, geo: Resol
         const entryZ = li === 0 ? h.feed : Math.min(h.feed, prev + LIFT);
         const c0 = centres[0];
         if (op.entry.mode === 'plunge') {
-          liftAcross({ x: c0.p.x + c0.n.x * R, y: c0.p.y + c0.n.y * R }, h, entryZ);
+          const at = { x: c0.p.x + c0.n.x * R, y: c0.p.y + c0.n.y * R };
+          if (li > 0) nextLayer(slot, at, h, entryZ); else liftAcross(at, h, entryZ);
           w.line({ ...w.pos!, z }, plunge);
         } else {
           // the first loop's circle is the helix (spec 3.6: a helix fits whenever trochoidal does); ramp entry uses it too
-          liftAcross({ x: c0.p.x + R, y: c0.p.y }, h, entryZ);
+          const at = { x: c0.p.x + R, y: c0.p.y };
+          if (li > 0) nextLayer(slot, at, h, entryZ); else liftAcross(at, h, entryZ);
           emitHelix(w, c0.p, R, entryZ, z, angle, feed);
           w.arc({ x: c0.p.x + c0.n.x * R, y: c0.p.y + c0.n.y * R, z }, c0.p, true, feed);
         }

@@ -35,20 +35,24 @@ const EPS = 1e-9;
  * start). Returns true when it ends at the path's end; `evenPasses` makes it end back at the start. A path shorter than 1 µm cannot be ramped: the tool feeds
  * straight down.
  */
-export function emitRampOpen(w: MoveWriter, path: Path2D, zFrom: number, zTo: number, angleDeg: number, feed: number, evenPasses = false): boolean {
+export const MAX_RAMP_PASSES = 200;
+export interface RampResult { atEnd: boolean; plunged: boolean }
+
+export function emitRampOpen(w: MoveWriter, path: Path2D, zFrom: number, zTo: number, angleDeg: number, feed: number, evenPasses = false, plungeFeed = feed): RampResult {
   const total = pathLength(path);
   const drop = zFrom - zTo;
-  if (drop <= EPS) return false;
-  if (total < 1e-3) {
-    w.line({ ...w.pos!, z: zTo }, feed);
-    return false;
-  }
+  if (drop <= EPS) return { atEnd: false, plunged: false };
   const perPass = total * Math.tan((Math.max(0.1, angleDeg) * Math.PI) / 180);
   let passes = Math.max(1, Math.ceil(drop / perPass - 1e-9));
+  // a centreline too short to ramp within a sensible number of passes is plunged instead (the caller warns)
+  if (total < 1e-3 || passes > MAX_RAMP_PASSES) {
+    w.line({ ...w.pos!, z: zTo }, plungeFeed);
+    return { atEnd: false, plunged: true };
+  }
   if (evenPasses && passes % 2 === 1) passes++;
   const back = reversePath(path);
   for (let k = 0; k < passes; k++) emitLap(w, k % 2 === 0 ? path : back, zFrom - (drop * k) / passes, zFrom - (drop * (k + 1)) / passes, feed, null);
-  return passes % 2 === 1;
+  return { atEnd: passes % 2 === 1, plunged: false };
 }
 
 /** Closed tool paths around a region: outer boundaries counter-clockwise for climb (an M3 spindle), holes the other way. */
