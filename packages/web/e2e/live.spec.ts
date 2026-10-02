@@ -5,11 +5,11 @@ import path from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { FIXTURES } from './helpers';
 import { expect, test } from '@playwright/test';
 
 const MCP = path.resolve(import.meta.dirname, '../../mcp');
 const DIST = path.join(MCP, 'dist', 'spon-mcp.js');
-const FIXTURES = path.resolve(import.meta.dirname, '../../core/test/fixtures');
 const PORT = 5196;
 const text = (r: CallToolResult) => r.content.map((c) => (c.type === 'text' ? c.text : '')).join('\n');
 

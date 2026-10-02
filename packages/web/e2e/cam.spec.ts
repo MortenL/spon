@@ -1,9 +1,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { expect, type Page, test } from '@playwright/test';
+import { FIXTURES, openPanel } from './helpers';
 import { strFromU8, unzipSync } from 'fflate';
-
-const FIXTURES = path.resolve(import.meta.dirname, '../../core/test/fixtures');
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -18,6 +17,7 @@ async function openFixture(page: Page, name: string) {
 }
 
 async function addOp(page: Page, type: 'profile' | 'pocket' | 'drill') {
+  await openPanel(page, 'operations');
   await page.getByTestId('add-op').click();
   await page.getByTestId(`add-op-${type}`).click();
   await expect(page.getByTestId('inspector')).toBeVisible();
@@ -26,7 +26,9 @@ const lastRow = (page: Page) => page.locator('[data-testid^="op-row-"]').last();
 
 test('DXF part: profile with tabs, pocket and drill generate, play and export', async ({ page }) => {
   await openFixture(page, 'cam-part.dxf');
+  await expect(page.getByTestId('model-size')).toBeVisible(); // the import has finished and brought the Model panel forward
   // 6 mm thick stock under the drawing (the auto-stock bottom margin; the drawing lies on the stock top)
+  await openPanel(page, 'stock');
   await page.getByTestId('stock-margin-bottom').fill('6');
   await page.getByTestId('stock-margin-bottom').press('Enter');
 
@@ -45,6 +47,7 @@ test('DXF part: profile with tabs, pocket and drill generate, play and export', 
   await expect(lastRow(page)).toHaveAttribute('data-status', /ok|warning/);
 
   // GRBL default: split by tool → the flat end mill file and the drill file
+  await openPanel(page, 'programs');
   const generated = page.getByTestId('program-generated');
   await expect(generated).toHaveCount(2);
   await expect(page.getByText(/-01-T2\.nc/)).toBeVisible();
@@ -59,10 +62,13 @@ test('DXF part: profile with tabs, pocket and drill generate, play and export', 
   await page.getByTestId('play').click();
 
   // LinuxCNC: a single file with canned cycles
-  await page.getByRole('button', { name: 'Post' }).click();
+  await openPanel(page, 'post');
   await page.getByTestId('post-dialect').selectOption('linuxcnc');
+  await openPanel(page, 'programs');
   await expect(generated).toHaveCount(1);
+  await openPanel(page, 'post');
   await page.getByTestId('post-dialect').selectOption('grbl');
+  await openPanel(page, 'programs');
   await expect(generated).toHaveCount(2);
 
   // export: warnings → confirm → zip download, containing exactly the two posted files
@@ -96,7 +102,9 @@ test('errors block export; a face that is no longer horizontal breaks its operat
   await page.getByTestId('catalog-face-1').click(); // the pocket floor (faces are listed top-down: top, floor, hole bottom)
   await expect(lastRow(page)).toHaveAttribute('data-status', /ok|warning/);
 
+  await openPanel(page, 'orientation');
   await page.getByTestId('rotate-x-pos').click(); // +90° about X: the pocket floor is now vertical
+  await openPanel(page, 'operations');
   await expect(lastRow(page)).toHaveAttribute('data-status', 'error');
   await expect(page.getByTestId('op-diagnostic').first()).toHaveAttribute('data-code', 'face-not-horizontal');
   await page.getByTestId('export-gcode').click();

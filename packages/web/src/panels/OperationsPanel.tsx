@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 import { addOperation, operationSeconds, operationStatus, runCommand, type OperationStatus } from '@/state/camView';
 import { appStore, useApp } from '@/state/store';
 import { formatDuration } from './format';
-import { PanelSection } from './PanelSection';
+import { PanelBody } from './PanelBody';
 
 const TYPE_ICON: Record<OperationType, typeof Scissors> = { profile: Scissors, pocket: SquareDashed, drill: Circle, face: Layers, chamfer: Triangle, slot: RectangleHorizontal };
 const OP_TYPES: readonly OperationType[] = ['profile', 'pocket', 'drill', 'face', 'chamfer', 'slot'];
@@ -101,7 +101,7 @@ export function OperationsPanel() {
   const [addOpen, setAddOpen] = useState(false);
 
   return (
-    <PanelSection title="Operations">
+    <PanelBody>
       <div data-testid="operations-panel">
         <Popover open={addOpen} onOpenChange={setAddOpen}>
           <PopoverTrigger asChild>
@@ -134,6 +134,6 @@ export function OperationsPanel() {
           </ul>
         )}
       </div>
-    </PanelSection>
+    </PanelBody>
   );
 }

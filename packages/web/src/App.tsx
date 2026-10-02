@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { resumeBridge } from '@/bridge/status';
 import { Toaster } from '@/components/ui/sonner';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { BottomDock } from '@/dock/BottomDock';
 import { usePlaybackLoop } from '@/gcode/playbackLoop';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
@@ -8,7 +9,7 @@ import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { Inspector } from '@/inspector/Inspector';
 import { BodyDialog } from '@/layout/BodyDialog';
 import { DropZone } from '@/layout/DropZone';
-import { LeftPanel } from '@/layout/LeftPanel';
+import { LeftRail } from '@/layout/LeftRail';
 import { StatusBar } from '@/layout/StatusBar';
 import { TopBar } from '@/layout/TopBar';
 import { SvgScaleDialog } from '@/layout/SvgScaleDialog';
@@ -44,8 +45,8 @@ export function App() {
   return (
     <div className="flex h-dvh flex-col bg-background text-foreground">
       <TopBar />
-      <div className="flex min-h-0 flex-1">
-        <LeftPanel />
+      <TooltipProvider>
+        <LeftRail>
         <main className="relative flex min-w-0 flex-1 flex-col">
           <div className="relative min-h-0 flex-1">
             <DropZone>
@@ -60,7 +61,8 @@ export function App() {
           <BottomDock />
         </main>
         <Inspector />
-      </div>
+        </LeftRail>
+      </TooltipProvider>
       <StatusBar />
       <UnitsDialog />
       <SvgScaleDialog />

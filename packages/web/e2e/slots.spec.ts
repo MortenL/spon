@@ -1,7 +1,6 @@
 import path from 'node:path';
 import { expect, type Page, test } from '@playwright/test';
-
-const FIXTURES = path.resolve(import.meta.dirname, '../../core/test/fixtures');
+import { FIXTURES, openPanel } from './helpers';
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -14,6 +13,7 @@ test.beforeEach(async ({ page }) => {
 const openFixture = (page: Page, name: string) => page.getByTestId('open-input').setInputFiles(path.join(FIXTURES, name));
 
 async function addOp(page: Page, type: 'slot') {
+  await openPanel(page, 'operations');
   await page.getByTestId('add-op').click();
   await page.getByTestId(`add-op-${type}`).click();
   await expect(page.getByTestId('inspector')).toBeVisible();
@@ -22,6 +22,8 @@ const lastRow = (page: Page) => page.locator('[data-testid^="op-row-"]').last();
 
 test('DXF centreline: a 10 mm slot is cut along a line and exports', async ({ page }) => {
   await openFixture(page, 'slot-lines.dxf');
+  await expect(page.getByTestId('model-size')).toBeVisible(); // the import has finished and brought the Model panel forward
+  await openPanel(page, 'stock');
   await page.getByTestId('stock-margin-bottom').fill('6');
   await page.getByTestId('stock-margin-bottom').press('Enter');
   await addOp(page, 'slot');
@@ -32,6 +34,7 @@ test('DXF centreline: a 10 mm slot is cut along a line and exports', async ({ pa
   await page.getByTestId('pass-slot-width').press('Enter');
   await expect(page.getByTestId('slot-auto-line')).toContainText('Auto → Wider');
   await expect(lastRow(page)).toHaveAttribute('data-status', /ok|warning/);
+  await openPanel(page, 'programs');
   await expect(page.getByTestId('program-generated')).toHaveCount(1);
 });
 
@@ -46,5 +49,6 @@ test('STL plate: a recognised square keyway blocks export until its ends are cho
   await page.getByTestId('inspector-tab-passes').click();
   await page.getByTestId('pass-slot-ends').selectOption('inside');
   await expect(lastRow(page)).toHaveAttribute('data-status', /ok|warning/);
+  await openPanel(page, 'programs');
   await expect(page.getByTestId('program-generated')).toHaveCount(1);
 });

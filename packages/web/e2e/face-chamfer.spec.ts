@@ -1,7 +1,6 @@
 import path from 'node:path';
 import { expect, type Page, test } from '@playwright/test';
-
-const FIXTURES = path.resolve(import.meta.dirname, '../../core/test/fixtures');
+import { FIXTURES, openPanel } from './helpers';
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -14,6 +13,7 @@ test.beforeEach(async ({ page }) => {
 const openFixture = (page: Page, name: string) => page.getByTestId('open-input').setInputFiles(path.join(FIXTURES, name));
 
 async function addOp(page: Page, type: 'profile' | 'face' | 'chamfer') {
+  await openPanel(page, 'operations');
   await page.getByTestId('add-op').click();
   await page.getByTestId(`add-op-${type}`).click();
   await expect(page.getByTestId('inspector')).toBeVisible();
@@ -22,6 +22,8 @@ const lastRow = (page: Page) => page.locator('[data-testid^="op-row-"]').last();
 
 test('DXF part: facing the stock top generates a program', async ({ page }) => {
   await openFixture(page, 'cam-part.dxf');
+  await expect(page.getByTestId('model-size')).toBeVisible(); // the import has finished and brought the Model panel forward
+  await openPanel(page, 'stock');
   await page.getByTestId('stock-margin-bottom').fill('6');
   await page.getByTestId('stock-margin-bottom').press('Enter');
 
@@ -34,11 +36,14 @@ test('DXF part: facing the stock top generates a program', async ({ page }) => {
   await page.getByTestId('height-bottom-offset').fill('-0.5');
   await page.getByTestId('height-bottom-offset').press('Enter');
   await expect(lastRow(page)).toHaveAttribute('data-status', /ok|warning/);
+  await openPanel(page, 'programs');
   await expect(page.getByTestId('program-generated')).toHaveCount(1);
 });
 
 test('DXF part: a chamfer mill chamfers the outline, with its depth computed', async ({ page }) => {
   await openFixture(page, 'cam-part.dxf');
+  await expect(page.getByTestId('model-size')).toBeVisible(); // the import has finished and brought the Model panel forward
+  await openPanel(page, 'stock');
   await page.getByTestId('stock-margin-bottom').fill('6');
   await page.getByTestId('stock-margin-bottom').press('Enter');
 

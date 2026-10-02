@@ -4,7 +4,7 @@ import { usePlacement } from '@/state/selectors';
 import { appStore, useApp } from '@/state/store';
 import { lineColor } from '@/viewport/convert';
 import { formatSize } from './format';
-import { PanelSection } from './PanelSection';
+import { PanelBody } from './PanelBody';
 
 export function ModelPanel() {
   const model = useApp((s) => s.job.model);
@@ -17,16 +17,16 @@ export function ModelPanel() {
 
   if (!model || !geometry) {
     return (
-      <PanelSection title="Model">
+      <PanelBody>
         <p className="text-sm text-muted-foreground">No model loaded. Drop an STL, STEP, IGES, DXF or SVG file on the viewport, or use Open.</p>
-      </PanelSection>
+      </PanelBody>
     );
   }
   const source = geometry.kind === 'mesh' ? geometry.source : undefined;
 
   const { commit, toggleLayer, toggleEdges } = appStore.getState();
   return (
-    <PanelSection title="Model">
+    <PanelBody>
       <dl className="grid grid-cols-[6rem_1fr] items-center gap-x-2 gap-y-1.5 text-sm">
         <dt className="text-muted-foreground">File</dt>
         <dd className="truncate" title={model.sourceName}>{model.sourceName}</dd>
@@ -92,6 +92,6 @@ export function ModelPanel() {
           {warnings.map((w) => <li key={w}>{w}</li>)}
         </ul>
       )}
-    </PanelSection>
+    </PanelBody>
   );
 }

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { MachineDialog } from '@/layout/MachineDialog';
 import { useExportConfirm } from '@/layout/ExportDialog';
 import { exportGcode } from '@/state/export';
 import { newDocument, openFile, openViaPicker, registerOpenFallback, saveDocument } from '@/state/documents';
@@ -62,6 +63,7 @@ export function TopBar() {
       <Separator orientation="vertical" className="mx-2 h-6" />
       <ToolButton label="Export G-code" icon={Download} onClick={() => void exportGcode(confirm)} disabled={!canExport} testId="export-gcode" />
       <div className="ml-auto" />
+      <MachineDialog />
       <ToggleGroup type="single" size="sm" variant="outline" value={units} onValueChange={(v) => v && commit((j) => setDisplayUnits(j, v as LengthUnit))}>
         <ToggleGroupItem value="mm" data-testid="units-toggle-mm">mm</ToggleGroupItem>
         <ToggleGroupItem value="in" data-testid="units-toggle-in">in</ToggleGroupItem>

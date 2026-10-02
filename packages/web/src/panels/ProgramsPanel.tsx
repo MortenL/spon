@@ -7,7 +7,7 @@ import { allPrograms } from '@/state/programList';
 import { pruneBlobs } from '@/state/programs';
 import { appStore, useApp } from '@/state/store';
 import { formatDuration } from './format';
-import { PanelSection } from './PanelSection';
+import { PanelBody } from './PanelBody';
 
 export function ProgramsPanel() {
   const programs = useApp((s) => allPrograms(s));
@@ -24,7 +24,7 @@ export function ProgramsPanel() {
   };
 
   return (
-    <PanelSection title="Programs">
+    <PanelBody>
       {programs.length === 0 ? (
         <p className="text-sm text-muted-foreground">No programs. Open or drop a G-code file (.nc, .ngc, .gcode, .tap, .cnc).</p>
       ) : (
@@ -81,6 +81,6 @@ export function ProgramsPanel() {
           })}
         </ul>
       )}
-    </PanelSection>
+    </PanelBody>
   );
 }
