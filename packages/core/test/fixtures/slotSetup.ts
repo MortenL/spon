@@ -1,8 +1,9 @@
 import {
-  applyCommands, camContext, type CamGeometry, createJob, differencePolys, drawingPathToProgram, flattenPath, type Move, offsetPolys, type Path2D,
-  pathsToPoints, PipelineCache, type Poly, polysArea, programContext, runPipeline, setModel, setStock, sweepPolylines, type Tool, type Toolpath, type Vec2,
+  applyCommands, buildAdjacency, camContext, type CamGeometry, createJob, describeGeometry, differencePolys, drawingPathToProgram, flattenPath, type Move, offsetPolys, type Path2D,
+  pathsToPoints, PipelineCache, type Poly, polysArea, programContext, runPipeline, setModel, setStock, sweepPolylines, type Tool, type Toolpath, type Vec2, weldTriangles,
 } from '../../src';
 import { tool6 } from './camSetup';
+import { type Pt, terracedTriangles } from './terraced.mjs';
 
 /** A drawing job with one Slot operation over every path of layer 0 (each path picked once). */
 export function drawingSlotJob(paths: Path2D[], patch: Record<string, unknown>, tool: Tool = tool6) {
@@ -74,3 +75,11 @@ export const plunges = (tp: Toolpath, top: number) => {
   });
   return out;
 };
+
+/** A mesh job of a terraced part (identity orientation, auto stock 5 mm around in XY, flush top and bottom). */
+export function terracedSetup(outer: Pt[], top: number, cuts: { poly: Pt[]; z: number }[]) {
+  const { mesh } = weldTriangles(Float32Array.from(terracedTriangles(outer, top, cuts).flat()));
+  const geometry: CamGeometry = { kind: 'mesh', mesh, adjacency: buildAdjacency(mesh), rawPoints: mesh.positions };
+  const job = setStock(setModel(createJob(), { sourceName: 'part.stl', blobId: 'm1', kind: 'mesh', importUnits: 'mm' }), { mode: 'auto', margin: { xy: 5, zTop: 0, zBottom: 0 } });
+  return { job, geometry, mesh, catalog: () => describeGeometry(job, geometry) };
+}

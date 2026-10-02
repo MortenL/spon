@@ -126,7 +126,7 @@ export function resolveFaceRef(ctx: CamContext, ref: MeshFaceRef): { ok: true; f
 const upFacing = new WeakMap<CamContext, { x: number; y: number; z: number }[]>();
 
 /** Centroids (program coordinates) of all triangles facing up within 1°. */
-function upFacingCentroids(ctx: CamContext): { x: number; y: number; z: number }[] {
+export function upFacingCentroids(ctx: CamContext): { x: number; y: number; z: number }[] {
   const cached = upFacing.get(ctx);
   if (cached) return cached;
   const out: { x: number; y: number; z: number }[] = [];
