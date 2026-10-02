@@ -1,13 +1,14 @@
-import type { CatalogContour, CatalogFace, CatalogHole, GeometryCatalog, GeometryRef } from '@sponcam/core';
+import type { CatalogContour, CatalogFace, CatalogHole, CatalogSlot, GeometryCatalog, GeometryRef } from '@sponcam/core';
 import { SessionError } from './session';
 
 export type HandledLoop = CatalogFace['loops'][number] & { handle: string };
 export type HandledFace = Omit<CatalogFace, 'loops'> & { handle: string; loops: HandledLoop[] };
 export type HandledHole = CatalogHole & { handle: string };
 export type HandledContour = CatalogContour & { handle: string };
-export interface HandledCatalog { faces: HandledFace[]; holes: HandledHole[]; contours: HandledContour[] }
+export type HandledSlot = CatalogSlot & { handle: string };
+export interface HandledCatalog { faces: HandledFace[]; holes: HandledHole[]; contours: HandledContour[]; slots: HandledSlot[] }
 
-/** Short names (F1, F1.L0, H1, C1) for the latest describe_geometry catalog. Refs are raw-model based, so they survive reorienting. */
+/** Short names (F1, F1.L0, H1, C1, S1) for the latest describe_geometry catalog. Refs are raw-model based, so they survive reorienting. */
 export class HandleMap {
   private refs = new Map<string, GeometryRef>();
 
@@ -25,7 +26,8 @@ export class HandleMap {
     });
     const holes = catalog.holes.map((h, i) => name(`H${i + 1}`, h.ref, h));
     const contours = catalog.contours.map((c, i) => name(`C${i + 1}`, c.ref, c));
-    return { faces, holes, contours };
+    const slots = catalog.slots.map((s, i) => name(`S${i + 1}`, s.ref, s));
+    return { faces, holes, contours, slots };
   }
 
   resolve(item: string | GeometryRef): GeometryRef {
@@ -49,6 +51,8 @@ export class HandleMap {
 }
 
 const mm = (v: number) => v.toFixed(3);
+/** A slot's width or length to 0.1 mm without trailing zeros (6.5, 13.5, 8); faceted models give 13.482 for a 13.5 mm slot. */
+const dim = (v: number) => String(+v.toFixed(1));
 const at = (c: { x: number; y: number }) => `(${mm(c.x)}, ${mm(c.y)})`;
 
 /** One line per face, hole and contour, in program coordinates (mm). */
@@ -59,6 +63,10 @@ export function catalogText(c: HandledCatalog): string {
     lines.push(`${f.handle} face z ${mm(f.z)}, area ${f.area.toFixed(1)} mm²; loops: ${loops.join(', ')}`);
   }
   for (const h of c.holes) lines.push(`${h.handle} ⌀${mm(h.diameter)} at ${at(h.center)}, z ${mm(h.bottom)} to ${mm(h.top)}, ${h.through ? 'through' : 'blind'}`);
+  for (const s of c.slots) {
+    const arc = s.kind === 'arc' && s.center && s.radius !== undefined ? `, radius ${dim(s.radius)} about ${at(s.center)}` : '';
+    lines.push(`${s.handle} slot ${dim(s.width)} × ${dim(s.length)} (${s.kind}, ${s.ends[0]}/${s.ends[1]}) at ${at(s.start)} → ${at(s.end)}${arc}, z ${mm(s.bottom)} to ${mm(s.top)}, ${s.through ? 'through' : 'blind'}`);
+  }
   for (const k of c.contours) {
     const shape = k.circle ? `circle ⌀${mm(k.circle.diameter)} at ${at(k.circle.center)}` : `box ${at(k.bbox.min)} to ${at(k.bbox.max)}`;
     lines.push(`${k.handle} contour on layer ${k.layer}, ${k.closed ? 'closed' : 'open'}, length ${k.length.toFixed(1)}, ${shape}${k.closed ? '' : `, from ${at(k.start)} to ${at(k.end)}`}`);

@@ -37,6 +37,7 @@ const SAMPLES: JobCommand[] = [
       tabs: { enabled: true, positions: [{ refIndex: 0, t: 0.25 }] }, leads: { startPoint: 'auto' }, diameterFilter: null,
     },
   },
+  { type: 'updateOperation', id: 'o', patch: { geometry: [{ kind: 'meshSlot', face }, { kind: 'meshSlot', face, loop: 2 }], strategy: 'toolWidth', trochoidal: { stepPct: 12 }, squareEnds: 'dogbone', heights: { bottom: { from: 'slotBottom', offset: 0 } } } },
   { type: 'removeOperation', id: 'o' },
   { type: 'duplicateOperation', id: 'o', newId: 'o2' },
   { type: 'moveOperation', id: 'o', delta: -1 },

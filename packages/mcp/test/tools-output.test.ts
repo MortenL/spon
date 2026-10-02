@@ -115,4 +115,19 @@ describe('output tools', () => {
     expect(text(blocked)).toContain('Cuts into the model by up to');
     expect(existsSync(join(dir, 'out'))).toBe(false);
   });
+
+  it('refuses to export a square-ended slot until squareEnds is set', async () => {
+    const { call } = await connect({}, ['slot-plate.stl']);
+    await call('new_job');
+    await call('import_model', { path: 'slot-plate.stl', units: 'mm' });
+    const handle = /^(S\d+) slot 8 × 40/m.exec(text(await call('describe_geometry')))![1];
+    const op = data(await call('add_operation', { type: 'slot', tool: 'starter-flat-6', geometry: [handle] })).operation;
+    const blocked = await call('export_gcode', { dir: 'out' });
+    expect(blocked.isError).toBe(true);
+    expect(text(blocked)).toContain('Choose how square slot ends are cut');
+    const updated = await call('apply_commands', { commands: [{ type: 'updateOperation', id: op.id, patch: { squareEnds: 'inside' } }] });
+    expect(updated.isError).toBeFalsy();
+    const written = await call('export_gcode', { dir: 'out' });
+    expect(written.isError).toBeFalsy();
+  });
 });

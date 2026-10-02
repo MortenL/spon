@@ -8,8 +8,8 @@ Typical flow
 1. new_job (or open_job for an existing .spon).
 2. import_model with an STL, STEP, IGES, DXF or SVG file. If it answers needsUnits or needsBody, call it again with units or body. An SVG without real-world units answers needsScale: call it again with svgDpi (96 for CSS/Inkscape/Affinity, 72 for Illustrator) or svgWidth (mm).
 3. Set up with apply_commands: rotateQuarter / layFlat / setZSpin to orient, setStock, setWcs, applyMachinePreset, setPost { dialect: "grbl" | "linuxcnc" | "fanuc" }. A drawing (DXF or SVG) is flat: give the stock its material thickness with setStock (auto stock margin zBottom = thickness).
-4. describe_geometry lists what can be machined, with short handles: faces F1, F2… (top down, horizontal and facing up), their loops F1.L0 (outer), F1.L1…, holes H1…, and drawing (DXF/SVG) contours C1…. Call it again after importing or reorienting.
-5. add_operation for each operation: type profile, pocket, drill, face or chamfer (face takes an empty geometry list to face the whole stock); a tool from list_tools (job tool id, T number, or library tool id); geometry handles; params.
+4. describe_geometry lists what can be machined, with short handles: faces F1, F2… (top down, horizontal and facing up), their loops F1.L0 (outer), F1.L1…, holes H1…, slots S1… (recognised slots), and drawing (DXF/SVG) contours C1…. Call it again after importing or reorienting.
+5. add_operation for each operation: type profile, pocket, drill, face, chamfer or slot (face takes an empty geometry list to face the whole stock); a tool from list_tools (job tool id, T number, or library tool id); geometry handles; params.
 6. generate: read each operation's status and diagnostics and fix errors with apply_commands (updateOperation).
 7. render_preview (top, then iso) to check the toolpaths by eye: feeds are solid, rapids dashed, red hatching is material the tool cannot reach.
 8. export_gcode into a folder, and save_job to a .spon path. The user can open the .spon in the Spon web app.
@@ -22,6 +22,7 @@ Operation parameters (add_operation params, or updateOperation patch)
 - drill: cycle (drill | dwell | peck | chipbreak), peck, dwellSeconds, diameterFilter { min, max }.
 - face: area (stock | picked), stepoverPct, overlap, pattern (zigzag | spiral), angleDeg, oneWay, finishStepoverPct, stepdown, finishPass, direction (climb | conventional).
 - chamfer: width, tipOffset, side (outside | inside | auto), openSide (left | right, for open lines), stepdown, direction (climb | conventional); the depth comes from the width and the tool's tip angle (a V-bit or chamfer mill).
+- slot: width (drawn centrelines), strategy (auto | toolWidth | wider | trochoidal), trochoidal { stepPct }, squareEnds (inside | endWall | dogbone), stepdown, direction.
 - feeds: { rpm, feed, plungeFeed, coolant }.
 
 Facing
@@ -30,6 +31,12 @@ Facing
 
 Chamfer
 - Deburr an edge with add_operation type chamfer on its contour, a V-bit or chamfer tool and width 0.3. Open lines take openSide left or right (the chamfer is cut to that side of the line); a hole handle (H1) is chamfered as a countersink. stepdown cuts the chamfer in several levels and direction picks climb or conventional.
+
+Slots
+- Slots: add_operation type slot on drawn centrelines (lines or arcs; each line end is the centre of a round end, so a 6.5 × 20 slot is a 13.5 mm line; set width) or on recognised slots S1….
+- strategy auto picks toolWidth when the width matches the tool diameter (±0.05 mm), else wider; trochoidal is used only when set (trochoidal.stepPct, default 10).
+- Square-ended slots need squareEnds: inside (corners keep the tool radius), endWall (overcuts the end by the tool radius) or dogbone (corner reliefs); export is refused until it is set.
+- endWall and dogbone overcuts give a slot-overcut warning, not a gouge error.
 
 Gouges
 - generate tests every toolpath against the model with the real tool shape. A gouge is an error ("Cuts into the model by up to ..."): export_gcode refuses until you fix it with the operation's heights or geometry (for example a bottom height that is too deep, or a tool that is too large).
