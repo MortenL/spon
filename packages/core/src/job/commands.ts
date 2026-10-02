@@ -48,6 +48,13 @@ const OP_KEYS: Readonly<Record<OperationType, readonly string[]>> = {
   face: [...COMMON_KEYS, 'area', 'overlap', 'pattern', 'angleDeg', 'stepoverPct', 'oneWay', 'direction', 'stepdown', 'finishPass', 'finishStepoverPct'],
   chamfer: [...COMMON_KEYS, 'side', 'openSide', 'direction', 'width', 'tipOffset', 'stepdown'],
 };
+const ENUMS: Readonly<Record<string, Partial<Record<OperationType, readonly string[]>>>> = {
+  side: { profile: ['outside', 'inside', 'on'], chamfer: ['auto', 'outside', 'inside'] },
+  openSide: { profile: ['left', 'on', 'right'], chamfer: ['left', 'right'] },
+  direction: { profile: ['climb', 'conventional'], pocket: ['climb', 'conventional'], face: ['climb', 'conventional'], chamfer: ['climb', 'conventional'] },
+  area: { face: ['stock', 'picked'] },
+  pattern: { face: ['zigzag', 'spiral'] },
+};
 const NESTED = new Set(['heights', 'feeds', 'entry', 'leads', 'tabs']);
 const POSITIVE = ['stepdown', 'peck', 'width'];
 const NON_NEGATIVE = ['stockRadial', 'stockAxial', 'dwellSeconds', 'overlap', 'tipOffset'];
@@ -82,11 +89,13 @@ function patchOperation(job: Job, op: Operation, patch: OperationPatch): Operati
   const next: Record<string, unknown> = { ...op };
   for (const [key, value] of Object.entries(patch)) {
     if (!allowed.includes(key)) throw new CommandError(`"${key}" does not apply to a ${op.type} operation`);
+    const allowedValues = ENUMS[key]?.[op.type];
+    if (allowedValues && !allowedValues.includes(value as string)) throw new CommandError(`${key} must be one of ${allowedValues.join(', ')}`);
     // a chamfer's stepdown may be 0 (one pass)
     if (key === 'stepdown' && op.type === 'chamfer') {
       if (!((value as number) >= 0 && Number.isFinite(value))) throw new CommandError('stepdown must not be negative');
-    } else if (POSITIVE.includes(key) && !((value as number) > 0)) throw new CommandError(`${key} must be greater than 0`);
-    if (NON_NEGATIVE.includes(key) && !((value as number) >= 0)) throw new CommandError(`${key} must not be negative`);
+    } else if (POSITIVE.includes(key) && !((value as number) > 0 && Number.isFinite(value))) throw new CommandError(`${key} must be greater than 0`);
+    if (NON_NEGATIVE.includes(key) && !((value as number) >= 0 && Number.isFinite(value))) throw new CommandError(`${key} must not be negative`);
     if ((key === 'stepoverPct' || key === 'finishStepoverPct') && !((value as number) > 0 && (value as number) <= 100)) throw new CommandError(`${key} must be in (0, 100]`);
     if (key === 'angleDeg' && !Number.isFinite(value)) throw new CommandError('angleDeg must be a finite number');
     if (key === 'toolId') checkTool(job, value as string | null);

@@ -199,3 +199,30 @@ describe('facing and chamfer operations', () => {
     expect(() => applyCommand(job, { type: 'updateOperation', id: 'f', patch: { side: 'inside' } as never })).toThrow('"side" does not apply to a face operation');
   });
 });
+
+describe('operation patch validation', () => {
+  const base = () => run(withTool(),
+    { type: 'addOperation', opType: 'profile', toolId: 't6', id: 'p' },
+    { type: 'addOperation', opType: 'face', toolId: 't6', id: 'f' },
+    { type: 'addOperation', opType: 'chamfer', toolId: 't6', id: 'c' });
+  const patch = (id: string, p: Record<string, unknown>) => () => applyCommand(base(), { type: 'updateOperation', id, patch: p as never });
+  it('rejects enum values that do not belong to the operation type', () => {
+    expect(patch('p', { side: 'auto' })).toThrow('side must be one of outside, inside, on');
+    expect(patch('c', { openSide: 'on' })).toThrow('openSide must be one of left, right');
+    expect(patch('c', { side: 'on' })).toThrow('side must be one of auto, outside, inside');
+    expect(patch('f', { pattern: 'x' })).toThrow('pattern must be one of zigzag, spiral');
+    expect(patch('f', { area: 'x' })).toThrow('area must be one of stock, picked');
+    expect(patch('f', { direction: 'x' })).toThrow('direction must be one of climb, conventional');
+    expect(() => patch('p', { side: 'on', openSide: 'on' })()).not.toThrow();
+  });
+  it('validates numbers', () => {
+    expect(() => patch('c', { stepdown: 0 })()).not.toThrow();
+    expect(patch('c', { stepdown: -1 })).toThrow('stepdown must not be negative');
+    expect(patch('f', { finishStepoverPct: 0 })).toThrow('finishStepoverPct must be in (0, 100]');
+    expect(patch('f', { angleDeg: NaN })).toThrow('angleDeg must be a finite number');
+    expect(patch('c', { width: Infinity })).toThrow('width must be greater than 0');
+    expect(patch('f', { overlap: Infinity })).toThrow('overlap must not be negative');
+    expect(patch('c', { tipOffset: Infinity })).toThrow('tipOffset must not be negative');
+    expect(patch('f', { stepdown: Infinity })).toThrow('stepdown must be greater than 0');
+  });
+});
