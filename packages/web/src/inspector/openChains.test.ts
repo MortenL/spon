@@ -1,7 +1,7 @@
 import { applyCommands, camContext, createJob, pathFromPoints, segmentStart, setModel, setStock } from '@sponcam/core';
 import { describe, expect, it } from 'vitest';
 import type { ModelGeometry } from '@/state/store';
-import { contourKinds, openChains, toggleReverse } from './openChains';
+import { contourKinds, openChains, toggleChainReverse, chainReversed } from './openChains';
 
 const geometry: ModelGeometry = {
   kind: 'drawing',
@@ -38,8 +38,17 @@ describe('open chains in the inspector', () => {
     expect(segmentStart(a.path.segments[0]).x).toBeLessThan(segmentStart(b.path.segments[0]).x);
   });
 
-  it('toggles reverse on one reference', () => {
-    expect(toggleReverse([ref(0), ref(1)], 0)).toEqual([ref(0, true), ref(1)]);
-    expect(toggleReverse([ref(0, true)], 0)).toEqual([ref(0)]);
+  it('lists the members of a chain', () => {
+    const { op, ctx } = setup([ref(0), ref(1)]);
+    expect(openChains(op, ctx)).toMatchObject([{ ref: 0, members: [0] }]);
+  });
+
+  it('toggles reverse for a whole chain', () => {
+    const geo = [ref(0), ref(1), ref(2)];
+    expect(toggleChainReverse(geo, [0, 1], 0)).toEqual([ref(0, true), ref(1), ref(2)]);
+    expect(toggleChainReverse([ref(0), ref(1, true), ref(2)], [0, 1], 0)).toEqual(geo);
+    expect(toggleChainReverse([ref(0, true), ref(1, true), ref(2, true)], [0, 1], 0)).toEqual([ref(0), ref(1), ref(2, true)]);
+    expect(chainReversed([ref(0), ref(1, true)], [0, 1])).toBe(true);
+    expect(chainReversed([ref(0), ref(1, true)], [0])).toBe(false);
   });
 });

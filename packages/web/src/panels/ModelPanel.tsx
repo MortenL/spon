@@ -41,6 +41,11 @@ export function ModelPanel() {
               {`${CAD_LABEL[source.format]} · body ${source.body + 1} of ${source.bodies} · ${source.name}`}
             </dd>
           </>
+        ) : model.format === 'svg' ? (
+          <>
+            <dt className="text-muted-foreground">Scale</dt>
+            <dd data-testid="svg-scale">{model.svgScale ? `${+model.svgScale.toFixed(5)} mm per px` : '—'}</dd>
+          </>
         ) : (
           <>
             <dt className="text-muted-foreground">File units</dt>

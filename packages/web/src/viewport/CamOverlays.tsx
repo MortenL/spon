@@ -67,28 +67,35 @@ const ARROW_SIDE = 1.2;
 
 /** Direction arrows (and a dashed preview of the side cut) for the open lines of a profile. */
 function OpenChainArrows({ job, geometry, op }: { job: Job; geometry: ModelGeometry | null; op: Operation }) {
-  const ctx = useMemo(() => camContext(job, geometry), [job, geometry]);
-  const chains = useMemo(() => openChains(op, ctx), [op, ctx]);
+  const profile = op.type === 'profile' ? op : null;
+  const openSide = profile?.openSide ?? 'on';
+  const stockRadial = profile?.stockRadial ?? 0;
+  const finishPass = profile?.finishPass ?? false;
   const toolDiameter = job.tools.find((t) => t.id === op.toolId)?.diameter ?? null;
-  const openSide = op.type === 'profile' ? op.openSide : 'on';
+  // only what the preview depends on: unrelated job edits do not recompute the offsets
   const items = useMemo(
-    () =>
-      chains.map((c) => {
+    () => {
+      const ctx = camContext(job, geometry);
+      const dashed = (c: { path: Path2D; z: number }, radius: number) =>
+        (offsetOpenPath(c.path, openSide as 'left' | 'right', radius, 0.05)?.paths ?? []).map((p) => flattenPath(p, 0.05).map((q): Point3 => [q.x, q.y, c.z]));
+      return openChains(op, ctx).map((c) => {
         const { point, tangent } = pointAt(c.path, pathLength(c.path) / 2);
         const nx = -tangent.y, ny = tangent.x;
         const bx = point.x - tangent.x * ARROW_BACK, by = point.y - tangent.y * ARROW_BACK;
         const arrow: Point3[] = [
-          [bx + nx * ARROW_SIDE, by + ny * ARROW_SIDE, 0],
-          [point.x + tangent.x * ARROW_TIP, point.y + tangent.y * ARROW_TIP, 0],
-          [bx - nx * ARROW_SIDE, by - ny * ARROW_SIDE, 0],
+          [bx + nx * ARROW_SIDE, by + ny * ARROW_SIDE, c.z],
+          [point.x + tangent.x * ARROW_TIP, point.y + tangent.y * ARROW_TIP, c.z],
+          [bx - nx * ARROW_SIDE, by - ny * ARROW_SIDE, c.z],
         ];
-        const offsets =
-          openSide !== 'on' && toolDiameter !== null
-            ? (offsetOpenPath(c.path, openSide, toolDiameter / 2, 0.05)?.paths ?? []).map((p) => flattenPath(p, 0.05).map((q): Point3 => [q.x, q.y, 0]))
-            : [];
-        return { ref: c.ref, arrow, offsets };
-      }),
-    [chains, openSide, toolDiameter],
+        const r = (toolDiameter ?? 0) / 2;
+        const active = openSide !== 'on' && toolDiameter !== null;
+        const offsets = active ? dashed(c, r + stockRadial) : [];
+        const finish = active && finishPass && stockRadial > 0 ? dashed(c, r) : [];
+        return { ref: c.ref, arrow, offsets, finish };
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [op.geometry, openSide, stockRadial, finishPass, toolDiameter, job.model, job.stock, job.wcs, job.tolerance, geometry],
   );
   return (
     <>
@@ -97,6 +104,9 @@ function OpenChainArrows({ job, geometry, op }: { job: Job; geometry: ModelGeome
           <Line name="open-chain-arrow" points={it.arrow} color={PICK_COLOR} lineWidth={3} raycast={noRaycast} />
           {it.offsets.filter((pts) => pts.length >= 2).map((pts, i) => (
             <Line key={i} points={pts} color={PICK_COLOR} lineWidth={1} dashed dashSize={1} gapSize={0.6} raycast={noRaycast} />
+          ))}
+          {it.finish.filter((pts) => pts.length >= 2).map((pts, i) => (
+            <Line key={`f${i}`} points={pts} color={PICK_COLOR} lineWidth={1} dashed dashSize={1} gapSize={0.6} transparent opacity={0.4} raycast={noRaycast} />
           ))}
         </group>
       ))}

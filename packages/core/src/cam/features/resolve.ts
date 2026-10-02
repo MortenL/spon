@@ -6,7 +6,8 @@ import { chainPaths, nestLoops, type Shape } from './chain';
 import { circleOf, drawingPath } from './dxf';
 import { type FaceGeometry, holeBottom, resolveFaceRef } from './mesh';
 
-export interface ResolvedContour { path: Path2D; z: number; ref: number }
+/** `members` (open chains only): the geometry indices of every reference that makes up the chain; `ref` is its seed. */
+export interface ResolvedContour { path: Path2D; z: number; ref: number; members?: number[] }
 export interface ResolvedShape { shape: Shape; z: number; ref: number }
 export interface ResolvedHole { center: Vec2; diameter: number; top: number; bottom: number; through: boolean; ref: number }
 export interface ResolvedGeometry {
@@ -94,7 +95,7 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
             const g = op.geometry[dxf[m].ref];
             return g.kind === 'dxfPath' && g.reverse === true;
           });
-          out.contours.push({ path: reversed ? reversePath(path) : path, z: drawingZ, ref: seed });
+          out.contours.push({ path: reversed ? reversePath(path) : path, z: drawingZ, ref: seed, members: openMembers[k].map((m) => dxf[m].ref) });
         });
       } else {
         for (const shape of nestLoops(closed, ctx.tolerance)) out.shapes.push({ shape, z: drawingZ, ref: firstRef });

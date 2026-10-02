@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import { LengthField } from '@/panels/NumericField';
 import { runCommand } from '@/state/camView';
 import { appStore, useApp } from '@/state/store';
-import { openChains, toggleReverse } from './openChains';
+import { chainReversed, openChains, toggleChainReverse } from './openChains';
 import { refLabel, sameRef, toggleRef } from './geometryLabels';
 
 const PICK_HINT: Record<OperationType, string> = {
@@ -24,7 +24,7 @@ export function GeometryTab({ op }: { op: Operation }) {
   const camPick = useApp((s) => s.camPick);
   const units = useApp((s) => s.job.displayUnits);
   const job = useApp((s) => s.job);
-  const seeds = useMemo(() => new Set(openChains(op, camContext(job, geometry)).map((c) => c.ref)), [op, job, geometry]);
+  const seeds = useMemo(() => new Map(openChains(op, camContext(job, geometry)).map((c) => [c.ref, c.members])), [op, job, geometry]);
 
   const drawingLayers = geometry?.kind === 'drawing' ? geometry.drawing.layers.map((l) => l.name) : null;
   const diagnostics = camResults[op.id]?.diagnostics ?? [];
@@ -52,8 +52,8 @@ export function GeometryTab({ op }: { op: Operation }) {
               </span>
               {seeds.has(i) && (
                 <Toggle
-                  size="sm" pressed={ref.kind === 'dxfPath' && ref.reverse === true} data-testid={`geo-reverse-${i}`} title="Reverse the line's direction"
-                  onPressedChange={() => setGeometry(toggleReverse(op.geometry, i))}
+                  size="sm" pressed={chainReversed(op.geometry, seeds.get(i)!)} data-testid={`geo-reverse-${i}`} title="Reverse the line's direction"
+                  onPressedChange={() => setGeometry(toggleChainReverse(op.geometry, seeds.get(i)!, i))}
                 >
                   <ArrowLeftRight className="size-3.5" />
                 </Toggle>
