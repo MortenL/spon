@@ -8,7 +8,7 @@ import type { ResolvedGeometry, ResolvedSlot } from '../features/resolve';
 import { resolveHeights, type ResolvedHeights } from '../heights';
 import type { CamCode, CamSeverity, SlotOp } from '../types';
 import { emptyOverlays, type OpOutput } from './output';
-import { adjustCentreline, centreRegion, dogboneCorners, overcutZones, type SlotCuts, slotCuts } from './slotEnds';
+import { adjustCentreline, centreRegion, dogboneCorners, type DogbonePass, overcutZones, type SlotCuts, slotCuts } from './slotEnds';
 import { emitRampOpen, regionLoops, slotStrategy, trochoidCentres } from './slotPaths';
 import { depthLevels, emitHelix, emitLap, emitRampLaps, MoveWriter } from './writer';
 
@@ -110,8 +110,12 @@ export function slotToolpath(op: SlotOp, tool: Tool, ctx: CamContext, geo: Resol
     const centre = adjustCentreline(slot.centreline, cuts.start, cuts.end);
     if (!centre) { diag('error', 'offset-collapsed', 'The tool does not fit in this slot', slot.ref); continue; }
     if (squareEnds === 'inside' && hasSquareEnd(slot)) diag('warning', 'unmachined-area', 'Square slot ends keep the tool radius in their corners', slot.ref);
-    out.intended!.push(...overcutZones(slot, r, squareEnds, tol));
     const dn = st.strategy === 'toolWidth' ? 0 : slot.width / 2 - r - sr;
+    if (op.squareEnds === 'dogbone' || op.squareEnds === 'endWall') {
+      const passes: DogbonePass[] = [{ stock: sr, dn: st.strategy === 'toolWidth' ? 0 : Math.max(0, dn - margin), cuts }];
+      if (op.finishWalls && st.strategy !== 'toolWidth') passes.push({ stock: 0, dn: Math.max(0, slot.width / 2 - r - margin), cuts: slotCuts(slot, r, squareEnds, 0) });
+      out.intended!.push(...overcutZones(slot, r, squareEnds, tol, passes));
+    }
 
     if (st.strategy === 'toolWidth') {
       const levels = depthLevels(h.top, h.bottom + op.stockAxial, op.stepdown);

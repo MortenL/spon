@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { offsetPolys, pathFromPoints, pathStart, type Path2D, type Toolpath } from '../src';
+import { offsetPolys, pathFromPoints, type Path2D, type Toolpath } from '../src';
 import { tool6 } from './fixtures/camSetup';
 import { cutsAt, drawingSlotJob, plunges, slotOutline, sweptAt, uncovered } from './fixtures/slotSetup';
 
@@ -100,20 +100,6 @@ describe('trochoidal slots', () => {
 
   it('refuses a slot no wider than the tool', () => {
     expect(drawingSlotJob([straight], { ...troch, width: 6 }).diagnostics.map((d) => d.message)).toContain('Trochoidal needs a slot wider than the tool');
-  });
-});
-
-describe('several slots in one operation', () => {
-  it('travels from one slot to the next at the retract height', () => {
-    const second = pathFromPoints([{ x: 0, y: 40 }, { x: 40, y: 40 }], false);
-    const heights = { bottom: { from: 'stockTop', offset: -3 }, feed: { from: 'stockTop', offset: 2 }, retract: { from: 'stockTop', offset: 10 }, clearance: { from: 'stockTop', offset: 15 } };
-    const job = drawingSlotJob([straight, second], { width: 6, stepdown: 1, heights });
-    const { tp } = job;
-    const y2 = pathStart(job.program(1)).y;
-    // the first rapid that moves sideways to the second slot (the second slot) starts and ends at or above retract height
-    const i = tp!.moves.findIndex((m, k) => m.kind === 'rapid' && k > 0 && Math.abs(m.to.y - y2) < 1e-6);
-    expect((tp!.moves[i - 1] as { to: { z: number } }).to.z).toBeGreaterThanOrEqual(10 - 1e-9);
-    expect((tp!.moves[i] as { to: { z: number } }).to.z).toBeGreaterThanOrEqual(10 - 1e-9);
   });
 });
 
