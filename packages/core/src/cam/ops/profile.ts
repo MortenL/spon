@@ -23,6 +23,9 @@ const FREE_SLACK = 5e-4;
 /** Leads are halved until they fit, but never below this length (mm); shorter leads are left out. */
 const MIN_LEAD = 0.1;
 
+/** Whether a closed lap cut on `side` runs clockwise: with an M3 spindle climb keeps the cut edge on the cutter's right. */
+export const lapRunsCW = (side: 'outside' | 'inside' | 'on', direction: 'climb' | 'conventional'): boolean => (side !== 'inside') === (direction === 'climb');
+
 /**
  * Tool-centre laps of a contour: offset outward/inward by `offset`, or the contour itself for "on" and open paths.
  *
@@ -33,17 +36,18 @@ const MIN_LEAD = 0.1;
  * follow their chords. The lap is offset by their sum beyond `offset`, so the tool centre never comes closer
  * than `offset` to the contour; the lap stays within `tol` of nominal.
  */
-function centreLaps(path: Path2D, op: ProfileOp, offset: number, tol: number): { laps: Path2D[]; rounded: boolean } | null {
+export function contourLaps(
+  path: Path2D, side: 'outside' | 'inside' | 'on', openSide: 'left' | 'on' | 'right', direction: 'climb' | 'conventional', offset: number, tol: number,
+): { laps: Path2D[]; rounded: boolean } | null {
   if (!path.closed) {
-    if (op.openSide === 'on' || offset === 0) return { laps: [path], rounded: false };
-    const res = offsetOpenPath(path, op.openSide, offset, tol);
+    if (openSide === 'on' || offset === 0) return { laps: [path], rounded: false };
+    const res = offsetOpenPath(path, openSide, offset, tol);
     if (!res) return null;
     // climb keeps the cut edge on the tool's right (M3): left of the line runs with it, right runs against it
-    const forward = (op.openSide === 'left') === (op.direction === 'climb');
+    const forward = (openSide === 'left') === (direction === 'climb');
     const laps = forward ? res.paths : res.paths.map(reversePath).reverse();
     return { laps, rounded: res.rounded };
   }
-  const side = op.side;
   if (side === 'on' || offset === 0) return { laps: [path], rounded: false };
   const flatTol = tol / 4, joinTol = tol / 8, fitTol = tol / 2;
   const d = offset + flatTol + joinTol + fitTol;
@@ -53,7 +57,7 @@ function centreLaps(path: Path2D, op: ProfileOp, offset: number, tol: number): {
 }
 
 /** Midpoint of the longest line segment, else of the longest arc. */
-function autoStart(path: Path2D): number {
+export function autoStart(path: Path2D): number {
   let best = 0, bestLen = -1, bestIsLine = false, acc = 0;
   for (const s of path.segments) {
     const len = segmentLength(s);
@@ -103,7 +107,7 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
   const cutClosed = (
     lap: Path2D, levels: number[], h: ResolvedHeights, first: boolean, index: number, ref: number, useExplicit: boolean, recordOverlay: boolean,
   ) => {
-    const wantCW = (op.side !== 'inside') === (op.direction === 'climb');
+    const wantCW = lapRunsCW(op.side, op.direction);
     let path = orientPath(lap, !wantCW);
     const total = pathLength(path);
     const explicitStart =
@@ -219,7 +223,7 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
     const h = hr.values;
     out.heights ??= h;
     clearance = Math.max(clearance, h.clearance);
-    const res = centreLaps(c.path, op, r + op.stockRadial, tol);
+    const res = contourLaps(c.path, op.side, op.openSide, op.direction, r + op.stockRadial, tol);
     if (!res) {
       return diag('error', 'offset-collapsed', c.path.closed ? 'The tool does not fit inside this contour' : 'The tool does not fit beside this line', c.ref);
     }
@@ -233,7 +237,7 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
     });
     if (op.finishPass && (c.path.closed || op.openSide !== 'on')) {
       // closed contours and open-side chains get a finish pass at the tool radius; a cut on the line has none
-      const finishLaps = centreLaps(c.path, op, r, tol)?.laps ?? [];
+      const finishLaps = contourLaps(c.path, op.side, op.openSide, op.direction, r, tol)?.laps ?? [];
       finishLaps.forEach((lap, i) => {
         if (lap.closed) cutClosed(lap, [h.bottom], h, false, index, c.ref, i === 0, false);
         else cutOpen(lap, [h.bottom], h, false, true);

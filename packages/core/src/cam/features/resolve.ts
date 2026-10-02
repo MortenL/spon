@@ -7,7 +7,11 @@ import { circleOf, drawingPath } from './dxf';
 import { type FaceGeometry, holeBottom, resolveFaceRef } from './mesh';
 
 /** `members` (open chains only): the geometry indices of every reference that makes up the chain; `ref` is its seed. */
-export interface ResolvedContour { path: Path2D; z: number; ref: number; members?: number[] }
+export interface ResolvedContour {
+  path: Path2D; z: number; ref: number; members?: number[];
+  /** Mesh faces: the outline (`outer`) or an inner loop; drawing contours count as `outer`. */
+  kind?: 'outer' | 'inner';
+}
 export interface ResolvedShape { shape: Shape; z: number; ref: number }
 export interface ResolvedHole { center: Vec2; diameter: number; top: number; bottom: number; through: boolean; ref: number }
 export interface ResolvedGeometry {
@@ -62,6 +66,7 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
     const f = r.face;
     if (g.kind === 'meshFace') {
       if (op.type === 'profile') out.contours.push({ path: f.loops[0], z: f.z, ref: i });
+      else if (op.type === 'chamfer') out.contours.push({ path: f.loops[0], z: f.z, ref: i, kind: 'outer' });
       else if (op.type === 'face') out.shapes.push({ shape: { outer: f.loops[0], islands: [] }, z: f.z, ref: i });
       else if (op.type === 'pocket') out.shapes.push({ shape: { outer: f.loops[0], islands: f.loops.slice(1) }, z: f.z, ref: i });
       else for (let k = 1; k < f.loops.length; k++) holeFromLoop(f, k, i);
@@ -75,6 +80,7 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
       return;
     }
     if (op.type === 'profile') out.contours.push({ path, z: f.z, ref: i });
+    else if (op.type === 'chamfer') out.contours.push({ path, z: f.z, ref: i, kind: g.loop === 0 ? 'outer' : 'inner' });
     else out.shapes.push({ shape: { outer: orientPath(path, true), islands: [] }, z: f.z, ref: i });
   });
 
@@ -88,8 +94,14 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
       }
     } else {
       const { closed, open, openSeeds, openMembers } = chainPaths(dxf.map((d) => d.path), ctx.tolerance);
-      if (op.type === 'profile') {
-        for (const path of closed) out.contours.push({ path, z: drawingZ, ref: firstRef });
+      if (op.type === 'profile' || op.type === 'chamfer') {
+        const chamfer = op.type === 'chamfer';
+        for (const path of closed) {
+          const c = chamfer ? circleOf(path) : null;
+          // a chamfered drawing circle is a countersink
+          if (c) out.holes.push({ center: c.center, diameter: c.diameter, top: drawingZ, bottom: ctx.stock?.min.z ?? drawingZ, through: true, ref: firstRef });
+          else out.contours.push({ path, z: drawingZ, ref: firstRef, ...(chamfer ? { kind: 'outer' as const } : {}) });
+        }
         open.forEach((path, k) => {
           const seed = dxf[openSeeds[k]].ref;
           // the chain runs in its seed's drawn direction; a reverse flag on any of its references flips the whole chain
