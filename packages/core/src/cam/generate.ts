@@ -8,6 +8,7 @@ import { faceToolpath } from './ops/face';
 import { emptyOverlays, type OpOutput } from './ops/output';
 import { pocketToolpath } from './ops/pocket';
 import { profileToolpath } from './ops/profile';
+import { slotToolpath } from './ops/slot';
 import type { CamDiagnostic, Operation } from './types';
 
 export interface OperationResult extends OpOutput {
@@ -54,11 +55,11 @@ export function generateOperation(op: Operation, ctx: CamContext): OperationResu
       : op.type === 'pocket' ? pocketToolpath(op, tool, ctx, geo)
       : op.type === 'drill' ? drillToolpath(op, tool, ctx, geo)
       : op.type === 'face' ? faceToolpath(op, tool, ctx, geo)
-      : op.type === 'slot' ? { toolpath: null, diagnostics: [{ operationId: op.id, severity: 'error' as const, code: 'internal' as const, message: 'Not implemented yet' }], heights: null, overlays: emptyOverlays() }
+      : op.type === 'slot' ? slotToolpath(op, tool, ctx, geo)
       : chamferToolpath(op, tool, ctx, geo);
     const diagnostics: CamDiagnostic[] = [...geo.diagnostics, ...res.diagnostics];
     const warn = (code: CamDiagnostic['code'], message: string) => diagnostics.push({ operationId: op.id, severity: 'warning', code, message });
-    if (op.type !== 'drill' && op.stepdown > tool.fluteLength) warn('stepdown-exceeds-flute', `Stepdown ${op.stepdown} mm is deeper than the ${tool.fluteLength} mm flutes`);
+    if (op.type !== 'drill' && !(op.type === 'slot' && op.strategy === 'trochoidal') && op.stepdown > tool.fluteLength) warn('stepdown-exceeds-flute', `Stepdown ${op.stepdown} mm is deeper than the ${tool.fluteLength} mm flutes`);
     const maxFeed = op.type === 'drill' ? op.feeds.plungeFeed : op.feeds.feed;
     if (maxFeed > ctx.job.machine.maxFeed) warn('feed-exceeds-machine', `Feed ${maxFeed} mm/min is above the machine maximum of ${ctx.job.machine.maxFeed}`);
     // a gouge keeps its toolpath, so the user can see where it cuts into the model
