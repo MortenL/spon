@@ -231,9 +231,13 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
       else cutOpen(lap, levels, h, first, op.openSide !== 'on');
       first = false;
     });
-    if (op.finishPass && c.path.closed) {
+    if (op.finishPass && (c.path.closed || op.openSide !== 'on')) {
+      // closed contours and open-side chains get a finish pass at the tool radius; a cut on the line has none
       const finishLaps = centreLaps(c.path, op, r, tol)?.laps ?? [];
-      finishLaps.forEach((lap, i) => cutClosed(lap, [h.bottom], h, false, index, c.ref, i === 0, false));
+      finishLaps.forEach((lap, i) => {
+        if (lap.closed) cutClosed(lap, [h.bottom], h, false, index, c.ref, i === 0, false);
+        else cutOpen(lap, [h.bottom], h, false, true);
+      });
     }
   });
 

@@ -1,4 +1,4 @@
-import { flattenPath, pathLength, polyArea } from '../../geometry/offset/pathOps';
+import { flattenPath, pathEnd, pathLength, pathStart, polyArea } from '../../geometry/offset/pathOps';
 import type { Vec2 } from '../../geometry/path2d';
 import { triangleCount, triangleNormal } from '../../geometry/mesh';
 import { faceRegion } from '../../geometry/faces';
@@ -20,6 +20,9 @@ export interface CatalogContour {
   layer: string;
   closed: boolean;
   length: number;
+  /** Where the drawn path starts and ends (program coordinates); the direction an open line is cut in. */
+  start: Vec2;
+  end: Vec2;
   bbox: { min: Vec2; max: Vec2 };
   circle: { center: Vec2; diameter: number } | null;
 }
@@ -61,7 +64,7 @@ export function describeGeometry(job: Job, geometry: CamGeometry): GeometryCatal
         const ref: DxfPathRef = { kind: 'dxfPath', blobId: model.blobId, layer: li, path: pi };
         const circle = circleOf(path);
         out.contours.push({
-          ref, layer: layer.name, closed: path.closed, length: pathLength(path), circle,
+          ref, layer: layer.name, closed: path.closed, length: pathLength(path), start: pathStart(path), end: pathEnd(path), circle,
           bbox: { min: { x: Math.min(...xs), y: Math.min(...ys) }, max: { x: Math.max(...xs), y: Math.max(...ys) } },
         });
         if (circle) out.holes.push({ ref, center: circle.center, diameter: circle.diameter, top: z, bottom: ctx.stock?.min.z ?? z, through: true });

@@ -84,13 +84,16 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
         else out.holes.push({ center: c.center, diameter: c.diameter, top: drawingZ, bottom: ctx.stock?.min.z ?? drawingZ, through: true, ref: d.ref });
       }
     } else {
-      const { closed, open, openSeeds } = chainPaths(dxf.map((d) => d.path), ctx.tolerance);
+      const { closed, open, openSeeds, openMembers } = chainPaths(dxf.map((d) => d.path), ctx.tolerance);
       if (op.type === 'profile') {
         for (const path of closed) out.contours.push({ path, z: drawingZ, ref: firstRef });
         open.forEach((path, k) => {
           const seed = dxf[openSeeds[k]].ref;
-          const g = op.geometry[seed];
-          const reversed = g.kind === 'dxfPath' && g.reverse === true;
+          // the chain runs in its seed's drawn direction; a reverse flag on any of its references flips the whole chain
+          const reversed = openMembers[k].some((m) => {
+            const g = op.geometry[dxf[m].ref];
+            return g.kind === 'dxfPath' && g.reverse === true;
+          });
           out.contours.push({ path: reversed ? reversePath(path) : path, z: drawingZ, ref: seed });
         });
       } else {

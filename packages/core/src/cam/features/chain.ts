@@ -3,7 +3,7 @@ import { dist2, flattenPath, orientPath, pathEnd, pathLength, pathStart, polyAre
 import { type Path2D, type Segment, segmentEnd, segmentStart } from '../../geometry/path2d';
 
 /** Joins open paths end to end (reversing where needed) when their end points are within `tol`. */
-export function chainPaths(paths: readonly Path2D[], tol: number): { closed: Path2D[]; open: Path2D[]; openSeeds: number[] } {
+export function chainPaths(paths: readonly Path2D[], tol: number): { closed: Path2D[]; open: Path2D[]; openSeeds: number[]; openMembers: number[][] } {
   const closed: Path2D[] = [];
   const pieces: Path2D[] = [];
   const pieceIndex: number[] = [];
@@ -18,10 +18,12 @@ export function chainPaths(paths: readonly Path2D[], tol: number): { closed: Pat
   const used = pieces.map(() => false);
   const open: Path2D[] = [];
   const openSeeds: number[] = [];
+  const openMembers: number[][] = [];
   for (let i = 0; i < pieces.length; i++) {
     if (used[i]) continue;
     used[i] = true;
     let segs: Segment[] = [...pieces[i].segments];
+    const members = [pieceIndex[i]];
     for (let grown = true; grown; ) {
       grown = false;
       const start = segmentStart(segs[0]);
@@ -36,6 +38,7 @@ export function chainPaths(paths: readonly Path2D[], tol: number): { closed: Pat
         else if (dist2(start, qs) <= tol) segs = [...reversePath(q).segments, ...segs];
         else continue;
         used[j] = true;
+        members.push(pieceIndex[j]);
         grown = true;
         break;
       }
@@ -45,9 +48,10 @@ export function chainPaths(paths: readonly Path2D[], tol: number): { closed: Pat
     else {
       open.push(path);
       openSeeds.push(pieceIndex[i]);
+      openMembers.push(members);
     }
   }
-  return { closed, open, openSeeds };
+  return { closed, open, openSeeds, openMembers };
 }
 
 export interface Shape {

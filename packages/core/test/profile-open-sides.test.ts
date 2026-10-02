@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  applyCommand, applyCommands, chainPaths, createJob, type JobCommand, migrateJob, pathFromPoints, PipelineCache, programContext, runPipeline,
+  applyCommand, applyCommands, chainPaths, createJob, describeGeometry, type JobCommand, migrateJob, pathFromPoints, PipelineCache, programContext, runPipeline,
   setModel, setStock, type Toolpath,
 } from '../src';
 import type { CamGeometry } from '../src';
@@ -13,21 +13,31 @@ const drawing: CamGeometry = {
   rawPoints: new Float32Array([0, 0, 0, 60, 0, 0, 60, 40, 0]),
 };
 
-function run(geo: CamGeometry, patch: Record<string, unknown>, reverse = false) {
+// the same L as two pieces that chain: (0,0) to (60,0) and (60,0) to (60,40)
+const twoPieces: CamGeometry = {
+  kind: 'drawing',
+  drawing: {
+    layers: [{ name: 'L', color: 0xffffff, paths: [pathFromPoints([{ x: 0, y: 0 }, { x: 60, y: 0 }], false), pathFromPoints([{ x: 60, y: 0 }, { x: 60, y: 40 }], false)] }],
+  },
+  rawPoints: new Float32Array([0, 0, 0, 60, 0, 0, 60, 40, 0]),
+};
+
+function run(geo: CamGeometry, patch: Record<string, unknown>, reverse: boolean | boolean[] = false) {
+  const flags = Array.isArray(reverse) ? reverse : [reverse];
   let job = setModel(createJob(), { sourceName: 'l.svg', blobId: 'd1', kind: 'drawing', importUnits: 'mm' });
   job = setStock(job, { mode: 'auto', margin: { xy: 10, zTop: 0, zBottom: 6 } });
   const commands: JobCommand[] = [
     { type: 'addTool', tool: tool6 },
     { type: 'addOperation', opType: 'profile', toolId: 't6', id: 'p' },
-    { type: 'updateOperation', id: 'p', patch: { geometry: [{ kind: 'dxfPath', blobId: 'd1', layer: 0, path: 0, ...(reverse ? { reverse: true as const } : {}) }], stepdown: 3, ...patch } as never },
+    { type: 'updateOperation', id: 'p', patch: { geometry: flags.map((rv, path) => ({ kind: 'dxfPath', blobId: 'd1', layer: 0, path, ...(rv ? { reverse: true as const } : {}) })), stepdown: 3, ...patch } as never },
   ];
   job = applyCommands(job, commands);
   const { run: r, toolpaths } = runPipeline(job, geo as never, programContext(job, geo as never), new PipelineCache(), { date: '2026-01-01' });
   return { diagnostics: r.results[0].diagnostics, toolpath: toolpaths[0] as Toolpath | undefined };
 }
 
-function cut(patch: Record<string, unknown>, reverse = false): Toolpath {
-  const { diagnostics, toolpath } = run(drawing, patch, reverse);
+function cut(patch: Record<string, unknown>, reverse: boolean | boolean[] = false, geo: CamGeometry = drawing): Toolpath {
+  const { diagnostics, toolpath } = run(geo, patch, reverse);
   expect(diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
   return toolpath!;
 }
@@ -110,6 +120,44 @@ describe('open-line sides', () => {
     const r = chainPaths([a, b], 1e-6);
     expect(r.open).toHaveLength(1);
     expect(r.openSeeds).toEqual([0]);
+    expect(r.openMembers).toEqual([[0, 1]]);
+  });
+
+  it('reverses a whole chain when any of its references is reversed', () => {
+    const firstDir = (rev: boolean[]) => {
+      const tp = cut({ openSide: 'left', direction: 'climb' }, rev, twoPieces);
+      const at = tp.moves.findIndex((m) => (m.kind === 'line' || m.kind === 'arc') && m.to.z < -0.5);
+      const a = tp.moves[at], b = tp.moves[at + 1];
+      if (!('to' in a) || !('to' in b)) throw new Error('expected cutting moves');
+      return Math.sign(b.to.x - a.to.x) || Math.sign(b.to.y - a.to.y);
+    };
+    expect(firstDir([false, false])).toBe(1);
+    expect(firstDir([false, true])).not.toBe(1);
+    expect(firstDir([true, false])).not.toBe(1);
+  });
+
+  it('runs a finish pass for open-side cuts, never closer than the tool radius', () => {
+    const tp = cut({ openSide: 'left', stockRadial: 0.5, finishPass: true });
+    const on = cut({});
+    const line = cuts(on).filter((p, i, a) => i === 0 || p.x !== a[i - 1].x || p.y !== a[i - 1].y);
+    const distTo = (p: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }) => {
+      const dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy;
+      const t = l2 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2)) : 0;
+      return Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy);
+    };
+    const d = cuts(tp).map((p) => Math.min(...line.slice(1).map((q, i) => distTo(p, line[i], q))));
+    expect(Math.min(...d)).toBeGreaterThanOrEqual(3 - 0.01);
+    expect(d.some((v) => Math.abs(v - 3) < 0.02)).toBe(true);
+    expect(d.some((v) => Math.abs(v - 3.5) < 0.02)).toBe(true);
+  });
+
+  it('describes the start and end of an open contour in program coordinates', () => {
+    let job = setModel(createJob(), { sourceName: 'l.svg', blobId: 'd1', kind: 'drawing', importUnits: 'mm' });
+    job = setStock(job, { mode: 'auto', margin: { xy: 10, zTop: 0, zBottom: 6 } });
+    const c = describeGeometry(job, drawing).contours[0];
+    expect(c.closed).toBe(false);
+    expect(c.end.x - c.start.x).toBeCloseTo(60, 6);
+    expect(c.end.y - c.start.y).toBeCloseTo(40, 6);
   });
 
   it('migrates v3 jobs: profiles get openSide on', () => {
