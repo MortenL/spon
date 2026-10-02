@@ -87,3 +87,6 @@ export * from './pipeline/report';
 export * from './pipeline/importOutcome';
 export * from './bridge/protocol';
 export * from './import/svg/svg';
+export * from './cam/features/slots';
+export * from './cam/ops/slotEnds';
+export * from './cam/ops/slotPaths';

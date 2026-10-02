@@ -110,7 +110,19 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
       }
     } else {
       const { closed, open, openSeeds, openMembers } = chainPaths(dxf.map((d) => d.path), ctx.tolerance);
-      if (op.type === 'profile' || op.type === 'chamfer') {
+      if (op.type === 'slot') {
+        // a drawn centreline: round ends centred on its end points (spec §2.1); closed chains are ring grooves
+        const slot = (centreline: Path2D, ref: number): ResolvedSlot =>
+          ({ centreline, width: op.width, startEnd: 'round', endEnd: 'round', top: drawingZ, bottom: null, through: false, ref });
+        for (const path of closed) out.slots.push(slot(path, firstRef));
+        open.forEach((path, k) => {
+          const reversed = openMembers[k].some((m) => {
+            const g = op.geometry[dxf[m].ref];
+            return g.kind === 'dxfPath' && g.reverse === true;
+          });
+          out.slots.push(slot(reversed ? reversePath(path) : path, dxf[openSeeds[k]].ref));
+        });
+      } else if (op.type === 'profile' || op.type === 'chamfer') {
         const chamfer = op.type === 'chamfer';
         for (const path of closed) {
           const c = chamfer ? circleOf(path) : null;
