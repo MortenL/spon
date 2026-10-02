@@ -53,6 +53,31 @@ describe('open chains in the inspector', () => {
   });
 });
 
+describe('open chains of slot operations', () => {
+  const chain: ModelGeometry = {
+    kind: 'drawing',
+    drawing: { layers: [{ name: 'L', color: 0xffffff, paths: [
+      pathFromPoints([{ x: 0, y: 0 }, { x: 10, y: 0 }], false),
+      pathFromPoints([{ x: 10, y: 0 }, { x: 20, y: 0 }], false),
+    ] }] },
+    rawPoints: new Float32Array([0, 0, 0, 20, 0, 0]),
+  };
+  it('lists every member of a drawn chain and honours a reverse flag on a non-seed member', () => {
+    const base = setStock(setModel(createJob(), { sourceName: 'a.svg', blobId: 'b', kind: 'drawing', importUnits: 'mm' }), { mode: 'auto', margin: { xy: 5, zTop: 0, zBottom: 5 } });
+    const mk = (geo: ReturnType<typeof ref>[]) => applyCommands(base, [
+      { type: 'addOperation', opType: 'slot', toolId: null, id: 's' },
+      { type: 'updateOperation', id: 's', patch: { geometry: geo } },
+    ]);
+    const fwd = mk([ref(0), ref(1)]);
+    const rev = mk([ref(0), ref(1, true)]);
+    const [a] = openChains(fwd.operations[0], camContext(fwd, chain));
+    const [b] = openChains(rev.operations[0], camContext(rev, chain));
+    expect(a).toMatchObject({ ref: 0, members: [0, 1] });
+    expect(chainReversed(rev.operations[0].geometry, b.members)).toBe(true);
+    expect(segmentStart(a.path.segments[0]).x).toBeLessThan(segmentStart(b.path.segments[0]).x);
+  });
+});
+
 describe('chamferRunsAsDrawn', () => {
   it.each([
     ['left', 'climb', true],

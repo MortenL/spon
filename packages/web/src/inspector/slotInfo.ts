@@ -13,14 +13,52 @@ export interface SlotInfo {
   trochoidalLayers: number | null;
 }
 
-/** Display values for a slot operation, computed with the same geometry and rules the toolpath uses. */
-export function slotInfo(op: SlotOp, ctx: CamContext, tool: Tool | null): SlotInfo {
+export interface SlotFields {
+  /** Width of a drawn centreline. */
+  width: boolean;
+  stepdown: boolean;
+  /** Wider stepover. */
+  stepover: boolean;
+  /** Trochoidal step. */
+  step: boolean;
+  direction: boolean;
+  layers: boolean;
+  radialStock: boolean;
+  finishWalls: boolean;
+  squareEnds: boolean;
+}
+
+type Strategies = Set<'toolWidth' | 'wider' | 'trochoidal'>;
+
+/** Which settings the Passes tab shows, from the chosen strategy, the strategies the slots resolve to and the info. */
+export function slotFields(strategy: SlotOp['strategy'], active: Strategies, info: SlotInfo): SlotFields {
+  const wider = active.has('wider');
+  const trochoidal = active.has('trochoidal');
+  const toolWidthOnly = active.size > 0 && [...active].every((a) => a === 'toolWidth');
+  return {
+    width: info.drawn,
+    stepdown: strategy !== 'trochoidal',
+    stepover: wider,
+    step: trochoidal,
+    direction: wider || trochoidal,
+    layers: strategy === 'trochoidal' && info.trochoidalLayers !== null,
+    radialStock: !toolWidthOnly,
+    finishWalls: !toolWidthOnly,
+    squareEnds: info.squareEnds,
+  };
+}
+
+/** Everything the Slot settings need, from a single resolveGeometry call. */
+export function slotView(op: SlotOp, ctx: CamContext, tool: Tool | null): { info: SlotInfo; active: Strategies; fields: SlotFields } {
   const geo = resolveGeometry(op, ctx);
   const auto = new Set<string>();
-  if (tool) {
+  const active: Strategies = op.strategy === 'auto' ? new Set() : new Set([op.strategy]);
+  if (tool && op.strategy === 'auto') {
     for (const s of geo.slots) {
       const st = slotStrategy('auto', s.width, tool.diameter);
-      if (op.strategy === 'auto' && 'strategy' in st) auto.add(`Auto → ${LABEL[st.strategy]} (${st.reason})`);
+      if (!('strategy' in st)) continue;
+      active.add(st.strategy);
+      auto.add(`Auto \u2192 ${LABEL[st.strategy]} (${st.reason})`);
     }
   }
   let trochoidalLayers: number | null = null;
@@ -29,17 +67,9 @@ export function slotInfo(op: SlotOp, ctx: CamContext, tool: Tool | null): SlotIn
     const h = resolveHeights(op.heights, ctx, { contourZ: first.top, holeBottom: null, slotBottom: first.bottom, faceZ: geo.faceZ }).values;
     if (h) trochoidalLayers = Math.max(1, Math.ceil((h.top - h.bottom - op.stockAxial) / tool.fluteLength - 1e-9));
   }
-  return { drawn: op.geometry.some((g) => g.kind === 'dxfPath'), squareEnds: geo.slots.some(hasSquareEnd), auto: [...auto], trochoidalLayers };
+  const info: SlotInfo = { drawn: op.geometry.some((g) => g.kind === 'dxfPath'), squareEnds: geo.slots.some(hasSquareEnd), auto: [...auto], trochoidalLayers };
+  return { info, active, fields: slotFields(op.strategy, active, info) };
 }
 
-/** The strategies the slots resolve to, with Auto settled per slot; the settings shown depend on them. */
-export function activeStrategies(op: SlotOp, ctx: CamContext, tool: Tool | null): Set<'toolWidth' | 'wider' | 'trochoidal'> {
-  if (op.strategy !== 'auto') return new Set([op.strategy]);
-  const out = new Set<'toolWidth' | 'wider' | 'trochoidal'>();
-  if (!tool) return out;
-  for (const s of resolveGeometry(op, ctx).slots) {
-    const st = slotStrategy('auto', s.width, tool.diameter);
-    if ('strategy' in st) out.add(st.strategy);
-  }
-  return out;
-}
+/** Display values for a slot operation, computed with the same geometry and rules the toolpath uses. */
+export const slotInfo = (op: SlotOp, ctx: CamContext, tool: Tool | null): SlotInfo => slotView(op, ctx, tool).info;

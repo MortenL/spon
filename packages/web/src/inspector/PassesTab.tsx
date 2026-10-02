@@ -7,7 +7,7 @@ import { LengthField, NumericField } from '@/panels/NumericField';
 import { runCommand } from '@/state/camView';
 import { useApp } from '@/state/store';
 import { chamferInfo } from './chamferInfo';
-import { activeStrategies, slotInfo } from './slotInfo';
+import { slotView } from './slotInfo';
 import { contourKinds } from './openChains';
 
 const pctField = (label: string, value: number, testId: string, onCommit: (v: number) => void) => (
@@ -371,11 +371,7 @@ function SlotPasses({ op }: { op: SlotOp }) {
   const geometry = useApp((s) => s.geometry);
   const tool = job.tools.find((t) => t.id === op.toolId) ?? null;
   const ctx = useMemo(() => camContext(job, geometry), [job, geometry]);
-  const info = slotInfo(op, ctx, tool);
-  const active = activeStrategies(op, ctx, tool);
-  const wider = active.has('wider');
-  const trochoidal = active.has('trochoidal');
-  const toolWidthOnly = active.size > 0 && [...active].every((a) => a === 'toolWidth');
+  const { info, fields } = useMemo(() => slotView(op, ctx, tool), [op, ctx, tool]);
 
   return (
     <div className="space-y-3">
@@ -389,25 +385,25 @@ function SlotPasses({ op }: { op: SlotOp }) {
         </select>
       </label>
       {info.auto.map((line) => <p key={line} data-testid="slot-auto-line" className="text-xs text-muted-foreground">{line}</p>)}
-      {info.drawn && <LengthField label="Width" valueMm={op.width} testId="pass-slot-width" min={0.01} onCommit={(v) => patch({ width: v })} />}
-      {op.strategy !== 'trochoidal' && (
+      {fields.width && <LengthField label="Width" valueMm={op.width} testId="pass-slot-width" min={0.01} onCommit={(v) => patch({ width: v })} />}
+      {fields.stepdown && (
         <LengthField label="Stepdown" valueMm={op.stepdown} testId="pass-stepdown" min={0.01} onCommit={(v) => patch({ stepdown: v })} />
       )}
-      {wider && pctField('Stepover', op.stepoverPct, 'pass-stepover', (v) => patch({ stepoverPct: v }))}
-      {trochoidal && pctField('Step', op.trochoidal.stepPct, 'pass-slot-step', (v) => patch({ trochoidal: { stepPct: v } }))}
-      {(wider || trochoidal) && directionField(op.direction, (v) => patch({ direction: v }))}
-      {op.strategy === 'trochoidal' && info.trochoidalLayers !== null && (
+      {fields.stepover && pctField('Stepover', op.stepoverPct, 'pass-stepover', (v) => patch({ stepoverPct: v }))}
+      {fields.step && pctField('Step', op.trochoidal.stepPct, 'pass-slot-step', (v) => patch({ trochoidal: { stepPct: v } }))}
+      {fields.direction && directionField(op.direction, (v) => patch({ direction: v }))}
+      {fields.layers && (
         <p data-testid="slot-layers" className="text-xs text-muted-foreground">Layers: {info.trochoidalLayers}</p>
       )}
-      {!toolWidthOnly && <LengthField label="Radial stock" valueMm={op.stockRadial} testId="pass-stock-radial" min={0} onCommit={(v) => patch({ stockRadial: v })} />}
+      {fields.radialStock && <LengthField label="Radial stock" valueMm={op.stockRadial} testId="pass-stock-radial" min={0} onCommit={(v) => patch({ stockRadial: v })} />}
       <LengthField label="Axial stock" valueMm={op.stockAxial} testId="pass-stock-axial" min={0} onCommit={(v) => patch({ stockAxial: v })} />
-      {!toolWidthOnly && (
+      {fields.finishWalls && (
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" data-testid="pass-finish-walls" className="accent-primary" checked={op.finishWalls} onChange={(e) => patch({ finishWalls: e.target.checked })} />
           Finish walls
         </label>
       )}
-      {info.squareEnds && (
+      {fields.squareEnds && (
         <label className="grid grid-cols-[1fr_10rem] items-center gap-2 text-sm">
           <span className="text-muted-foreground">Square ends</span>
           <select

@@ -17,6 +17,8 @@ export interface ResolvedShape { shape: Shape; z: number; ref: number }
 export interface ResolvedHole { center: Vec2; diameter: number; top: number; bottom: number; through: boolean; ref: number }
 export interface ResolvedSlot {
   centreline: Path2D; width: number; startEnd: SlotEnd; endEnd: SlotEnd; top: number; bottom: number | null; through: boolean; ref: number;
+  /** Drawn open chains only: the geometry indices of every reference that makes up the chain; `ref` is its seed. */
+  members?: number[];
 }
 export interface ResolvedGeometry {
   contours: ResolvedContour[];
@@ -120,15 +122,15 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
       const { closed, open, openSeeds, openMembers } = chainPaths(dxf.map((d) => d.path), ctx.tolerance);
       if (op.type === 'slot') {
         // a drawn centreline: round ends centred on its end points (spec §2.1); closed chains are ring grooves
-        const slot = (centreline: Path2D, ref: number): ResolvedSlot =>
-          ({ centreline, width: op.width, startEnd: 'round', endEnd: 'round', top: drawingZ, bottom: null, through: false, ref });
+        const slot = (centreline: Path2D, ref: number, members?: number[]): ResolvedSlot =>
+          ({ centreline, width: op.width, startEnd: 'round', endEnd: 'round', top: drawingZ, bottom: null, through: false, ref, ...(members ? { members } : {}) });
         for (const path of closed) out.slots.push(slot(path, firstRef));
         open.forEach((path, k) => {
           const reversed = openMembers[k].some((m) => {
             const g = op.geometry[dxf[m].ref];
             return g.kind === 'dxfPath' && g.reverse === true;
           });
-          out.slots.push(slot(reversed ? reversePath(path) : path, dxf[openSeeds[k]].ref));
+          out.slots.push(slot(reversed ? reversePath(path) : path, dxf[openSeeds[k]].ref, openMembers[k].map((m) => dxf[m].ref)));
         });
       } else if (op.type === 'profile' || op.type === 'chamfer') {
         const chamfer = op.type === 'chamfer';
