@@ -1,4 +1,4 @@
-import { formatLength, MATERIALS, type Tool, type ToolPreset, TOOL_TYPES, type ToolType } from '@sponcam/core';
+import { formatLength, isToolTableFile, type LengthUnit, MATERIALS, type Tool, type ToolPreset, TOOL_TYPES, type ToolType, suggestToolTableUnits } from '@sponcam/core';
 import { Download, Pencil, Plus, RotateCcw, Trash2, Upload, Wrench, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -11,6 +11,7 @@ import {
 } from '@/state/toolLibrary';
 import { useApp } from '@/state/store';
 import { ToolSketch } from './ToolSketch';
+import { importSummary } from './toolTableImport';
 
 const NEW_PRESET: ToolPreset = { name: MATERIALS[0], rpm: 18000, feed: 1000, plungeFeed: 300, stepdown: 1, stepoverPct: 40, coolant: 'off' };
 
@@ -55,6 +56,7 @@ export function ToolLibraryDialog() {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<ToolType | 'All'>('All');
   const [draft, setDraft] = useState<Tool | null>(null);
+  const [pendingTable, setPendingTable] = useState<{ file: File; suggested: LengthUnit } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const filtered = tools.filter(
@@ -102,19 +104,34 @@ export function ToolLibraryDialog() {
     }
   };
 
-  const handleImport = async (file: File) => {
+  const handleImport = async (file: File, tableUnits?: LengthUnit) => {
     try {
-      const { added, updated, skipped, notes } = await importLibraryFile(file);
-      const total = added + updated;
-      const updatedPart = updated > 0 ? ` (${updated} updated)` : '';
-      const details = [...skipped.map((s) => `${s.name}: ${s.reason}`), ...notes];
-      toast.success(`Imported ${total} tool${total === 1 ? '' : 's'}${updatedPart}; ${skipped.length} skipped`, {
-        description: details.length ? details.join('\n') : undefined,
-      });
+      const { title, description } = importSummary(await importLibraryFile(file, tableUnits));
+      toast.success(title, { description });
     } catch (err) {
       console.error('Could not import the tool library', err);
       toast.error(message(err));
     }
+  };
+
+  const chooseImportFile = async (file: File) => {
+    if (!isToolTableFile(file.name)) {
+      await handleImport(file);
+      return;
+    }
+    try {
+      setPendingTable({ file, suggested: suggestToolTableUnits(await file.text()) });
+    } catch (err) {
+      console.error('Could not read the tool table', err);
+      toast.error(message(err));
+    }
+  };
+
+  const chooseTableUnits = (unit: LengthUnit) => {
+    if (!pendingTable) return;
+    const { file } = pendingTable;
+    setPendingTable(null);
+    void handleImport(file, unit);
   };
 
   const updatePreset = (i: number, patch: Partial<ToolPreset>) => {
@@ -180,15 +197,30 @@ export function ToolLibraryDialog() {
                     <RotateCcw className="size-4" /> Reset starter
                   </Button>
                   <input
-                    ref={fileInput} type="file" accept=".json,.tools" hidden data-testid="tool-import-input"
+                    ref={fileInput} type="file" accept=".json,.tools,.tbl" hidden data-testid="tool-import-input"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       e.target.value = '';
-                      if (file) void handleImport(file);
+                      if (file) void chooseImportFile(file);
                     }}
                   />
                 </div>
               </div>
+
+              {pendingTable && (
+                <div data-testid="tool-table-units" className="flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                  <span>Units of {pendingTable.file.name}:</span>
+                  {(['mm', 'in'] as const).map((u) => (
+                    <Button
+                      key={u} size="sm" variant={pendingTable.suggested === u ? 'default' : 'outline'} data-testid={`tool-table-units-${u}`}
+                      onClick={() => chooseTableUnits(u)}
+                    >
+                      {u === 'mm' ? 'Millimetres' : 'Inches'}{pendingTable.suggested === u ? ' (suggested)' : ''}
+                    </Button>
+                  ))}
+                  <Button size="sm" variant="ghost" className="ml-auto" onClick={() => setPendingTable(null)}>Cancel</Button>
+                </div>
+              )}
 
               <div className="min-h-0 flex-1 overflow-y-auto rounded-md border">
                 <table className="w-full text-sm">
