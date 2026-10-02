@@ -84,7 +84,7 @@ test('STL: a cut into the model is an error that blocks export, until the depth 
   await expect(page.getByTestId('export-dialog')).toHaveCount(0);
   await expect(page.getByText('Cannot export G-code')).toBeVisible();
 
-  // bottom at model top - 10: above the slab, so nothing is gouged
+  // bottom at model top - 10: at the slab top, so nothing is gouged
   await page.getByTestId('inspector-tab-heights').click();
   await page.getByTestId('height-bottom-from').selectOption('modelTop');
   await page.getByTestId('height-bottom-offset').fill('-10');

@@ -20,15 +20,16 @@ Operation parameters (add_operation params, or updateOperation patch)
 - Open lines: profile them with openSide left or right to cut beside the line (the line is the part's edge). A line runs in the drawn direction of its first handle (open contours list from/to in describe_geometry); a trailing ! on any of an open line's handles (C3!) reverses the whole line, which swaps left and right.
 - pocket: stepdown, stepoverPct, finishWalls, finishFloor, entry { mode: auto | helix | ramp | plunge }.
 - drill: cycle (drill | dwell | peck | chipbreak), peck, dwellSeconds, diameterFilter { min, max }.
-- face: area (stock | picked), stepoverPct, overlap, pattern (zigzag | spiral), angleDeg, oneWay, finishStepoverPct.
-- chamfer: width, tipOffset, side (outside | inside | auto); the depth comes from the width and the tool's tip angle (a V-bit or chamfer mill).
+- face: area (stock | picked), stepoverPct, overlap, pattern (zigzag | spiral), angleDeg, oneWay, finishStepoverPct, stepdown, finishPass, direction (climb | conventional).
+- chamfer: width, tipOffset, side (outside | inside | auto), openSide (left | right, for open lines), stepdown, direction (climb | conventional); the depth comes from the width and the tool's tip angle (a V-bit or chamfer mill).
 - feeds: { rpm, feed, plungeFeed, coolant }.
 
 Facing
-- To surface a spoilboard or a blank with no model: apply_commands setStock { mode: "fixed", size { x, y, z }, modelOffset { x: 0, y: 0, z: 0 } } (the stock sits at the origin with its top at Z 0), then add_operation type face with geometry [] and heights.bottom set to the depth to remove, e.g. { from: "stockTop", offset: -0.5 }.
+- To surface a spoilboard or a blank with no model: apply_commands setStock { mode: "fixed", size { x, y, z }, modelOffset { x: 0, y: 0, z: 0 } } (the stock sits at the origin with its top at Z 0; size z is the board thickness, not 0), then add_operation type face with geometry [] and heights.bottom set to the depth to remove, e.g. { from: "stockTop", offset: -0.5 }.
+- A picked mesh face defaults its bottom height to the model top, so set heights.bottom to the face height (for example { from: "modelTop", offset: -10 } for a face 10 mm below the top).
 
 Chamfer
-- Deburr an edge with add_operation type chamfer on its contour, a V-bit or chamfer tool and width 0.3.
+- Deburr an edge with add_operation type chamfer on its contour, a V-bit or chamfer tool and width 0.3. Open lines take openSide left or right (the chamfer is cut to that side of the line); a hole handle (H1) is chamfered as a countersink. stepdown cuts the chamfer in several levels and direction picks climb or conventional.
 
 Gouges
 - generate tests every toolpath against the model with the real tool shape. A gouge is an error ("Cuts into the model by up to ..."): export_gcode refuses until you fix it with the operation's heights or geometry (for example a bottom height that is too deep, or a tool that is too large).

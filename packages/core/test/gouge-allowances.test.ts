@@ -156,7 +156,7 @@ describe('gouge check: faceted round walls', () => {
       // program centre (20, 20); the tool centre runs at radius 3.5, so scaling by 4 / 3.5 moves the cutter edge 0.5 mm into the wall
       const k = 4 / 3.5;
       const grow = (p: { x: number; y: number; z: number }) => ({ x: 20 + (p.x - 20) * k, y: 20 + (p.y - 20) * k, z: p.z });
-      const pushed = { ...r.toolpath!, moves: r.toolpath!.moves.map((m) => ({ ...m, to: grow(m.to) }) as Move) };
+      const pushed = { ...r.toolpath!, moves: r.toolpath!.moves.map((m) => (m.kind === 'cycle' ? m : { ...m, to: grow(m.to) }) as Move) };
       const ctx = camContext(job, geometry as never);
       expect(gougeCheck(pushed, t3, ctx, { sagitta: 5 * (1 - Math.cos(Math.PI / sides)) }).diagnostics[0]?.message).toMatch(/^Cuts into the model by up to/);
     });

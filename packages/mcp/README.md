@@ -29,8 +29,10 @@ To use your browser tool library headless, export it from the web app's tool lib
 Geometry handles take a trailing `!` (`C3!`): a `!` on any of an open line's handles reverses the whole line (it otherwise runs in its first handle's drawn direction), which swaps its left and right for `openSide`.
 
 Facing and chamfers: `add_operation` with `type: "face"` takes an empty `geometry` list to face the whole stock, which also works with no model:
-`setStock { mode: "fixed", size }` puts a spoilboard at the origin with its top at Z 0. `type: "chamfer"` takes a contour and a `width`
-(for example 0.3 to deburr) with a V-bit or chamfer tool. `generate` tests every toolpath against the model: a gouge is an error
+`setStock { mode: "fixed", size }` puts a spoilboard at the origin with its top at Z 0 (`size.z` is the board thickness, not 0). Facing also takes
+`stepdown`, `finishPass` and `direction`; a picked mesh face defaults its bottom to the model top, so set the bottom to the face height.
+`type: "chamfer"` takes a contour and a `width` (for example 0.3 to deburr) with a V-bit or chamfer tool, plus `openSide` (`left` or `right`)
+for open lines, `stepdown` and `direction`; a hole handle is chamfered as a countersink. `generate` tests every toolpath against the model: a gouge is an error
 ("Cuts into the model by up to ...") and `export_gcode` refuses until you fix the heights or geometry.
 
 ## Tools

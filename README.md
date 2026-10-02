@@ -25,8 +25,8 @@ An MCP server lets Claude (or any MCP client) drive the same jobs: on `.spon` fi
 - **Pocket** with islands, stepover, and wall and floor finishing; unmachined areas are shown.
 - **Drill**: plain drilling, dwell, peck and chip-break cycles, with a diameter filter.
 - **Face** the whole stock or picked areas, zig-zag or spiral, with overlap, stepdown and a finish pass.
-- **Chamfer** an edge or contour with a chamfer mill or V-bit. You give the chamfer width, and Spon computes the depth from the tool's tip angle. A deburr button sets a small edge break.
-- **Gouge check.** Toolpaths are checked against the model. A cut into it is an error that keeps the toolpath, shows red markers in the viewport and blocks export.
+- **Chamfer** an edge or contour with a chamfer mill or V-bit, countersink a hole, or cut an open line to its left or right. You give the chamfer width, and Spon computes the depth from the tool's tip angle. A deburr button sets a small edge break.
+- **Gouge check.** Toolpaths are checked against the model (chamfer depth and the facets of round walls are allowed for). A cut into it is an error that keeps the toolpath, shows red markers in the viewport and blocks export.
 - Geometry is picked in the viewport, or from a catalog of faces, edge loops, holes and drawing contours.
 
 **Tools**
@@ -102,7 +102,7 @@ More detail is in [`.claude/skills/spon-dev/SKILL.md`](.claude/skills/spon-dev/S
 | 4.5 | Thread milling | Planned |
 | 4.6 | Automatic operation suggestions | Planned |
 
-Later: adaptive and zig-zag clearing, rest machining, cutter-compensation output, material-removal simulation, Heidenhain and Siemens dialects, and 3D operations.
+Later: adaptive clearing, rest machining, cutter-compensation output, material-removal simulation, Heidenhain and Siemens dialects, and 3D operations.
 
 ## License
 
