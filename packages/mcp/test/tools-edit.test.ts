@@ -138,4 +138,30 @@ describe('editing tools', () => {
     const gen = data(await call('generate')) as { operations: { status: string }[] };
     expect(gen.operations[0].status).not.toBe('error');
   });
+
+  it('faces a spoilboard with no model and requires geometry for other types', async () => {
+    const { call } = await connect();
+    await call('new_job');
+    await call('apply_commands', { commands: [{ type: 'setStock', stock: { mode: 'fixed', size: { x: 300, y: 200, z: 20 }, modelOffset: { x: 0, y: 0, z: 0 } } }] });
+    const face = await call('add_operation', { type: 'face', tool: 'starter-flat-6', geometry: [], params: { heights: { bottom: { from: 'stockTop', offset: -0.5 } } } });
+    expect(face.isError).toBeFalsy();
+    expect(data(face).operation).toMatchObject({ type: 'face', area: 'stock' });
+    const generated = data(await call('generate'));
+    expect(generated.operations[0].status).not.toBe('error');
+    const bare = await call('add_operation', { type: 'profile', tool: 'starter-flat-6', geometry: [] });
+    expect(bare.isError).toBe(true);
+    expect(text(bare)).toContain('Pick geometry for this operation');
+  });
+
+  it('chamfers a drawing outline with a chamfer tool', async () => {
+    const { call } = await dxfJob();
+    await call('add_library_tool', { tool: { ...tool6, id: 'chamfer-90', name: '90 degree chamfer mill', type: 'chamfer', number: 20, diameter: 12, tipAngleDeg: 90, fluteLength: 6, stickout: 25 } });
+    const outline = handleOn(data(await call('describe_geometry')), 'OUTLINE');
+    const added = await call('add_operation', { type: 'chamfer', tool: 'chamfer-90', geometry: [outline], params: { width: 0.5 } });
+    expect(added.isError).toBeFalsy();
+    expect(data(added).operation).toMatchObject({ type: 'chamfer', width: 0.5 });
+    const generated = data(await call('generate'));
+    expect(generated.operations[0].status).not.toBe('error');
+    expect(generated.export.errors).toEqual([]);
+  });
 });

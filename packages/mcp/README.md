@@ -1,7 +1,7 @@
 # Spon MCP server
 
 Lets Claude (or any MCP client) create and edit Spon jobs on disk: import STL, STEP, IGES, DXF and SVG models, pick geometry,
-add profile, pocket and drill operations, generate, preview, export G-code and save `.spon` files that open in the web app.
+add profile, pocket, drill, face and chamfer operations, generate, preview, export G-code and save `.spon` files that open in the web app.
 
 ## Build and register
 
@@ -27,6 +27,11 @@ starts the server in.
 To use your browser tool library headless, export it from the web app's tool library dialog and call
 `import_tool_library` with the file. It also reads LinuxCNC `tool.tbl` files (pass `units: "mm"` or `"in"`).
 Geometry handles take a trailing `!` (`C3!`): a `!` on any of an open line's handles reverses the whole line (it otherwise runs in its first handle's drawn direction), which swaps its left and right for `openSide`.
+
+Facing and chamfers: `add_operation` with `type: "face"` takes an empty `geometry` list to face the whole stock, which also works with no model:
+`setStock { mode: "fixed", size }` puts a spoilboard at the origin with its top at Z 0. `type: "chamfer"` takes a contour and a `width`
+(for example 0.3 to deburr) with a V-bit or chamfer tool. `generate` tests every toolpath against the model: a gouge is an error
+("Cuts into the model by up to ...") and `export_gcode` refuses until you fix the heights or geometry.
 
 ## Tools
 
