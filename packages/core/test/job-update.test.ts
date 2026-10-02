@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { quatRotate } from '../src/geometry/quat';
 import { v3near, v3normalize, vec3 } from '../src/geometry/vec3';
+import { CURRENT_SCHEMA_VERSION } from '../src/io/migrations';
 import { createJob, DEFAULT_AUTO_STOCK } from '../src/job/defaults';
 import { normalizeDegrees, orientationQuat } from '../src/job/orientation';
 import type { Job } from '../src/job/types';
@@ -19,7 +20,7 @@ describe('createJob', () => {
   it('uses the spec defaults', () => {
     const job = createJob();
     expect(job).toMatchObject({
-      schemaVersion: 3, name: 'Untitled', displayUnits: 'mm', model: null,
+      schemaVersion: CURRENT_SCHEMA_VERSION, name: 'Untitled', displayUnits: 'mm', model: null,
       stock: { mode: 'auto', margin: { xy: 5, zTop: 1, zBottom: 0 } },
       wcs: { anchor: { x: 'min', y: 'min', z: 'top' }, offset: { x: 0, y: 0, z: 0 }, workOffset: 'G54' },
     });

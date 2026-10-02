@@ -7,7 +7,7 @@ export type OperationType = 'profile' | 'pocket' | 'drill';
 /** A planar face of the mesh, in model-local (raw, pre-orientation) coordinates. */
 export interface MeshFaceRef { kind: 'meshFace'; blobId: string; seed: number; normal: Vec3; point: Vec3 }
 /** One path of the DXF drawing. */
-export interface DxfPathRef { kind: 'dxfPath'; blobId: string; layer: number; path: number }
+export interface DxfPathRef { kind: 'dxfPath'; blobId: string; layer: number; path: number; /** Open chains seeded by this reference run against its drawn direction. */ reverse?: true }
 /** One boundary loop of a face (loop 0 = the outer loop). */
 export interface MeshLoopRef { kind: 'meshLoop'; face: MeshFaceRef; loop: number }
 /** An inner loop of a face that fits a circle. */
@@ -59,6 +59,8 @@ export interface OperationBase {
 export interface ProfileOp extends OperationBase {
   type: 'profile';
   side: 'outside' | 'inside' | 'on';
+  /** Open chains: which side of the line (seen along its direction) the tool runs on. */
+  openSide: 'left' | 'on' | 'right';
   direction: 'climb' | 'conventional';
   stepdown: number;
   stockRadial: number;
@@ -122,7 +124,7 @@ export type CamSeverity = 'error' | 'warning';
 export type CamCode =
   | 'no-tool' | 'no-geometry' | 'ref-missing' | 'ref-changed' | 'face-not-horizontal' | 'open-contour' | 'no-stock'
   | 'heights-invalid' | 'offset-collapsed' | 'tool-too-large' | 'tool-undersize' | 'entry-plunge' | 'unmachined-area'
-  | 'tab-skipped' | 'stepdown-exceeds-flute' | 'feed-exceeds-machine' | 'tool-number-duplicate' | 'internal';
+  | 'tab-skipped' | 'stepdown-exceeds-flute' | 'feed-exceeds-machine' | 'tool-number-duplicate' | 'bend-rounded' | 'internal';
 export interface CamDiagnostic {
   operationId: string;
   severity: CamSeverity;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v1Job from './fixtures/job-v1.json';
-import { migrateJob } from '../src/io/migrations';
+import { CURRENT_SCHEMA_VERSION, migrateJob } from '../src/io/migrations';
 import { createJob } from '../src/job/defaults';
 import { DEFAULT_MACHINE_PRESET, MACHINE_PRESET_NAMES, machinePreset } from '../src/job/machine';
 import {
@@ -36,7 +36,7 @@ describe('machine presets', () => {
 describe('job v2', () => {
   it('creates jobs with the default machine and no programs', () => {
     const job = createJob();
-    expect(job.schemaVersion).toBe(3);
+    expect(job.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
     expect(job.machine).toEqual(machinePreset('Hobby GRBL router'));
     expect(job.programs).toEqual([]);
   });
@@ -72,7 +72,7 @@ describe('job v2', () => {
 describe('migration v1 → v2', () => {
   it('upgrades a Milestone 1 job', () => {
     const job = migrateJob(v1Job);
-    expect(job.schemaVersion).toBe(3);
+    expect(job.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
     expect(job.machine).toEqual(machinePreset('Hobby GRBL router'));
     expect(job.programs).toEqual([]);
     expect(job.model?.blobId).toBe('b1');

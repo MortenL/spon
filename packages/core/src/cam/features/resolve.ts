@@ -1,4 +1,4 @@
-import { orientPath } from '../../geometry/offset/pathOps';
+import { orientPath, reversePath } from '../../geometry/offset/pathOps';
 import type { Path2D, Vec2 } from '../../geometry/path2d';
 import { type CamContext, drawingPathToProgram } from '../context';
 import type { CamCode, CamDiagnostic, MeshFaceRef, Operation } from '../types';
@@ -84,13 +84,15 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
         else out.holes.push({ center: c.center, diameter: c.diameter, top: drawingZ, bottom: ctx.stock?.min.z ?? drawingZ, through: true, ref: d.ref });
       }
     } else {
-      const { closed, open } = chainPaths(dxf.map((d) => d.path), ctx.tolerance);
+      const { closed, open, openSeeds } = chainPaths(dxf.map((d) => d.path), ctx.tolerance);
       if (op.type === 'profile') {
         for (const path of closed) out.contours.push({ path, z: drawingZ, ref: firstRef });
-        for (const path of open) {
-          if (op.side === 'on') out.contours.push({ path, z: drawingZ, ref: firstRef });
-          else fail(firstRef, 'open-contour', 'An open chain can only be profiled on the line');
-        }
+        open.forEach((path, k) => {
+          const seed = dxf[openSeeds[k]].ref;
+          const g = op.geometry[seed];
+          const reversed = g.kind === 'dxfPath' && g.reverse === true;
+          out.contours.push({ path: reversed ? reversePath(path) : path, z: drawingZ, ref: seed });
+        });
       } else {
         for (const shape of nestLoops(closed, ctx.tolerance)) out.shapes.push({ shape, z: drawingZ, ref: firstRef });
         if (open.length) fail(firstRef, 'open-contour', 'Pockets need closed contours; open chains are skipped');
