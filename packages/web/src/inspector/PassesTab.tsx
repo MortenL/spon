@@ -1,8 +1,11 @@
-import type { DrillCycle, DrillOp, EntrySettings, Operation, PocketOp, ProfileOp } from '@sponcam/core';
+import { camContext, type DrillCycle, type DrillOp, type EntrySettings, type Operation, type PocketOp, type ProfileOp } from '@sponcam/core';
+import { useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { LengthField, NumericField } from '@/panels/NumericField';
 import { runCommand } from '@/state/camView';
+import { useApp } from '@/state/store';
+import { contourKinds } from './openChains';
 
 const pctField = (label: string, value: number, testId: string, onCommit: (v: number) => void) => (
   <NumericField
@@ -59,9 +62,13 @@ function EntryFields({ entry, showAngles, onPatch }: { entry: EntrySettings; sho
 function ProfilePasses({ op }: { op: ProfileOp }) {
   const patch = (p: Partial<ProfileOp>) => runCommand({ type: 'updateOperation', id: op.id, patch: p });
   const { tabs } = op;
+  const job = useApp((s) => s.job);
+  const geometry = useApp((s) => s.geometry);
+  const kinds = useMemo(() => contourKinds(op, camContext(job, geometry)), [op, job, geometry]);
 
   return (
     <div className="space-y-3">
+      {(kinds.closed || !kinds.open) && (
       <label className="grid grid-cols-[1fr_10rem] items-center gap-2 text-sm">
         <span className="text-muted-foreground">Side</span>
         <ToggleGroup
@@ -73,6 +80,20 @@ function ProfilePasses({ op }: { op: ProfileOp }) {
           <ToggleGroupItem value="on">On</ToggleGroupItem>
         </ToggleGroup>
       </label>
+      )}
+      {kinds.open && (
+        <label className="grid grid-cols-[1fr_10rem] items-center gap-2 text-sm">
+          <span className="text-muted-foreground">Open side</span>
+          <ToggleGroup
+            type="single" variant="outline" size="sm" data-testid="pass-open-side" value={op.openSide}
+            onValueChange={(v) => v && patch({ openSide: v as ProfileOp['openSide'] })}
+          >
+            <ToggleGroupItem value="left">Left</ToggleGroupItem>
+            <ToggleGroupItem value="on">On</ToggleGroupItem>
+            <ToggleGroupItem value="right">Right</ToggleGroupItem>
+          </ToggleGroup>
+        </label>
+      )}
       <label className="grid grid-cols-[1fr_10rem] items-center gap-2 text-sm">
         <span className="text-muted-foreground">Direction</span>
         <ToggleGroup

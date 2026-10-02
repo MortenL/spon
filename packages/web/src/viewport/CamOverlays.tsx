@@ -1,6 +1,6 @@
 import {
   camContext, type CamContext, circleOf, type DxfPathRef, drawingPath, drawingPathToProgram, flattenPath, type GeometryRef,
-  HEIGHT_NAMES, type HeightName, type Job, type LapPosition, type Operation, type OpOverlays, type Path2D, type ResolvedHeights,
+  HEIGHT_NAMES, type HeightName, type Job, offsetOpenPath, pathLength, pointAt, type LapPosition, type Operation, type OpOverlays, type Path2D, type ResolvedHeights,
   programContext, programOrigin, resolveFaceRef, type Vec2, type Vec3,
 } from '@sponcam/core';
 import { Line } from '@react-three/drei';
@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from 'react';
 import * as THREE from 'three';
 import { runCommand } from '@/state/camView';
 import { type ModelGeometry, useApp } from '@/state/store';
+import { openChains } from '@/inspector/openChains';
 import { regionShape } from './convert';
 import { noRaycast } from './SceneObjects';
 
@@ -35,6 +36,7 @@ export function CamOverlays() {
   return (
     <group position={[origin.x, origin.y, origin.z]}>
       <PickedGeometry job={job} geometry={geometry} op={op} />
+      {op.type === 'profile' && <OpenChainArrows job={job} geometry={geometry} op={op} />}
       {inspectorTab === 'heights' && summary?.heights && <HeightsPlanes job={job} geometry={geometry} heights={summary.heights} />}
       {op.type === 'profile' && summary && <TabHandles op={op} overlays={summary.overlays} origin={origin} />}
       {summary && <UnmachinedAreas overlays={summary.overlays} />}
@@ -54,6 +56,49 @@ function PickedGeometry({ job, geometry, op }: { job: Job; geometry: ModelGeomet
     <>
       {loops.map((l) => (
         <Line key={l.key} points={l.points as Point3[]} color={PICK_COLOR} lineWidth={3} raycast={noRaycast} />
+      ))}
+    </>
+  );
+}
+
+const ARROW_TIP = 2;
+const ARROW_BACK = 2;
+const ARROW_SIDE = 1.2;
+
+/** Direction arrows (and a dashed preview of the side cut) for the open lines of a profile. */
+function OpenChainArrows({ job, geometry, op }: { job: Job; geometry: ModelGeometry | null; op: Operation }) {
+  const ctx = useMemo(() => camContext(job, geometry), [job, geometry]);
+  const chains = useMemo(() => openChains(op, ctx), [op, ctx]);
+  const toolDiameter = job.tools.find((t) => t.id === op.toolId)?.diameter ?? null;
+  const openSide = op.type === 'profile' ? op.openSide : 'on';
+  const items = useMemo(
+    () =>
+      chains.map((c) => {
+        const { point, tangent } = pointAt(c.path, pathLength(c.path) / 2);
+        const nx = -tangent.y, ny = tangent.x;
+        const bx = point.x - tangent.x * ARROW_BACK, by = point.y - tangent.y * ARROW_BACK;
+        const arrow: Point3[] = [
+          [bx + nx * ARROW_SIDE, by + ny * ARROW_SIDE, 0],
+          [point.x + tangent.x * ARROW_TIP, point.y + tangent.y * ARROW_TIP, 0],
+          [bx - nx * ARROW_SIDE, by - ny * ARROW_SIDE, 0],
+        ];
+        const offsets =
+          openSide !== 'on' && toolDiameter !== null
+            ? (offsetOpenPath(c.path, openSide, toolDiameter / 2, 0.05)?.paths ?? []).map((p) => flattenPath(p, 0.05).map((q): Point3 => [q.x, q.y, 0]))
+            : [];
+        return { ref: c.ref, arrow, offsets };
+      }),
+    [chains, openSide, toolDiameter],
+  );
+  return (
+    <>
+      {items.map((it) => (
+        <group key={it.ref}>
+          <Line name="open-chain-arrow" points={it.arrow} color={PICK_COLOR} lineWidth={3} raycast={noRaycast} />
+          {it.offsets.filter((pts) => pts.length >= 2).map((pts, i) => (
+            <Line key={i} points={pts} color={PICK_COLOR} lineWidth={1} dashed dashSize={1} gapSize={0.6} raycast={noRaycast} />
+          ))}
+        </group>
       ))}
     </>
   );

@@ -1,5 +1,6 @@
-import { formatLength, type Operation, type OperationType } from '@sponcam/core';
-import { CircleX, Crosshair, Trash2 } from 'lucide-react';
+import { camContext, formatLength, type Operation, type OperationType } from '@sponcam/core';
+import { ArrowLeftRight, CircleX, Crosshair, Trash2 } from 'lucide-react';
+import { useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Toggle } from '@/components/ui/toggle';
@@ -7,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { LengthField } from '@/panels/NumericField';
 import { runCommand } from '@/state/camView';
 import { appStore, useApp } from '@/state/store';
+import { openChains, toggleReverse } from './openChains';
 import { refLabel, sameRef, toggleRef } from './geometryLabels';
 
 const PICK_HINT: Record<OperationType, string> = {
@@ -21,6 +23,8 @@ export function GeometryTab({ op }: { op: Operation }) {
   const camResults = useApp((s) => s.camResults);
   const camPick = useApp((s) => s.camPick);
   const units = useApp((s) => s.job.displayUnits);
+  const job = useApp((s) => s.job);
+  const seeds = useMemo(() => new Set(openChains(op, camContext(job, geometry)).map((c) => c.ref)), [op, job, geometry]);
 
   const drawingLayers = geometry?.kind === 'drawing' ? geometry.drawing.layers.map((l) => l.name) : null;
   const diagnostics = camResults[op.id]?.diagnostics ?? [];
@@ -46,6 +50,14 @@ export function GeometryTab({ op }: { op: Operation }) {
               <span className="min-w-0 flex-1 truncate" title={refLabel(ref, catalog, drawingLayers, units)}>
                 {refLabel(ref, catalog, drawingLayers, units)}
               </span>
+              {seeds.has(i) && (
+                <Toggle
+                  size="sm" pressed={ref.kind === 'dxfPath' && ref.reverse === true} data-testid={`geo-reverse-${i}`} title="Reverse the line's direction"
+                  onPressedChange={() => setGeometry(toggleReverse(op.geometry, i))}
+                >
+                  <ArrowLeftRight className="size-3.5" />
+                </Toggle>
+              )}
               <Button
                 size="icon" variant="ghost" className="size-6" data-testid={`geo-remove-${i}`} title="Remove"
                 onClick={() => setGeometry(op.geometry.filter((_, idx) => idx !== i))}
