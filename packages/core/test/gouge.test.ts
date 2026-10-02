@@ -179,7 +179,6 @@ describe('gouge check', () => {
     const t0 = performance.now();
     const r = gougeCheck(handPath(moves), tool6, ctx);
     const ms = performance.now() - t0;
-`);
     expect(r.gouges.length).toBeLessThanOrEqual(200);
     expect(ms).toBeLessThan(2000);
   }, 60_000);
