@@ -150,7 +150,7 @@ export function faceToolpath(op: FaceOp, tool: Tool, ctx: CamContext, geo: Resol
       }));
 
   for (const area of areas) {
-    const hr = resolveHeights(op.heights, ctx, { contourZ: area.z, holeBottom: null, faceZ: geo.faceZ });
+    const hr = resolveHeights(op.heights, ctx, { contourZ: area.z, holeBottom: null, faceZ: geo.faceZ, facing: true });
     const ref = op.area === 'stock' ? undefined : area.ref;
     if (!hr.values) {
       for (const e of hr.errors) diag('error', 'heights-invalid', e, ref);

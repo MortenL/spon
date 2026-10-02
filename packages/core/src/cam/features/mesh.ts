@@ -1,6 +1,6 @@
 import type { Adjacency } from '../../geometry/adjacency';
 import { type Mesh, triangleCount, triangleNormal, triangleVertices, vertexAt } from '../../geometry/mesh';
-import { fitArcs } from '../../geometry/offset/arcFit';
+import { type ArcFitStats, fitArcs } from '../../geometry/offset/arcFit';
 import { orientPath, polyArea, v2 } from '../../geometry/offset/pathOps';
 import type { Path2D, Vec2 } from '../../geometry/path2d';
 import { faceRegion } from '../../geometry/faces';
@@ -56,6 +56,8 @@ export interface FaceGeometry {
   z: number;
   /** Loop 0 = outer (counter-clockwise); the others are holes (clockwise); program coordinates. */
   loops: Path2D[];
+  /** Per loop: the largest gap between a mesh chord and the arc fitted over it (mm); 0 for a loop without fitted arcs. */
+  sagittas: number[];
 }
 
 export function faceGeometry(ctx: CamContext, tris: number[]): FaceGeometry {
@@ -66,8 +68,14 @@ export function faceGeometry(ctx: CamContext, tris: number[]): FaceGeometry {
   for (const loop of loops3) for (const p of loop) { zSum += p.z; n++; }
   const polys: Vec2[][] = loops3.map((loop) => loop.map((p) => v2(p.x, p.y)));
   const order = polys.map((p, i) => ({ i, area: Math.abs(polyArea(p)) })).sort((a, b) => b.area - a.area).map((o) => o.i);
-  const loops = order.map((i, k) => orientPath(fitArcs(polys[i], true, ctx.tolerance), k === 0));
-  return { tris, z: n ? zSum / n : 0, loops };
+  const sagittas: number[] = [];
+  const loops = order.map((i, k) => {
+    const stats: ArcFitStats = { sagitta: 0 };
+    const path = orientPath(fitArcs(polys[i], true, ctx.tolerance, Infinity, stats), k === 0);
+    sagittas.push(stats.sagitta);
+    return path;
+  });
+  return { tris, z: n ? zSum / n : 0, loops, sagittas };
 }
 
 /** Checks a face reference against the loaded mesh and the current orientation, then builds its geometry. */

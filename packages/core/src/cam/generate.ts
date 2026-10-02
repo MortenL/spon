@@ -2,7 +2,7 @@ import type { Job } from '../job/types';
 import { camContext, type CamContext, type CamGeometry } from './context';
 import { resolveGeometry } from './features/resolve';
 import { gougeCheck } from './gouge/check';
-import { chamferToolpath } from './ops/chamfer';
+import { chamferGeometry, chamferToolpath } from './ops/chamfer';
 import { drillToolpath } from './ops/drill';
 import { faceToolpath } from './ops/face';
 import { emptyOverlays, type OpOutput } from './ops/output';
@@ -65,7 +65,11 @@ export function generateOperation(op: Operation, ctx: CamContext): OperationResu
     const toolpath = failed ? null : res.toolpath;
     const overlays = res.overlays;
     if (toolpath) {
-      const g = gougeCheck(toolpath, tool, ctx);
+      // a chamfer cone sits width / tan(half-angle) below the edge by design, and a faceted wall sitting `sagitta`
+      // inside its fitted circle lets the cone ride sagitta / tan(half-angle) deeper
+      const tanHalf = op.type === 'chamfer' ? Math.tan(chamferGeometry(tool, op.width, op.tipOffset).halfAngle) : 0;
+      const allowance = op.type === 'chamfer' ? (op.width + geo.sagitta) / tanHalf : 0;
+      const g = gougeCheck(toolpath, tool, ctx, { allowance, sagitta: geo.sagitta });
       diagnostics.push(...g.diagnostics);
       return { ...base, ...res, diagnostics, toolpath, overlays: { ...overlays, gouges: g.gouges } };
     }

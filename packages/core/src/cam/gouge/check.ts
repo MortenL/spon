@@ -8,6 +8,27 @@ import { meshIndex } from './meshIndex';
 import { toolShape } from './toolShape';
 
 const MAX_GOUGES = 200;
+const CELL_BUCKETS = [3, 2, 1, 0.5];
+
+export interface GougeOptions {
+  /**
+   * Chamfers: a cone legitimately sits this far (mm) below the mesh edge it cuts, so a sample gouges only when it is
+   * deeper than allowance + tolerance. Applies to every sample of the operation, feed and rapid.
+   */
+  allowance?: number;
+  /**
+   * The largest chord sagitta (mm) of the arcs fitted to the mesh loops the operation uses. The real mesh walls sit
+   * inside the fitted circles by that much, so a sample gouges only if it also gouges with the tool radius reduced by
+   * tolerance + sagitta.
+   */
+  sagitta?: number;
+}
+
+/** Cell size for a tool radius: clamp(R / 3, 0.5, 3) rounded down to a bucket, so a placement holds at most four indexes. */
+function cellFor(radius: number): number {
+  const want = Math.min(3, Math.max(0.5, radius / 3));
+  return CELL_BUCKETS.find((b) => b <= want + 1e-9) ?? 0.5;
+}
 
 export interface GougeResult {
   diagnostics: CamDiagnostic[];
@@ -18,11 +39,11 @@ export interface GougeResult {
  * Tests every move of a toolpath against the model mesh with the real tool shape. Moves are sampled from the previous
  * position at spacing min(R/4, 0.5) mm (arcs are tessellated within the tolerance first). Only meshes are checked.
  */
-export function gougeCheck(toolpath: Toolpath, tool: Tool, ctx: CamContext): GougeResult {
+export function gougeCheck(toolpath: Toolpath, tool: Tool, ctx: CamContext, options: GougeOptions = {}): GougeResult {
   const none: GougeResult = { diagnostics: [], gouges: [] };
   if (ctx.geometry?.kind !== 'mesh') return none;
   const shape = toolShape(tool);
-  const index = meshIndex(ctx, Math.min(3, Math.max(0.5, shape.radius / 3)));
+  const index = meshIndex(ctx, cellFor(shape.radius));
   if (!index || index.triangleCount === 0) return none;
   let maxZ = -Infinity;
   for (let t = 0; t < index.triangleCount; t++) if (index.triBox[t * 5 + 4] > maxZ) maxZ = index.triBox[t * 5 + 4];
@@ -36,15 +57,25 @@ export function gougeCheck(toolpath: Toolpath, tool: Tool, ctx: CamContext): Gou
   let found: { point: Vec3; depth: number }[] = [];
   const compact = () => { found.sort((p, q) => q.depth - p.depth); found = found.slice(0, MAX_GOUGES); };
   // Hole walls in a mesh are inscribed polygons, so a drill column is checked with a slightly smaller tool.
-  const cycleRadius = Math.max(0, shape.radius - (gTol + ctx.tolerance + 0.02 * shape.radius));
-  const cycleShape = { ...shape, radius: cycleRadius, cornerRadius: Math.min(shape.cornerRadius, cycleRadius) };
+  const allowance = Math.max(0, options.allowance ?? 0);
+  const sagitta = Math.max(0, options.sagitta ?? 0);
+  const rAllow = gTol + sagitta;
+  const shrink = (by: number) => {
+    const radius = Math.max(0, shape.radius - by);
+    return { ...shape, radius, cornerRadius: Math.min(shape.cornerRadius, radius) };
+  };
+  // A sample that gouges at full radius is tested again with the reduced one: faceted round walls sit inside their fitted
+  // circles. Without fitted arcs (sagitta 0) the full-radius result stands, which keeps all-gouging paths at one pass.
+  const reduced = shrink(rAllow);
+  const cycleShape = shrink(Math.max(gTol + ctx.tolerance + 0.02 * shape.radius, rAllow));
   let active = shape;
 
   const sample = (x: number, y: number, z: number, isRapid: boolean) => {
     let depth = 0;
     if (z <= maxZ) {
-      const lim = z + gTol;
-      const d = dropCutter(index, active, x, y, ctx.tolerance, lim); // only depths beyond gTol matter
+      const lim = z + allowance + gTol;
+      let d = dropCutter(index, active, x, y, ctx.tolerance, lim); // only depths beyond the allowance matter
+      if (d > lim && active === shape && sagitta > 0) d = dropCutter(index, reduced, x, y, ctx.tolerance, lim);
       if (d > lim) depth = d - z;
     }
     if (depth > 0) {

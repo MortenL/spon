@@ -19,13 +19,15 @@ export interface ResolvedGeometry {
   shapes: ResolvedShape[];
   holes: ResolvedHole[];
   diagnostics: CamDiagnostic[];
+  /** Largest chord sagitta (mm) of the arcs fitted to the mesh loops this operation uses; 0 without any. */
+  sagitta: number;
   /** Z of any face reference (for the "face" height reference), or null if it does not resolve. */
   faceZ(ref: MeshFaceRef): number | null;
 }
 
 export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometry {
   const out: ResolvedGeometry = {
-    contours: [], shapes: [], holes: [], diagnostics: [],
+    contours: [], shapes: [], holes: [], diagnostics: [], sagitta: 0,
     faceZ: (ref) => {
       const r = resolveFaceRef(ctx, ref);
       return r.ok ? r.face.z : null;
@@ -39,7 +41,12 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
     if (!faceCache.has(key)) faceCache.set(key, resolveFaceRef(ctx, ref));
     return faceCache.get(key)!;
   };
+  /** Notes the fitted-arc sagitta of the loops of `f` that the operation uses. */
+  const usesLoops = (f: FaceGeometry, loops: Iterable<number>) => {
+    for (const k of loops) out.sagitta = Math.max(out.sagitta, f.sagittas[k] ?? 0);
+  };
   const holeFromLoop = (f: FaceGeometry, loop: number, ref: number): boolean => {
+    usesLoops(f, [loop]);
     const path = f.loops[loop];
     const c = loop > 0 && path ? circleOf(path) : null;
     if (!c) return false;
@@ -65,6 +72,8 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
     if (!r.ok) return fail(i, r.code, r.message);
     const f = r.face;
     if (g.kind === 'meshFace') {
+      if (op.type !== 'drill' && op.type !== 'pocket') usesLoops(f, [0]);
+      if (op.type === 'pocket') usesLoops(f, f.loops.keys());
       if (op.type === 'profile') out.contours.push({ path: f.loops[0], z: f.z, ref: i });
       else if (op.type === 'chamfer') out.contours.push({ path: f.loops[0], z: f.z, ref: i, kind: 'outer' });
       else if (op.type === 'face') out.shapes.push({ shape: { outer: f.loops[0], islands: [] }, z: f.z, ref: i });
@@ -79,6 +88,7 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
       if (!holeFromLoop(f, g.loop, i)) fail(i, 'ref-changed', 'The picked loop is not a round hole');
       return;
     }
+    usesLoops(f, [g.loop]);
     if (op.type === 'profile') out.contours.push({ path, z: f.z, ref: i });
     else if (op.type === 'chamfer') out.contours.push({ path, z: f.z, ref: i, kind: g.loop === 0 ? 'outer' : 'inner' });
     else out.shapes.push({ shape: { outer: orientPath(path, true), islands: [] }, z: f.z, ref: i });

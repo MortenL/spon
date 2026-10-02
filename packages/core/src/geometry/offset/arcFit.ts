@@ -113,6 +113,22 @@ function fitStart(pts: readonly Vec2[]): number {
   return sharpCos < MAX_TURN ? sharp : longest;
 }
 
+/** Optional output of fitArcs. */
+export interface ArcFitStats {
+  /** Largest distance between a polyline chord and the arc fitted over it (grown, never reset). */
+  sagitta: number;
+}
+
+/** Records the largest gap between the circle (c, r) and the chords joining pts[i..j], consecutive and closing when `wrap`. */
+function noteSagitta(stats: ArcFitStats, c: Vec2, r: number, pts: readonly Vec2[], i: number, j: number, wrap: boolean): void {
+  const last = wrap ? j + 1 : j;
+  for (let k = i + 1; k <= last; k++) {
+    const p = pts[k - 1], q = pts[k % pts.length];
+    const s = Math.abs(r - Math.hypot((p.x + q.x) / 2 - c.x, (p.y + q.y) / 2 - c.y));
+    if (s > stats.sagitta) stats.sagitta = s;
+  }
+}
+
 /**
  * Replaces runs of polyline points with lines and arcs that stay within `tol` of every input point.
  * `maxBulge` bounds how far an arc may stray from the polyline between input points. It is unbounded by
@@ -120,7 +136,7 @@ function fitStart(pts: readonly Vec2[]): number {
  * fitted path to stay near the polyline itself (pocket rings, which must keep their wall clearance) pass a
  * bound and feed polygons whose facets are finer than it.
  */
-export function fitArcs(input: readonly Vec2[], closed: boolean, tol: number, maxBulge = Infinity): Path2D {
+export function fitArcs(input: readonly Vec2[], closed: boolean, tol: number, maxBulge = Infinity, stats?: ArcFitStats): Path2D {
   let pts = dedupe(input, closed, tol * 1e-3);
   if (pts.length < 2) return { segments: [], closed };
   if (closed) {
@@ -138,6 +154,7 @@ export function fitArcs(input: readonly Vec2[], closed: boolean, tol: number, ma
           return arcChordBulge(c, r, a0, arcSweepBetween(a0, Math.atan2(q.y - c.y, q.x - c.x), turn > 0), p, q) <= maxBulge;
         };
         if (r <= 1e4 && pts.every((p, k) => Math.abs(dist2(c, p) - r) <= tol && bulgeOk(p, pts[(k + 1) % pts.length]))) {
+          if (stats) noteSagitta(stats, c, r, pts, 0, pts.length - 1, true);
           return { closed, segments: [{ kind: 'arc', center: c, radius: r, startAngle: Math.atan2(pts[0].y - c.y, pts[0].x - c.x), sweep: turn * 2 * Math.PI }] };
         }
       }
@@ -164,6 +181,7 @@ export function fitArcs(input: readonly Vec2[], closed: boolean, tol: number, ma
     }
     if (arc && arcEnd > lineEnd) {
       segments.push(arc);
+      if (stats) noteSagitta(stats, arc.center, arc.radius, pts, i, arcEnd, false);
       i = arcEnd;
     } else {
       segments.push({ kind: 'line', from: pts[i], to: pts[lineEnd] });

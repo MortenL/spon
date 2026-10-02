@@ -46,6 +46,12 @@ describe('scanlineIntervals', () => {
 });
 
 describe('facing', () => {
+  it('asks for the facing depth when the bottom equals the top', () => {
+    const { run } = spoilboard({ heights: { bottom: { from: 'stockTop', offset: 0 } } });
+    const d = run.results[0].diagnostics.find((x) => x.code === 'heights-invalid');
+    expect(d).toMatchObject({ severity: 'error', message: 'Set the facing depth (Heights → Bottom)' });
+  });
+
   it('covers the whole stock top with zig-zag passes and overlap past the edges (review focus 3)', () => {
     const { run, tp } = spoilboard({});
     expect(run.results[0].diagnostics.filter((d) => d.severity === 'error')).toEqual([]);

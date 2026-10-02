@@ -29,6 +29,7 @@ describe('resolveHeights', () => {
   it('reports invalid combinations and missing references', () => {
     const base = defaultHeights('profile', 'drawing');
     expect(resolveHeights({ ...base, bottom: { from: 'origin', offset: 1 } }, ctx, none).errors).toEqual(['Bottom height must be below top height']);
+    expect(resolveHeights({ ...base, bottom: { from: 'origin', offset: 1 } }, ctx, { ...none, facing: true }).errors).toEqual(['Set the facing depth (Heights → Bottom)']);
     expect(resolveHeights({ ...base, top: { from: 'holeBottom', offset: 0 } }, ctx, none).errors[0]).toMatch(/Top height cannot be measured from/);
     expect(resolveHeights({ ...base, retract: { from: 'origin', offset: 0 } }, ctx, none).errors).toEqual(['Retract height must not be below feed height']);
     expect(resolveHeights({ ...base, bottom: { from: 'contour', offset: 0 } }, ctx, none).errors).toEqual(['Bottom height needs a contour']);
