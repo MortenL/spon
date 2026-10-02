@@ -146,6 +146,12 @@ describe('parseSvg', () => {
       expect(r.warnings).toContain('1 foreign object was skipped');
     });
 
+    it('walks only the first usable child of a switch', () => {
+      const r = drawing(parseSvg(svg('<switch><foreignObject width="5" height="5"/><g><rect width="5" height="5"/></g><g><rect width="9" height="9"/></g></switch>'), { svgScale: 1 }));
+      expect(r.drawing.layers.reduce((a, l) => a + l.paths.length, 0)).toBe(1);
+      expect(r.warnings.some((w) => w.includes('foreign'))).toBe(false);
+    });
+
     it('does not count hidden text', () => {
       const r = drawing(parseSvg(svg('<rect width="5" height="5"/><text style="display:none">x</text>'), { svgScale: 1 }));
       expect(r.warnings.some((w) => w.includes('text element'))).toBe(false);

@@ -84,7 +84,11 @@ function collect(root: XmlElement, rules: readonly CssRule[], userToPx: Affine2D
     }
     if (CONTAINERS.has(type)) {
       active.add(el);
-      for (const c of el.children) walk(c, mm, style, lay, depth);
+      // <switch> renders only its first usable child (Illustrator puts a foreignObject before the real drawing)
+      const kids = type === 'switch'
+        ? el.children.filter((c) => localName(c.name) !== 'foreignObject' && !c.name.includes(':')).slice(0, 1)
+        : el.children;
+      for (const c of kids) walk(c, mm, style, lay, depth);
       active.delete(el);
       return;
     }
