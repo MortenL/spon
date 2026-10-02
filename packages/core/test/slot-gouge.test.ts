@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyCommands, type JobCommand, PipelineCache, programContext, runPipeline } from '../src';
+import { applyCommands, camContext, gougeCheck, type JobCommand, PipelineCache, programContext, runPipeline } from '../src';
 import { tool6 } from './fixtures/camSetup';
 import { terracedSetup } from './fixtures/slotSetup';
 import { rectPts } from './fixtures/terraced.mjs';
@@ -15,7 +15,7 @@ function keyway(patch: Record<string, unknown>, o: { width?: number; top?: numbe
   ];
   const job = applyCommands(s.job, cmds);
   const { run, toolpaths } = runPipeline(job, s.geometry as never, programContext(job, s.geometry as never), new PipelineCache(), { date: '2026-01-01' });
-  return { ...run.results[0], toolpath: toolpaths[0] ?? null };
+  return { ...run.results[0], toolpath: toolpaths[0] ?? null, ctx: () => camContext(job, s.geometry) };
 }
 const codes = (r: ReturnType<typeof keyway>) => r.diagnostics.map((d) => `${d.severity}:${d.code}`);
 
@@ -104,10 +104,17 @@ describe('slots exactly as wide as the tool', () => {
     expect(codes(r)).toContain('error:tool-too-large');
   });
 
-  it('flags a side overcut larger than the tolerance (tool 0.04 mm wider than the slot)', () => {
-    // 5.96 still counts as tool width (within 0.05 mm), so the slot is cut and each wall is overcut by 0.02 mm
-    const r = keyway({ squareEnds: 'inside' }, { width: 5.96 });
-    expect(codes(r)).not.toContain('error:tool-too-large');
-    expect(codes(r)).toContain('error:gouge');
+  it('refuses a slot more than 0.02 mm narrower than the tool before cutting, and cuts one 0.02 mm narrower', () => {
+    for (const width of [5.96, 5.97]) expect(codes(keyway({ squareEnds: 'inside' }, { width })), String(width)).toContain('error:tool-too-large');
+    const r = keyway({ squareEnds: 'inside' }, { width: 5.98 });
+    expect(codes(r).filter((c) => c.startsWith('error'))).toEqual([]);
+    expect(r.toolpath).not.toBeNull();
+  });
+
+  it('still flags a side overcut larger than the tolerance (a 6 mm slot path checked with wider tools)', () => {
+    const r = keyway({ squareEnds: 'inside', stepdown: 3 }, { width: 6 });
+    const check = (diameter: number) => gougeCheck(r.toolpath!, { ...tool6, diameter }, r.ctx(), { sagitta: r.ctx().tolerance }).diagnostics.map((d) => d.code);
+    expect(check(6.02)).not.toContain('gouge'); // 0.01 mm per wall: inside the allowance
+    expect(check(6.04)).toContain('gouge'); // 0.02 mm per wall: a real overcut
   });
 });

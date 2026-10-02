@@ -51,6 +51,8 @@ describe('slot ends', () => {
     expect(slotStrategy('auto', 6.04, 6)).toMatchObject({ strategy: 'toolWidth' });
     expect(slotStrategy('auto', 10, 6)).toMatchObject({ strategy: 'wider', reason: 'width 10 > tool 6' });
     expect(slotStrategy('auto', 5.9, 6)).toEqual({ error: { code: 'tool-too-large', message: 'The tool is wider than this slot (5.90 mm)' } });
+    expect(slotStrategy('auto', 5.97, 6)).toEqual({ error: { code: 'tool-too-large', message: 'The tool is wider than this slot (5.97 mm)' } });
+    expect(slotStrategy('toolWidth', 5.98, 6)).toMatchObject({ strategy: 'toolWidth' });
     expect(slotStrategy('toolWidth', 10, 6)).toEqual({ error: { code: 'slot-width-mismatch', message: 'Tool-width slots need a tool as wide as the slot (10.00 mm); use Wider' } });
     expect(slotStrategy('trochoidal', 10, 6)).toMatchObject({ strategy: 'trochoidal' });
   });

@@ -8,14 +8,23 @@ import { emitLap, type MoveWriter } from './writer';
 
 /** A slot this close to the tool diameter (mm) is a tool-width slot. */
 export const WIDTH_MATCH = 0.05;
+/**
+ * How much narrower than the tool (mm) a slot may be and still be cut: 0.01 mm per wall, which the gouge check
+ * always tolerates on slot walls (its allowance is at least 0.01 mm). A narrower slot would be refused later as a
+ * gouge, so it is refused here with a clear message instead.
+ */
+export const NARROW_MATCH = 0.02;
 export type SlotStrategy = 'toolWidth' | 'wider' | 'trochoidal';
 
 const mm = (v: number) => String(Number(v.toFixed(2)));
 
-/** Spec §3.1: the strategy a slot of `width` is cut with, or why it cannot be. Auto never picks trochoidal. */
+/**
+ * Spec §3.1: the strategy a slot of `width` is cut with, or why it cannot be. Auto never picks trochoidal. A slot up
+ * to WIDTH_MATCH wider than the tool is a tool-width slot; one more than NARROW_MATCH narrower is refused.
+ */
 export function slotStrategy(strategy: SlotOp['strategy'], width: number, toolDiameter: number):
   { strategy: SlotStrategy; reason: string } | { error: { code: CamCode; message: string } } {
-  if (width < toolDiameter - WIDTH_MATCH) return { error: { code: 'tool-too-large', message: `The tool is wider than this slot (${width.toFixed(2)} mm)` } };
+  if (width < toolDiameter - NARROW_MATCH - 1e-9) return { error: { code: 'tool-too-large', message: `The tool is wider than this slot (${width.toFixed(2)} mm)` } };
   const matches = Math.abs(width - toolDiameter) <= WIDTH_MATCH;
   if (strategy === 'auto') {
     return matches

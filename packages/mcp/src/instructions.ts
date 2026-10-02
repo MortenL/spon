@@ -34,7 +34,7 @@ Chamfer
 
 Slots
 - Slots: add_operation type slot on drawn centrelines (lines or arcs; each line end is the centre of a round end, so a 6.5 × 20 slot is a 13.5 mm line; set width) or on recognised slots S1….
-- strategy auto picks toolWidth when the width matches the tool diameter (±0.05 mm), else wider; trochoidal is used only when set (trochoidal.stepPct, default 10).
+- strategy auto picks toolWidth when the width matches the tool diameter (0.02 mm narrower to 0.05 mm wider; narrower than that is refused), else wider; trochoidal is used only when set (trochoidal.stepPct, default 10).
 - Square-ended slots need squareEnds: inside (corners keep the tool radius), endWall (overcuts the end by the tool radius) or dogbone (corner reliefs); export is refused until it is set.
 - endWall and dogbone overcuts give a slot-overcut warning, not a gouge error.
 

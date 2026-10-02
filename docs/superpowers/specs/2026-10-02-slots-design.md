@@ -100,12 +100,12 @@ interface SlotOp extends OperationBase {
 
 ### 3.1 Strategy
 - **`auto`**, per slot:
-  - **`toolWidth`** when `|width − tool diameter| ≤ 0.05 mm`;
+  - **`toolWidth`** when the width is from 0.02 mm narrower to 0.05 mm wider than the tool diameter;
   - **`wider`** when the width is larger than that.
   - `auto` never picks trochoidal, because that would quietly change cycle times and tool load.
 - Any strategy can be chosen explicitly.
 - **Errors:**
-  - a slot narrower than the tool by more than 0.05 mm: `tool-too-large` (existing code);
+  - a slot narrower than the tool by more than 0.02 mm (0.01 mm per wall, what the gouge check tolerates): `tool-too-large` (existing code). Amended 2026-10-02: the first draft allowed 0.05 mm, which the gouge check then refused;
   - `toolWidth` chosen when the width is more than 0.05 mm larger than the tool: `slot-width-mismatch`. The message says that the walls would be left uncut and suggests `wider`;
   - `trochoidal` when the loop radius (§3.4) is ≤ 0: `slot-too-narrow`, "Trochoidal needs a slot wider than the tool".
 
