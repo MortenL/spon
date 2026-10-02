@@ -127,7 +127,10 @@ describe('facing', () => {
     ]);
     const { run } = runPipeline(job, geometry as never, programContext(job, geometry as never), new PipelineCache(), { date: '2026-01-01' });
     const d = run.results[0].diagnostics;
-    expect(d.filter((x) => x.severity === 'error')).toEqual([]);
+    // facing 0.5 mm below the model top really does cut into the model, so the gouge check reports it (and keeps the toolpath)
+    expect(d.filter((x) => x.severity === 'error').map((x) => x.code)).toEqual(['gouge']);
+    expect(d.find((x) => x.code === 'gouge')?.message).toMatch(/^Cuts into the model by up to 0\.50 mm/);
+    expect(run.results[0].hasToolpath).toBe(true);
     expect(d.map((x) => x.message)).toContain('The facing depth goes below the model top');
     expect(d.find((x) => x.message === 'The facing depth goes below the model top')?.code).toBe('facing-depth');
   });

@@ -1,6 +1,7 @@
 import type { Job } from '../job/types';
 import { camContext, type CamContext, type CamGeometry } from './context';
 import { resolveGeometry } from './features/resolve';
+import { gougeCheck } from './gouge/check';
 import { chamferToolpath } from './ops/chamfer';
 import { drillToolpath } from './ops/drill';
 import { faceToolpath } from './ops/face';
@@ -59,8 +60,16 @@ export function generateOperation(op: Operation, ctx: CamContext): OperationResu
     if (op.type !== 'drill' && op.stepdown > tool.fluteLength) warn('stepdown-exceeds-flute', `Stepdown ${op.stepdown} mm is deeper than the ${tool.fluteLength} mm flutes`);
     const maxFeed = op.type === 'drill' ? op.feeds.plungeFeed : op.feeds.feed;
     if (maxFeed > ctx.job.machine.maxFeed) warn('feed-exceeds-machine', `Feed ${maxFeed} mm/min is above the machine maximum of ${ctx.job.machine.maxFeed}`);
-    const failed = diagnostics.some((d) => d.severity === 'error');
-    return { ...base, ...res, diagnostics, toolpath: failed ? null : res.toolpath };
+    // a gouge keeps its toolpath, so the user can see where it cuts into the model
+    const failed = diagnostics.some((d) => d.severity === 'error' && d.code !== 'gouge');
+    const toolpath = failed ? null : res.toolpath;
+    const overlays = res.overlays;
+    if (toolpath) {
+      const g = gougeCheck(toolpath, tool, ctx);
+      diagnostics.push(...g.diagnostics);
+      return { ...base, ...res, diagnostics, toolpath, overlays: { ...overlays, gouges: g.gouges } };
+    }
+    return { ...base, ...res, diagnostics, toolpath };
   } catch (e) {
     return err('internal', `Generation failed: ${e instanceof Error ? e.message : String(e)}`);
   }

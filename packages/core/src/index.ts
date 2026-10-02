@@ -65,6 +65,7 @@ export * from './cam/ops/chamfer';
 export * from './cam/gouge/toolShape';
 export * from './cam/gouge/meshIndex';
 export * from './cam/gouge/dropCutter';
+export * from './cam/gouge/check';
 export * from './geometry/offset/scanline';
 export * from './cam/generate';
 export * from './post/format';
