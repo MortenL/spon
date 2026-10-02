@@ -18,7 +18,7 @@ export function ModelPanel() {
   if (!model || !geometry) {
     return (
       <PanelSection title="Model">
-        <p className="text-sm text-muted-foreground">No model loaded. Drop an STL, STEP, IGES or DXF file on the viewport, or use Open.</p>
+        <p className="text-sm text-muted-foreground">No model loaded. Drop an STL, STEP, IGES, DXF or SVG file on the viewport, or use Open.</p>
       </PanelSection>
     );
   }
@@ -31,7 +31,7 @@ export function ModelPanel() {
         <dt className="text-muted-foreground">File</dt>
         <dd className="truncate" title={model.sourceName}>{model.sourceName}</dd>
         <dt className="text-muted-foreground">Type</dt>
-        <dd>{model.kind === 'drawing' ? 'Drawing (DXF)' : `Mesh (${source ? CAD_LABEL[source.format] : 'STL'})`}</dd>
+        <dd>{model.kind === 'drawing' ? `Drawing (${model.format === 'svg' ? 'SVG' : 'DXF'})` : `Mesh (${source ? CAD_LABEL[source.format] : 'STL'})`}</dd>
         <dt className="text-muted-foreground">Size</dt>
         <dd className="font-mono text-xs" data-testid="model-size">{placement ? formatSize(bboxSize(placement.bbox), units) : '—'}</dd>
         {source ? (

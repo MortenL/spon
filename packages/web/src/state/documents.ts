@@ -53,7 +53,7 @@ export async function openFile(file: File, handle: FileSystemFileHandle | null =
   }
   const isJob = file.name.toLowerCase().endsWith(SPON_EXTENSION);
   if (!isJob && !fileKind(file.name)) {
-    toast.error(`Unsupported file type: ${file.name} (open .spon, .stl, .step, .iges, .dxf or G-code)`);
+    toast.error(`Unsupported file type: ${file.name} (open .spon, .stl, .step, .iges, .dxf, .svg or G-code)`);
     return;
   }
   if (file.size > MAX_SOFT_IMPORT_BYTES && !window.confirm(`${file.name} is ${Math.round(file.size / 1048576)} MB and may take a while to load. Continue?`)) {
