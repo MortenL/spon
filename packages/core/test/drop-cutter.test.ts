@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { dropCutter, meshIndexFromTriangles, profileHeight, type ToolShape, toolShape } from '../src';
-import { tool6 } from './fixtures/camSetup';
+import { camContext, dropCutter, meshIndex, meshIndexFromTriangles, profileHeight, type ToolShape, toolShape } from '../src';
+import { plateSetup, tool6 } from './fixtures/camSetup';
 
 const flat = toolShape({ ...tool6, diameter: 6 }); // R 3, rc 0
 const ball = toolShape({ ...tool6, type: 'ball', cornerRadius: 3 }); // R 3, rc 3
@@ -25,7 +25,7 @@ describe('toolShape', () => {
     expect(cone).toMatchObject({ kind: 'cone', radius: 6 });
     expect(cone.halfAngle).toBeCloseTo(Math.PI / 4, 12);
     expect(toolShape({ ...tool6, type: 'chamfer', tipAngleDeg: 179.95 })).toMatchObject({ kind: 'torus', cornerRadius: 0 });
-  }, 120_000);
+  });
 });
 
 describe('profileHeight', () => {
@@ -36,7 +36,7 @@ describe('profileHeight', () => {
     expect(profileHeight(bull, 3)).toBeCloseTo(1, 9);
     expect(profileHeight(cone, 2)).toBeCloseTo(2, 9);
     expect(profileHeight(flat, 3.1)).toBe(Infinity);
-  }, 120_000);
+  });
 });
 
 describe('dropCutter', () => {
@@ -61,10 +61,38 @@ describe('dropCutter', () => {
     expect(dropCutter(shallow, cone, 10, 10, 0.01)).toBeCloseTo(5, 6);
   });
 
-  it('ignores downward-facing facets for the facet case but still sees their edges', () => {
-    const under = meshIndexFromTriangles([[0, 0, 5, 10, 10, 5, 10, 0, 5]], 2);
-    expect(dropCutter(under, flat, 8, 3, 0.01)).toBeCloseTo(5, 6);
-  }, 120_000);
+  it('treats facets as two-sided: an inverted-winding box drops like the correct one', () => {
+    const quad = (a: number[], b: number[], c: number[], d: number[]) => [[...a, ...b, ...c], [...a, ...c, ...d]];
+    const lo = 0, hi = 10, z0 = 0, z1 = 4;
+    const faces = [
+      quad([lo, lo, z1], [hi, lo, z1], [hi, hi, z1], [lo, hi, z1]),
+      quad([lo, lo, z0], [lo, hi, z0], [hi, hi, z0], [hi, lo, z0]),
+      quad([lo, lo, z0], [hi, lo, z0], [hi, lo, z1], [lo, lo, z1]),
+      quad([hi, lo, z0], [hi, hi, z0], [hi, hi, z1], [hi, lo, z1]),
+      quad([hi, hi, z0], [lo, hi, z0], [lo, hi, z1], [hi, hi, z1]),
+      quad([lo, hi, z0], [lo, lo, z0], [lo, lo, z1], [lo, hi, z1]),
+    ].flat();
+    const inverted = faces.map((t) => [...t.slice(0, 3), ...t.slice(6, 9), ...t.slice(3, 6)]);
+    const good = meshIndexFromTriangles(faces, 2), bad = meshIndexFromTriangles(inverted, 2);
+    for (const s of [flat, ball, bull, cone]) {
+      for (const [x, y] of [[5, 5], [-1, 5], [11.5, 3], [2, 12], [10, 10]]) {
+        const a = dropCutter(good, s, x, y, 0.01), b = dropCutter(bad, s, x, y, 0.01);
+        if (a === -Infinity) expect(b).toBe(-Infinity); else expect(b).toBeCloseTo(a, 9);
+      }
+    }
+    expect(dropCutter(bad, flat, 5, 5, 0.01)).toBeCloseTo(4, 9);
+  });
+
+  it('keys the mesh index on the placement scale, not only the orientation', () => {
+    const { job, geometry } = plateSetup();
+    const inch = { ...job, model: { ...job.model!, importUnits: 'in' as const } };
+    const a = meshIndex(camContext(job, geometry), 2)!;
+    const b = meshIndex(camContext(inch, geometry), 2)!;
+    expect(b).not.toBe(a);
+    expect(meshIndex(camContext(job, geometry), 2)).toBe(a);
+    const spanX = (i: typeof a) => { let lo = Infinity, hi = -Infinity; for (let k = 0; k < i.tris.length; k += 3) { lo = Math.min(lo, i.tris[k]); hi = Math.max(hi, i.tris[k]); } return hi - lo; };
+    expect(spanX(b)).toBeCloseTo(spanX(a) * 25.4, 6);
+  });
 });
 
 // ---------- randomized brute-force self-check ----------
@@ -171,7 +199,7 @@ function reference(tri: number[], s: ToolShape, cx: number, cy: number): number 
 }
 
 describe('dropCutter against a brute-force reference', () => {
-  it('agrees on random triangles and tool positions', () => {
+  it('agrees on random triangles and tool positions', { timeout: 60_000 }, () => {
     const rnd = mulberry(20261002);
     const shapes: ToolShape[] = [
       flat, ball, bull, cone,
@@ -182,10 +210,6 @@ describe('dropCutter against a brute-force reference', () => {
     for (let n = 0; n < 400; n++) {
       const tri: number[] = [];
       for (let k = 0; k < 3; k++) tri.push(rnd() * 10, rnd() * 10, rnd() * 10 - 5);
-      // facets count only when they face up (a closed model's down-facing facets are never the top surface), so orient up
-      if ((tri[3] - tri[0]) * (tri[7] - tri[1]) - (tri[4] - tri[1]) * (tri[6] - tri[0]) < 0) {
-        for (let k = 0; k < 3; k++) { const t = tri[3 + k]; tri[3 + k] = tri[6 + k]; tri[6 + k] = t; }
-      }
       const idx = meshIndexFromTriangles([tri], 2.5);
       for (const s of shapes) {
         for (let q = 0; q < 3; q++) {
@@ -205,5 +229,75 @@ describe('dropCutter against a brute-force reference', () => {
     expect(finite).toBeGreaterThan(500);
     expect(worstUnder).toBeGreaterThan(-1e-6);
     console.log(`drop-cutter self-check: ${finite} comparisons, worst under ${worstUnder.toExponential(2)}, worst over ${worstOver.toExponential(2)}`);
-  }, 120_000);
+  });
+});
+
+describe('dropCutter on multi-triangle meshes', () => {
+  it('agrees with the per-triangle brute force on random small terrains', { timeout: 60_000 }, () => {
+    const rnd = mulberry(77);
+    const shapes: ToolShape[] = [flat, ball, bull, cone, toolShape({ ...tool6, type: 'chamfer', tipAngleDeg: 60, diameter: 8 })];
+    let compared = 0, worstUnder = 0, worstOver = 0;
+    for (let n = 0; n < 25; n++) {
+      const N = 4, step = 14 / (N - 1);
+      const vz: number[] = [];
+      for (let i = 0; i < N * N; i++) vz.push(rnd() * 6 - 2);
+      const tris: number[][] = [];
+      const V = (i: number, j: number) => [i * step, j * step, vz[j * N + i]];
+      for (let j = 0; j < N - 1; j++) for (let i = 0; i < N - 1; i++) {
+        const t1 = [...V(i, j), ...V(i + 1, j), ...V(i + 1, j + 1)], t2 = [...V(i, j), ...V(i + 1, j + 1), ...V(i, j + 1)];
+        tris.push(rnd() < 0.3 ? [...t1.slice(0, 3), ...t1.slice(6), ...t1.slice(3, 6)] : t1, t2);
+      }
+      const idx = meshIndexFromTriangles(tris, 2.2);
+      for (const s of shapes) for (let q = 0; q < 2; q++) {
+        const x = rnd() * 18 - 2, y = rnd() * 18 - 2;
+        let ref = -Infinity;
+        for (const t of tris) {
+          const near = Math.min(t[0], t[3], t[6]) <= x + s.radius && Math.max(t[0], t[3], t[6]) >= x - s.radius
+            && Math.min(t[1], t[4], t[7]) <= y + s.radius && Math.max(t[1], t[4], t[7]) >= y - s.radius;
+          if (near) ref = Math.max(ref, reference(t, s, x, y));
+        }
+        const got = dropCutter(idx, s, x, y, 0.01);
+        if (ref === -Infinity) continue;
+        compared++;
+        worstUnder = Math.min(worstUnder, got - ref);
+        worstOver = Math.max(worstOver, got - ref);
+        expect(got, `terrain ${n} ${JSON.stringify({ s, x, y, got, ref })}`).toBeGreaterThanOrEqual(ref - 1e-4);
+        expect(got, `terrain ${n} ${JSON.stringify({ s, x, y, got, ref })}`).toBeLessThanOrEqual(ref + 1e-6);
+      }
+    }
+    expect(compared).toBeGreaterThan(100);
+    console.log(`terrain self-check: ${compared} comparisons, worst under ${worstUnder.toExponential(2)}, worst over ${worstOver.toExponential(2)}`);
+  });
+});
+
+describe('dropCutter speed', () => {
+  // a 316 x 316 vertex sin-wave height grid over 100 mm: about 200k triangles
+  const N = 316, size = 100, step = size / (N - 1);
+  const z = (i: number, j: number) => 2 + 1.5 * Math.sin(i * 0.21) * Math.cos(j * 0.17);
+  const tris: number[][] = [];
+  for (let j = 0; j < N - 1; j++) for (let i = 0; i < N - 1; i++) {
+    const a = [i * step, j * step, z(i, j)], b = [(i + 1) * step, j * step, z(i + 1, j)];
+    const c = [(i + 1) * step, (j + 1) * step, z(i + 1, j + 1)], d = [i * step, (j + 1) * step, z(i, j + 1)];
+    tris.push([...a, ...b, ...c], [...a, ...c, ...d]);
+  }
+  const idx = meshIndexFromTriangles(tris, 1.5);
+  const run = (s: ToolShape): number => {
+    const t0 = performance.now();
+    let acc = 0;
+    for (let k = 0; k < 100_000; k++) {
+      const line = Math.floor(k / 2000), u = k % 2000;
+      const x = 3 + (u / 1999) * 94, y = 3 + line * 1.88;
+      acc += dropCutter(idx, s, line % 2 ? 100 - x : x, y, 0.01);
+    }
+    expect(Number.isFinite(acc)).toBe(true);
+    return performance.now() - t0;
+  };
+
+  it('does 100,000 flat R3 calls on a 200k-triangle terrain in under a second', { timeout: 120_000 }, () => {
+    expect(tris.length).toBeGreaterThan(190_000);
+    run(flat); // warm up
+    const ms = run(flat);
+    console.log(`drop-cutter speed: flat R3 ${ms.toFixed(0)} ms per 100k calls, ball R3 ${run(ball).toFixed(0)} ms, 90deg cone R6 ${run(cone).toFixed(0)} ms`);
+    expect(ms).toBeLessThan(1000);
+  });
 });
