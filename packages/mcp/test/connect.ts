@@ -1,5 +1,5 @@
 import { copyFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
@@ -11,7 +11,7 @@ import { fixturePath, tempDir } from './helpers';
 /** A server and client joined in memory, working in a fresh temporary directory holding copies of `files`. */
 export async function connect(overrides: Partial<ServerDeps> = {}, files: string[] = []) {
   const dir = tempDir();
-  for (const f of files) copyFileSync(fixturePath(f), join(dir, f));
+  for (const f of files) copyFileSync(fixturePath(f), join(dir, basename(f)));
   const deps: ServerDeps = {
     cwd: dir, library: new ToolLibraryFile(join(dir, 'tools.json')), loadReader: loadNodeOcct,
     rasterize: async () => new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]), postDate: '2026-01-01', ...overrides,

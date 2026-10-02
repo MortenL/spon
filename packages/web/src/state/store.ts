@@ -1,6 +1,6 @@
 import {
   applyCommand, applyCommands, type CadBodySummary, type CadFormat, createJob, type GeometryCatalog, type Job,
-  type JobCommand, type LengthUnit, type ModelGeometry, type NewModel, type ParsedProgram, type ProgramRef, setModel, type Vec3,
+  type JobCommand, type LengthUnit, type ModelGeometry, type NewModel, type ParsedProgram, type ProgramRef, setModel, type Vec2, type Vec3,
 } from '@sponcam/core';
 import { useStore } from 'zustand';
 import { createStore, type StoreApi } from 'zustand/vanilla';
@@ -29,6 +29,13 @@ export interface PendingBodies {
   bytes: Uint8Array;
   format: CadFormat;
   bodies: CadBodySummary[];
+}
+
+/** An SVG without real-world units, waiting for the scale dialog. */
+export interface PendingScale {
+  fileName: string;
+  bytes: Uint8Array;
+  rawSize: Vec2;
 }
 
 export interface ProgramData {
@@ -69,6 +76,7 @@ export interface AppState {
   viewRequest: { preset: ViewPreset; nonce: number };
   pendingImport: PendingImport | null;
   pendingBodies: PendingBodies | null;
+  pendingScale: PendingScale | null;
   busy: string | null;
   /** Original program bytes by blobId (saved into .spon files). */
   programBytes: Record<string, Uint8Array>;
@@ -109,6 +117,7 @@ export interface AppState {
   requestView(preset: ViewPreset): void;
   setPendingImport(pending: PendingImport | null): void;
   setPendingBodies(pending: PendingBodies | null): void;
+  setPendingScale(pending: PendingScale | null): void;
   setBusy(message: string | null): void;
   setProgramBytes(blobId: string, bytes: Uint8Array): void;
   setProgramData(blobId: string, data: ProgramData): void;
@@ -151,6 +160,7 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
     viewRequest: { preset: 'fit', nonce: 0 },
     pendingImport: null,
     pendingBodies: null,
+    pendingScale: null,
     busy: null,
     programBytes: {},
     programData: {},
@@ -202,7 +212,7 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
     },
     loadDocument(doc) {
       set({
-        ...doc, past: [], future: [], pickMode: 'none', hiddenLayers: [], pendingImport: null, pendingBodies: null,
+        ...doc, past: [], future: [], pickMode: 'none', hiddenLayers: [], pendingImport: null, pendingBodies: null, pendingScale: null,
         programData: {}, activeProgramId: doc.job.programs[0]?.id ?? null, selectedLine: null, playhead: 0, playing: false,
         generatedPrograms: [], camFiles: [], camResults: {}, catalog: null, selectedOperationId: null, camPick: null,
       });
@@ -235,6 +245,9 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
     },
     setPendingBodies(pendingBodies) {
       set({ pendingBodies });
+    },
+    setPendingScale(pendingScale) {
+      set({ pendingScale });
     },
     setBusy(busy) {
       set({ busy });

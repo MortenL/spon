@@ -35,7 +35,7 @@ export function newOperation(type: OperationType, opts: { id: string; name: stri
   const entry = { mode: 'auto' as const, helixDiameterPct: 90, rampAngleDeg: 3 };
   if (type === 'profile') {
     return {
-      ...base, type, side: 'outside', direction: 'climb', stepdown, stockRadial: 0, stockAxial: 0, finishPass: false, entry,
+      ...base, type, side: 'outside', openSide: 'on', direction: 'climb', stepdown, stockRadial: 0, stockAxial: 0, finishPass: false, entry,
       leads: { mode: 'arc', length: d / 2, startPoint: 'auto' },
       tabs: { enabled: false, shape: 'rect', width: Math.max(4, d), height: 2, placement: 'count', count: 4, spacing: 50, positions: null },
     };

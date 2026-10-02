@@ -104,6 +104,38 @@ describe('editing tools', () => {
     await stl.call('import_model', { path: 'box-20x10x5.stl', units: 'mm' });
     expect(text(await stl.call('describe_geometry', { filter: 'holes' }))).toContain('No holes found.');
     expect(text(await stl.call('describe_geometry', { filter: 'holes' }))).toContain('No holes found.');
-    expect(text(await stl.call('describe_geometry', { filter: 'contours' }))).toContain('No contours (only DXF drawings have contours).');
+    expect(text(await stl.call('describe_geometry', { filter: 'contours' }))).toContain('No contours (only drawings, DXF or SVG, have contours).');
+  });
+
+  it('reverses a whole open line when a later handle has a trailing !', async () => {
+    const firstXY = async (reverseSecond: boolean) => {
+      const { call } = await connect({}, ['svg/two-pieces.svg']);
+      await call('new_job');
+      await call('import_model', { path: 'two-pieces.svg' });
+      await call('apply_commands', { commands: [{ type: 'setStock', stock: { mode: 'auto', margin: { xy: 10, zTop: 0, zBottom: 6 } } }] });
+      const described = await call('describe_geometry');
+      expect(text(described)).toContain('from (');
+      const [a, b] = data(described).contours.map((c: { handle: string }) => c.handle);
+      const added = await call('add_operation', { type: 'profile', tool: 'starter-flat-6', geometry: [a, reverseSecond ? `${b}!` : b], params: { openSide: 'left' } });
+      expect(added.isError).toBeFalsy();
+      await call('generate');
+      const lines = (data(await call('get_gcode')).text as string).split(/\r?\n/);
+      return /X(\S+) Y(\S+)/.exec(lines.find((l) => /^X\S+ Y\S+/.test(l))!)!.slice(1, 3).join(',');
+    };
+    expect(await firstXY(true)).not.toBe(await firstXY(false));
+  });
+
+  it('profiles an open line on its right with a reversed handle', async () => {
+    const { call } = await connect({}, ['svg/cad.svg']);
+    await call('new_job');
+    await call('import_model', { path: 'cad.svg' });
+    await call('apply_commands', { commands: [{ type: 'setStock', stock: { mode: 'auto', margin: { xy: 10, zTop: 0, zBottom: 6 } } }] });
+    const catalog = data(await call('describe_geometry')) as { contours: { handle: string; closed: boolean }[] };
+    const open = catalog.contours.find((c) => !c.closed)!;
+    const added = await call('add_operation', { type: 'profile', tool: 'starter-flat-6', geometry: [`${open.handle}!`], params: { openSide: 'right' } });
+    expect(added.isError).toBeFalsy();
+    expect(data(added).operation).toMatchObject({ openSide: 'right', geometry: [{ reverse: true }] });
+    const gen = data(await call('generate')) as { operations: { status: string }[] };
+    expect(gen.operations[0].status).not.toBe('error');
   });
 });

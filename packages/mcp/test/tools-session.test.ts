@@ -89,4 +89,16 @@ describe('session tools', () => {
     await call('new_job');
     expect(text(await call('import_model', { path: 'cam-part.dxf' }))).toContain('setStock');
   });
+
+  it('asks for an SVG scale, then imports with svgDpi or svgWidth', async () => {
+    const { call } = await connect({}, ['svg/illustrator.svg']);
+    await call('new_job');
+    const ask = await call('import_model', { path: 'illustrator.svg' });
+    expect(data(ask).status).toBe('needsScale');
+    expect(text(ask)).toContain('svgDpi');
+    expect((await call('import_model', { path: 'illustrator.svg', svgDpi: 72, svgWidth: 10 })).isError).toBe(true);
+    const done = await call('import_model', { path: 'illustrator.svg', svgWidth: 252 });
+    expect(data(done)).toMatchObject({ status: 'imported', kind: 'drawing' });
+    expect(data(done).size.x).toBeCloseTo(252, 3);
+  });
 });

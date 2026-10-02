@@ -3,7 +3,7 @@ import type { Job } from '../job/types';
 import { defaultPostSettings } from '../post/types';
 import { SponFileError } from './errors';
 
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 4;
 
 export type Migration = (job: Record<string, unknown>) => Record<string, unknown>;
 
@@ -19,6 +19,12 @@ export const MIGRATIONS: Readonly<Record<number, Migration>> = {
     operations: [],
     post: defaultPostSettings('grbl'),
     tolerance: 0.002,
+  }),
+  // v3 → v4 (Milestone 4.1): profiles get a side for open chains; "on" keeps the old behaviour
+  3: (job) => ({
+    ...job,
+    operations: (Array.isArray(job.operations) ? job.operations : []).map((op) =>
+      (op as { type?: unknown }).type === 'profile' ? { openSide: 'on', ...(op as object) } : op),
   }),
 };
 

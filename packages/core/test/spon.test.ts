@@ -2,7 +2,7 @@ import { strToU8, unzipSync, zipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
 import v1Job from './fixtures/job-v1.json';
 import { SponFileError } from '../src/io/errors';
-import { migrateJob } from '../src/io/migrations';
+import { CURRENT_SCHEMA_VERSION, migrateJob } from '../src/io/migrations';
 import { jobBlobIds, modelFilePath, programFilePath, readSpon, writeSpon } from '../src/io/spon';
 import { createJob } from '../src/job/defaults';
 import { addProgram } from '../src/job/programs';
@@ -49,7 +49,7 @@ describe('.spon files', () => {
   it('opens Milestone 1 files and migrates them', () => {
     const bytes = zipSync({ 'job.json': strToU8(JSON.stringify(v1Job)), 'models/b1.stl': MODEL });
     const read = readSpon(bytes);
-    expect(read.job.schemaVersion).toBe(3);
+    expect(read.job.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
     expect(read.blobs).toEqual({ b1: MODEL });
   });
 
@@ -77,7 +77,7 @@ describe('.spon files', () => {
 
 describe('migrateJob', () => {
   it('refuses jobs from a newer schema', () => {
-    expect(() => migrateJob({ ...createJob(), schemaVersion: 4 })).toThrow(/newer version of Spon/);
+    expect(() => migrateJob({ ...createJob(), schemaVersion: CURRENT_SCHEMA_VERSION + 1 })).toThrow(/newer version of Spon/);
   });
 
   it('rejects data without a valid schemaVersion or job shape', () => {

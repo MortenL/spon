@@ -1,7 +1,9 @@
 import type { GeometryCatalog } from '../cam/features/describe';
 import type { BBox } from '../geometry/bbox';
+import type { Vec2 } from '../geometry/path2d';
 import type { Vec3 } from '../geometry/vec3';
 import type { CadBodySummary, ModelFormat, ModelKind } from '../import/importFile';
+import type { SvgScale } from '../import/svg/svg';
 import type { JobCommand } from '../job/commands';
 import type { Job, ModelRef, ProgramRef } from '../job/types';
 import type { RunReport } from '../pipeline/report';
@@ -37,6 +39,7 @@ export type ImportOutcome =
   /** STL/DXF that doesn't declare its units; `rawSize` is in file units. */
   | { status: 'needsUnits'; suggested: LengthUnit; rawSize: Vec3 }
   | { status: 'needsBody'; bodies: CadBodySummary[]; suggested: number }
+  | { status: 'needsScale'; rawSize: Vec2; suggestedDpi: number }
   | { status: 'error'; error: string };
 
 export type ExportOutcome =
@@ -62,7 +65,7 @@ export interface BridgeMethods {
   job: { params: NoParams; result: Job };
   /** Atomic, one undo step. */
   apply: { params: { commands: JobCommand[]; label: string }; result: Job };
-  importModel: { params: { fileName: string; bytes: string; units?: LengthUnit; body?: number }; result: ImportOutcome };
+  importModel: { params: { fileName: string; bytes: string; units?: LengthUnit; body?: number; svgScale?: SvgScale }; result: ImportOutcome };
   run: { params: NoParams; result: RunReport };
   catalog: { params: NoParams; result: GeometryCatalog | null };
   boxes: { params: NoParams; result: Boxes };
@@ -77,7 +80,7 @@ export interface BridgeMethods {
   importProgram: { params: { fileName: string; bytes: string }; result: ProgramRef };
   'tools.list': { params: NoParams; result: Tool[] };
   'tools.add': { params: { tool: Tool }; result: NoParams };
-  'tools.import': { params: { fileName: string; bytes: string }; result: LibraryImportResult };
+  'tools.import': { params: { fileName: string; bytes: string; units?: LengthUnit }; result: LibraryImportResult };
 }
 export type BridgeMethod = keyof BridgeMethods;
 export type BridgeParams<M extends BridgeMethod> = BridgeMethods[M]['params'];

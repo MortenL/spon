@@ -67,7 +67,7 @@ export function TopBar() {
         <ToggleGroupItem value="in" data-testid="units-toggle-in">in</ToggleGroupItem>
       </ToggleGroup>
       <input
-        ref={fileInput} type="file" accept=".spon,.stl,.step,.stp,.iges,.igs,.dxf,.nc,.ngc,.gcode,.tap,.cnc" hidden data-testid="open-input"
+        ref={fileInput} type="file" accept=".spon,.stl,.step,.stp,.iges,.igs,.dxf,.svg,.nc,.ngc,.gcode,.tap,.cnc" hidden data-testid="open-input"
         onChange={(e) => {
           const file = e.target.files?.[0];
           e.target.value = '';

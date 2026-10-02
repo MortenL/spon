@@ -11,6 +11,7 @@ import { DropZone } from '@/layout/DropZone';
 import { LeftPanel } from '@/layout/LeftPanel';
 import { StatusBar } from '@/layout/StatusBar';
 import { TopBar } from '@/layout/TopBar';
+import { SvgScaleDialog } from '@/layout/SvgScaleDialog';
 import { UnitsDialog } from '@/layout/UnitsDialog';
 import { startAutosave } from '@/state/autosave';
 import { startCamPipeline } from '@/state/cam';
@@ -62,6 +63,7 @@ export function App() {
       </div>
       <StatusBar />
       <UnitsDialog />
+      <SvgScaleDialog />
       <BodyDialog />
       <Toaster position="bottom-center" richColors />
     </div>

@@ -64,7 +64,7 @@ export function sessionHandler(session: FileSession): { handle: Handle; marked: 
       case 'describe': return { ...(await session.describe()), kind: 'live' };
       case 'job': return session.job();
       case 'apply': return session.apply(p.commands);
-      case 'importModel': return session.importModel({ fileName: p.fileName, bytes: fromBase64(p.bytes), units: p.units, body: p.body });
+      case 'importModel': return session.importModel({ fileName: p.fileName, bytes: fromBase64(p.bytes), units: p.units, body: p.body, svgScale: p.svgScale });
       case 'run': return session.run();
       case 'catalog': return session.catalog();
       case 'boxes': return session.boxes();
@@ -76,7 +76,7 @@ export function sessionHandler(session: FileSession): { handle: Handle; marked: 
       case 'importProgram': return session.importProgram(p.fileName, fromBase64(p.bytes));
       case 'tools.list': return session.tools.list();
       case 'tools.add': await session.tools.add(p.tool); return {};
-      case 'tools.import': return session.tools.importFile(p.fileName, fromBase64(p.bytes));
+      case 'tools.import': return session.tools.importFile(p.fileName, fromBase64(p.bytes), { units: p.units });
       default: throw new Error(`Unknown method ${method}`);
     }
   };

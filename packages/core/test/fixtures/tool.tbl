@@ -1,0 +1,11 @@
+; LinuxCNC tool table
+T1 P1 D0.25 Z+1.0 ;1/4 flat endmill
+t2 p2 z+0.5 d0.125 ;Spiralbohrer 1/8
+T3 P3 D0.5 Z+0.8 ;V60 engraving
+T4 P4 D0.25 ;ball nose
+T5 P5 D0.375 ;bull R0.03
+T6 P6 D0.5 ;chamfer 90°
+
+T7 P7 Z+0.2 ;no diameter
+T1 P8 D0.3 ;duplicate number
+T8 P9 D0.1

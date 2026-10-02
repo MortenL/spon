@@ -1,7 +1,7 @@
 import {
   type BlobMap,
-  CAD_LABEL, cadFormat, createJob, decideImport, fileKind, type ImportOutcome, importedOutcome, type ImportStep, importStep, type Job, type LengthUnit,
-  MAX_SOFT_IMPORT_BYTES, migrateJob, modelFilePath, type ModelRef, newModelRef, operationsWithGeometry, readSpon, SPON_EXTENSION, suggestedUnits, toModelGeometry, writeSpon,
+  CAD_LABEL, cadFormat, createJob, decideImport, fileKind, type ImportOutcome, importedOutcome, type ImportOptions, type ImportStep, importStep, type Job, type LengthUnit,
+  MAX_SOFT_IMPORT_BYTES, migrateJob, modelFilePath, type ModelRef, newModelRef, operationsWithGeometry, readSpon, SPON_EXTENSION, type SvgScale, suggestedUnits, toModelGeometry, writeSpon,
 } from '@sponcam/core';
 import { toast } from 'sonner';
 import { cadReaderLoaded, importInWorker, loadCadReaderInWorker } from '../workers/importClient';
@@ -15,9 +15,10 @@ const message = (err: unknown) => (err instanceof Error ? err.message : String(e
 
 async function geometryForModel(model: ModelRef, bytes: Uint8Array): Promise<{ geometry: ModelGeometry; warnings: string[] }> {
   // the stored name decides the parser, so derive it from the model kind/format rather than trusting sourceName
-  const result = await importInWorker(modelFilePath(model), bytes, model.body);
+  const result = await importInWorker(modelFilePath(model), bytes, { body: model.body, svgScale: model.svgScale });
   if (!result.ok) throw new Error(result.error);
   if (result.kind === 'bodies') throw new Error('The file has several bodies and the job does not say which one');
+  if (result.kind === 'needsScale') throw new Error('The SVG scale is missing from the job');
   return { geometry: toModelGeometry(result), warnings: result.warnings };
 }
 
@@ -52,7 +53,7 @@ export async function openFile(file: File, handle: FileSystemFileHandle | null =
   }
   const isJob = file.name.toLowerCase().endsWith(SPON_EXTENSION);
   if (!isJob && !fileKind(file.name)) {
-    toast.error(`Unsupported file type: ${file.name} (open .spon, .stl, .step, .iges, .dxf or G-code)`);
+    toast.error(`Unsupported file type: ${file.name} (open .spon, .stl, .step, .iges, .dxf, .svg or G-code)`);
     return;
   }
   if (file.size > MAX_SOFT_IMPORT_BYTES && !window.confirm(`${file.name} is ${Math.round(file.size / 1048576)} MB and may take a while to load. Continue?`)) {
@@ -66,7 +67,7 @@ export async function openFile(file: File, handle: FileSystemFileHandle | null =
 }
 
 /** Reads a model file in the worker, loading the STEP/IGES reader first; shows busy text. Throws with a message. */
-async function readModelFile(fileName: string, bytes: Uint8Array, body?: number): Promise<ImportStep> {
+async function readModelFile(fileName: string, bytes: Uint8Array, options: ImportOptions = {}): Promise<ImportStep> {
   const cad = cadFormat(fileName);
   try {
     if (cad && !cadReaderLoaded()) {
@@ -78,16 +79,16 @@ async function readModelFile(fileName: string, bytes: Uint8Array, body?: number)
       }
     }
     state().setBusy(cad ? `Reading ${CAD_LABEL[cad]} file…` : `Importing ${fileName}…`);
-    return importStep(await importInWorker(fileName, bytes, body));
+    return importStep(await importInWorker(fileName, bytes, options));
   } finally {
     state().setBusy(null);
   }
 }
 
-export async function importModelBytes(fileName: string, bytes: Uint8Array, body?: number): Promise<void> {
+export async function importModelBytes(fileName: string, bytes: Uint8Array, options: ImportOptions = {}): Promise<void> {
   let step: ImportStep;
   try {
-    step = await readModelFile(fileName, bytes, body);
+    step = await readModelFile(fileName, bytes, options);
   } catch (err) {
     toast.error(`Could not import ${fileName}: ${message(err)}`);
     return;
@@ -98,6 +99,10 @@ export async function importModelBytes(fileName: string, bytes: Uint8Array, body
   }
   if (step.kind === 'chooseBody') {
     state().setPendingBodies({ fileName, bytes, format: step.format, bodies: step.bodies });
+    return;
+  }
+  if (step.kind === 'needsScale') {
+    state().setPendingScale({ fileName, bytes, rawSize: step.rawSize });
     return;
   }
   const pending: PendingImport = {
@@ -116,11 +121,23 @@ export async function importPendingBody(body: number): Promise<void> {
   const pending = state().pendingBodies;
   if (!pending) return;
   state().setPendingBodies(null);
-  await importModelBytes(pending.fileName, pending.bytes, body);
+  await importModelBytes(pending.fileName, pending.bytes, { body });
 }
 
 export function cancelPendingBodies(): void {
   state().setPendingBodies(null);
+}
+
+/** Re-reads the pending SVG at the scale picked in the scale dialog. */
+export async function importPendingScale(scale: SvgScale): Promise<void> {
+  const pending = state().pendingScale;
+  if (!pending) return;
+  state().setPendingScale(null);
+  await importModelBytes(pending.fileName, pending.bytes, { svgScale: scale });
+}
+
+export function cancelPendingScale(): void {
+  state().setPendingScale(null);
 }
 
 export async function finishImport(pending: PendingImport, units: LengthUnit): Promise<void> {
@@ -138,14 +155,14 @@ export async function finishImport(pending: PendingImport, units: LengthUnit): P
 }
 
 /** The live bridge's import: never opens a dialog, answers needsUnits / needsBody instead. */
-export async function importModelOutcome(fileName: string, bytes: Uint8Array, units?: LengthUnit, body?: number): Promise<ImportOutcome> {
+export async function importModelOutcome(fileName: string, bytes: Uint8Array, options: { units?: LengthUnit; body?: number; svgScale?: SvgScale } = {}): Promise<ImportOutcome> {
   let step: ImportStep;
   try {
-    step = await readModelFile(fileName, bytes, body);
+    step = await readModelFile(fileName, bytes, { body: options.body, svgScale: options.svgScale });
   } catch (err) {
     return { status: 'error', error: message(err) };
   }
-  const decision = decideImport(step, units);
+  const decision = decideImport(step, options.units);
   if (decision.status !== 'ready') return decision;
   const affected = operationsWithGeometry(state().job);
   await finishImport({ fileName, bytes, geometry: decision.geometry, warnings: decision.warnings, suggestedUnits: decision.units }, decision.units);

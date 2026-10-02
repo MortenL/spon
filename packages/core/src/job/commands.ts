@@ -42,7 +42,7 @@ export class CommandError extends Error {
 
 const COMMON_KEYS = ['name', 'enabled', 'toolId', 'feeds', 'heights', 'geometry'];
 const OP_KEYS: Readonly<Record<OperationType, readonly string[]>> = {
-  profile: [...COMMON_KEYS, 'side', 'direction', 'stepdown', 'stockRadial', 'stockAxial', 'finishPass', 'entry', 'leads', 'tabs'],
+  profile: [...COMMON_KEYS, 'side', 'openSide', 'direction', 'stepdown', 'stockRadial', 'stockAxial', 'finishPass', 'entry', 'leads', 'tabs'],
   pocket: [...COMMON_KEYS, 'direction', 'stepdown', 'stepoverPct', 'stockRadial', 'stockAxial', 'finishWalls', 'finishFloor', 'entry'],
   drill: [...COMMON_KEYS, 'cycle', 'peck', 'dwellSeconds', 'diameterFilter'],
 };

@@ -1,6 +1,6 @@
 import type {
   Boxes, ExportOutcome, GeometryCatalog, ImportOutcome, Job, JobCommand, LengthUnit, LibraryImportResult, PreviewOptions, ProgramRef, RunReport,
-  SessionInfo, Tool,
+  SessionInfo, SvgScale, Tool,
 } from '@sponcam/core';
 
 export type { Boxes, ExportOutcome, ImportOutcome, LibraryImportResult, SessionInfo } from '@sponcam/core';
@@ -10,12 +10,12 @@ export class SessionError extends Error {
   override name = 'SessionError';
 }
 
-export interface ModelInput { fileName: string; bytes: Uint8Array; units?: LengthUnit; body?: number }
+export interface ModelInput { fileName: string; bytes: Uint8Array; units?: LengthUnit; body?: number; svgScale?: SvgScale }
 
 export interface ToolLibraryAccess {
   list(): Promise<Tool[]>;
   add(tool: Tool): Promise<void>;
-  importFile(fileName: string, bytes: Uint8Array, label?: string): Promise<LibraryImportResult>;
+  importFile(fileName: string, bytes: Uint8Array, options?: { label?: string; units?: LengthUnit }): Promise<LibraryImportResult>;
 }
 
 /** One open job: a .spon file on disk (FileSession) or the browser tab (LiveSession). */

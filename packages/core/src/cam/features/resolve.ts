@@ -1,4 +1,4 @@
-import { orientPath } from '../../geometry/offset/pathOps';
+import { orientPath, reversePath } from '../../geometry/offset/pathOps';
 import type { Path2D, Vec2 } from '../../geometry/path2d';
 import { type CamContext, drawingPathToProgram } from '../context';
 import type { CamCode, CamDiagnostic, MeshFaceRef, Operation } from '../types';
@@ -6,7 +6,8 @@ import { chainPaths, nestLoops, type Shape } from './chain';
 import { circleOf, drawingPath } from './dxf';
 import { type FaceGeometry, holeBottom, resolveFaceRef } from './mesh';
 
-export interface ResolvedContour { path: Path2D; z: number; ref: number }
+/** `members` (open chains only): the geometry indices of every reference that makes up the chain; `ref` is its seed. */
+export interface ResolvedContour { path: Path2D; z: number; ref: number; members?: number[] }
 export interface ResolvedShape { shape: Shape; z: number; ref: number }
 export interface ResolvedHole { center: Vec2; diameter: number; top: number; bottom: number; through: boolean; ref: number }
 export interface ResolvedGeometry {
@@ -84,13 +85,18 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
         else out.holes.push({ center: c.center, diameter: c.diameter, top: drawingZ, bottom: ctx.stock?.min.z ?? drawingZ, through: true, ref: d.ref });
       }
     } else {
-      const { closed, open } = chainPaths(dxf.map((d) => d.path), ctx.tolerance);
+      const { closed, open, openSeeds, openMembers } = chainPaths(dxf.map((d) => d.path), ctx.tolerance);
       if (op.type === 'profile') {
         for (const path of closed) out.contours.push({ path, z: drawingZ, ref: firstRef });
-        for (const path of open) {
-          if (op.side === 'on') out.contours.push({ path, z: drawingZ, ref: firstRef });
-          else fail(firstRef, 'open-contour', 'An open chain can only be profiled on the line');
-        }
+        open.forEach((path, k) => {
+          const seed = dxf[openSeeds[k]].ref;
+          // the chain runs in its seed's drawn direction; a reverse flag on any of its references flips the whole chain
+          const reversed = openMembers[k].some((m) => {
+            const g = op.geometry[dxf[m].ref];
+            return g.kind === 'dxfPath' && g.reverse === true;
+          });
+          out.contours.push({ path: reversed ? reversePath(path) : path, z: drawingZ, ref: seed, members: openMembers[k].map((m) => dxf[m].ref) });
+        });
       } else {
         for (const shape of nestLoops(closed, ctx.tolerance)) out.shapes.push({ shape, z: drawingZ, ref: firstRef });
         if (open.length) fail(firstRef, 'open-contour', 'Pockets need closed contours; open chains are skipped');

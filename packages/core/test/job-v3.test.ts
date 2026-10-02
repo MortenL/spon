@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { addProgram, createJob, DEFAULT_TOLERANCE, defaultPostSettings, migrateJob, readSpon, writeSpon } from '../src';
+import { addProgram, createJob, CURRENT_SCHEMA_VERSION, DEFAULT_TOLERANCE, defaultPostSettings, migrateJob, readSpon, writeSpon } from '../src';
 import v1Job from './fixtures/job-v1.json';
 
 describe('job schema v3', () => {
   it('creates v3 jobs with empty CAM data and GRBL post defaults', () => {
     const job = createJob();
-    expect(job.schemaVersion).toBe(3);
+    expect(job.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
     expect(job.tools).toEqual([]);
     expect(job.operations).toEqual([]);
     expect(job.post).toEqual(defaultPostSettings('grbl'));
@@ -22,7 +22,7 @@ describe('job schema v3', () => {
     const { tools: _t, operations: _o, post: _p, tolerance: _tol, ...rest } = createJob('Old');
     const v2 = { ...rest, schemaVersion: 2, programs: [{ id: 'x', name: 'a.nc', blobId: 'p1', inTimeline: true }] };
     const job = migrateJob(v2);
-    expect(job.schemaVersion).toBe(3);
+    expect(job.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
     expect(job.programs[0]).toEqual({ id: 'x', name: 'a.nc', blobId: 'p1', inTimeline: true, source: 'imported' });
     expect(job.tools).toEqual([]);
     expect(job.operations).toEqual([]);
@@ -32,7 +32,7 @@ describe('job schema v3', () => {
 
   it('migrates v1 jobs all the way to v3', () => {
     const job = migrateJob(v1Job);
-    expect(job.schemaVersion).toBe(3);
+    expect(job.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
     expect(job.operations).toEqual([]);
   });
 

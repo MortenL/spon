@@ -33,7 +33,7 @@ async function resolveTool(job: Job, session: JobSession, tool: string | number,
 const EMPTY = {
   faces: 'No up-facing horizontal faces in this orientation.',
   holes: 'No holes found.',
-  contours: 'No contours (only DXF drawings have contours).',
+  contours: 'No contours (only drawings, DXF or SVG, have contours).',
   all: 'Nothing to pick here (faces must be horizontal and face up).',
 };
 const describeShape = { filter: z.enum(['faces', 'holes', 'contours']).optional().describe('Only list one kind of geometry') };

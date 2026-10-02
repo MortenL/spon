@@ -30,9 +30,13 @@ export class HandleMap {
 
   resolve(item: string | GeometryRef): GeometryRef {
     if (typeof item !== 'string') return item;
-    const ref = this.refs.get(item.trim().toUpperCase());
+    const raw = item.trim().toUpperCase();
+    const reverse = raw.endsWith('!');
+    const ref = this.refs.get(reverse ? raw.slice(0, -1) : raw);
     if (!ref) throw new SessionError(`Unknown handle ${item.trim()} — call describe_geometry for the current list`);
-    return ref;
+    if (!reverse) return ref;
+    if (ref.kind !== 'dxfPath') throw new SessionError('Only drawing contours (C…) can be reversed');
+    return { ...ref, reverse: true };
   }
 
   clear(): void {
@@ -57,7 +61,7 @@ export function catalogText(c: HandledCatalog): string {
   for (const h of c.holes) lines.push(`${h.handle} ⌀${mm(h.diameter)} at ${at(h.center)}, z ${mm(h.bottom)} to ${mm(h.top)}, ${h.through ? 'through' : 'blind'}`);
   for (const k of c.contours) {
     const shape = k.circle ? `circle ⌀${mm(k.circle.diameter)} at ${at(k.circle.center)}` : `box ${at(k.bbox.min)} to ${at(k.bbox.max)}`;
-    lines.push(`${k.handle} contour on layer ${k.layer}, ${k.closed ? 'closed' : 'open'}, length ${k.length.toFixed(1)}, ${shape}`);
+    lines.push(`${k.handle} contour on layer ${k.layer}, ${k.closed ? 'closed' : 'open'}, length ${k.length.toFixed(1)}, ${shape}${k.closed ? '' : `, from ${at(k.start)} to ${at(k.end)}`}`);
   }
   return lines.join('\n');
 }

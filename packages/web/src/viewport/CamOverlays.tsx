@@ -1,6 +1,6 @@
 import {
   camContext, type CamContext, circleOf, type DxfPathRef, drawingPath, drawingPathToProgram, flattenPath, type GeometryRef,
-  HEIGHT_NAMES, type HeightName, type Job, type LapPosition, type Operation, type OpOverlays, type Path2D, type ResolvedHeights,
+  HEIGHT_NAMES, type HeightName, type Job, offsetOpenPath, pathLength, pointAt, type LapPosition, type Operation, type OpOverlays, type Path2D, type ResolvedHeights,
   programContext, programOrigin, resolveFaceRef, type Vec2, type Vec3,
 } from '@sponcam/core';
 import { Line } from '@react-three/drei';
@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from 'react';
 import * as THREE from 'three';
 import { runCommand } from '@/state/camView';
 import { type ModelGeometry, useApp } from '@/state/store';
+import { openChains } from '@/inspector/openChains';
 import { regionShape } from './convert';
 import { noRaycast } from './SceneObjects';
 
@@ -35,6 +36,7 @@ export function CamOverlays() {
   return (
     <group position={[origin.x, origin.y, origin.z]}>
       <PickedGeometry job={job} geometry={geometry} op={op} />
+      {op.type === 'profile' && <OpenChainArrows job={job} geometry={geometry} op={op} />}
       {inspectorTab === 'heights' && summary?.heights && <HeightsPlanes job={job} geometry={geometry} heights={summary.heights} />}
       {op.type === 'profile' && summary && <TabHandles op={op} overlays={summary.overlays} origin={origin} />}
       {summary && <UnmachinedAreas overlays={summary.overlays} />}
@@ -54,6 +56,59 @@ function PickedGeometry({ job, geometry, op }: { job: Job; geometry: ModelGeomet
     <>
       {loops.map((l) => (
         <Line key={l.key} points={l.points as Point3[]} color={PICK_COLOR} lineWidth={3} raycast={noRaycast} />
+      ))}
+    </>
+  );
+}
+
+const ARROW_TIP = 2;
+const ARROW_BACK = 2;
+const ARROW_SIDE = 1.2;
+
+/** Direction arrows (and a dashed preview of the side cut) for the open lines of a profile. */
+function OpenChainArrows({ job, geometry, op }: { job: Job; geometry: ModelGeometry | null; op: Operation }) {
+  const profile = op.type === 'profile' ? op : null;
+  const openSide = profile?.openSide ?? 'on';
+  const stockRadial = profile?.stockRadial ?? 0;
+  const finishPass = profile?.finishPass ?? false;
+  const toolDiameter = job.tools.find((t) => t.id === op.toolId)?.diameter ?? null;
+  // only what the preview depends on: unrelated job edits do not recompute the offsets
+  const items = useMemo(
+    () => {
+      const ctx = camContext(job, geometry);
+      const dashed = (c: { path: Path2D; z: number }, radius: number) =>
+        (offsetOpenPath(c.path, openSide as 'left' | 'right', radius, 0.05)?.paths ?? []).map((p) => flattenPath(p, 0.05).map((q): Point3 => [q.x, q.y, c.z]));
+      return openChains(op, ctx).map((c) => {
+        const { point, tangent } = pointAt(c.path, pathLength(c.path) / 2);
+        const nx = -tangent.y, ny = tangent.x;
+        const bx = point.x - tangent.x * ARROW_BACK, by = point.y - tangent.y * ARROW_BACK;
+        const arrow: Point3[] = [
+          [bx + nx * ARROW_SIDE, by + ny * ARROW_SIDE, c.z],
+          [point.x + tangent.x * ARROW_TIP, point.y + tangent.y * ARROW_TIP, c.z],
+          [bx - nx * ARROW_SIDE, by - ny * ARROW_SIDE, c.z],
+        ];
+        const r = (toolDiameter ?? 0) / 2;
+        const active = openSide !== 'on' && toolDiameter !== null;
+        const offsets = active ? dashed(c, r + stockRadial) : [];
+        const finish = active && finishPass && stockRadial > 0 ? dashed(c, r) : [];
+        return { ref: c.ref, arrow, offsets, finish };
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [op.geometry, openSide, stockRadial, finishPass, toolDiameter, job.model, job.stock, job.wcs, job.tolerance, geometry],
+  );
+  return (
+    <>
+      {items.map((it) => (
+        <group key={it.ref}>
+          <Line name="open-chain-arrow" points={it.arrow} color={PICK_COLOR} lineWidth={3} raycast={noRaycast} />
+          {it.offsets.filter((pts) => pts.length >= 2).map((pts, i) => (
+            <Line key={i} points={pts} color={PICK_COLOR} lineWidth={1} dashed dashSize={1} gapSize={0.6} raycast={noRaycast} />
+          ))}
+          {it.finish.filter((pts) => pts.length >= 2).map((pts, i) => (
+            <Line key={`f${i}`} points={pts} color={PICK_COLOR} lineWidth={1} dashed dashSize={1} gapSize={0.6} transparent opacity={0.4} raycast={noRaycast} />
+          ))}
+        </group>
       ))}
     </>
   );

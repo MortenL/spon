@@ -1,4 +1,5 @@
 import { fitArcs } from '../../geometry/offset/arcFit';
+import { offsetOpenPath } from '../../geometry/offset/openOffset';
 import { offsetPolys, pointInPolys, segmentCrossesPolys } from '../../geometry/offset/clipper';
 import {
   dist2, flattenPath, orientPath, pathLength, pathStart, pointAt, polyArea, reversePath, rotateStart, segmentLength, v2,
@@ -32,13 +33,23 @@ const MIN_LEAD = 0.1;
  * follow their chords. The lap is offset by their sum beyond `offset`, so the tool centre never comes closer
  * than `offset` to the contour; the lap stays within `tol` of nominal.
  */
-function centreLaps(path: Path2D, side: ProfileOp['side'], offset: number, tol: number): Path2D[] | null {
-  if (!path.closed || side === 'on' || offset === 0) return [path];
+function centreLaps(path: Path2D, op: ProfileOp, offset: number, tol: number): { laps: Path2D[]; rounded: boolean } | null {
+  if (!path.closed) {
+    if (op.openSide === 'on' || offset === 0) return { laps: [path], rounded: false };
+    const res = offsetOpenPath(path, op.openSide, offset, tol);
+    if (!res) return null;
+    // climb keeps the cut edge on the tool's right (M3): left of the line runs with it, right runs against it
+    const forward = (op.openSide === 'left') === (op.direction === 'climb');
+    const laps = forward ? res.paths : res.paths.map(reversePath).reverse();
+    return { laps, rounded: res.rounded };
+  }
+  const side = op.side;
+  if (side === 'on' || offset === 0) return { laps: [path], rounded: false };
   const flatTol = tol / 4, joinTol = tol / 8, fitTol = tol / 2;
   const d = offset + flatTol + joinTol + fitTol;
   const poly = flattenPath(orientPath(path, true), flatTol);
   const res = offsetPolys([poly], side === 'outside' ? d : -d, joinTol).filter((p) => polyArea(p) > 0);
-  return res.length ? res.map((p) => fitArcs(p, true, fitTol, fitTol)) : null;
+  return res.length ? { laps: res.map((p) => fitArcs(p, true, fitTol, fitTol)), rounded: false } : null;
 }
 
 /** Midpoint of the longest line segment, else of the longest arc. */
@@ -182,18 +193,19 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
     w.up(h.retract);
   };
 
-  const cutOpen = (lap: Path2D, levels: number[], h: ResolvedHeights, first: boolean) => {
+  const cutOpen = (lap: Path2D, levels: number[], h: ResolvedHeights, first: boolean, sameWay: boolean) => {
     if (op.entry.mode !== 'plunge' && !plungeWarned) {
       diag('warning', 'entry-plunge', 'Open contours are entered with a plunge');
       plungeWarned = true;
     }
     let path = lap;
     w.travel(pathStart(path), first ? h.clearance : h.retract, h.feed);
-    for (const z of levels) {
+    levels.forEach((z, i) => {
+      if (sameWay && i > 0) w.travel(pathStart(path), h.retract, h.feed); // back over the top: every level cuts the same way
       w.line({ x: w.pos!.x, y: w.pos!.y, z }, plunge);
       emitLap(w, path, z, z, feed, null);
-      path = reversePath(path);
-    }
+      if (!sameWay) path = reversePath(path);
+    });
     w.up(h.retract);
   };
 
@@ -207,17 +219,25 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
     const h = hr.values;
     out.heights ??= h;
     clearance = Math.max(clearance, h.clearance);
-    const laps = centreLaps(c.path, op.side, r + op.stockRadial, tol);
-    if (!laps) return diag('error', 'offset-collapsed', 'The tool does not fit inside this contour', c.ref);
+    const res = centreLaps(c.path, op, r + op.stockRadial, tol);
+    if (!res) {
+      return diag('error', 'offset-collapsed', c.path.closed ? 'The tool does not fit inside this contour' : 'The tool does not fit beside this line', c.ref);
+    }
+    const { laps } = res;
+    if (res.rounded) diag('warning', 'bend-rounded', 'The tool is too large for a bend in this line; the bend was rounded', c.ref);
     const levels = depthLevels(h.top, h.bottom + op.stockAxial, op.stepdown);
     laps.forEach((lap, i) => {
       if (lap.closed) cutClosed(lap, levels, h, first, index, c.ref, i === 0, i === 0);
-      else cutOpen(lap, levels, h, first);
+      else cutOpen(lap, levels, h, first, op.openSide !== 'on');
       first = false;
     });
-    if (op.finishPass && c.path.closed) {
-      const finishLaps = centreLaps(c.path, op.side, r, tol) ?? [];
-      finishLaps.forEach((lap, i) => cutClosed(lap, [h.bottom], h, false, index, c.ref, i === 0, false));
+    if (op.finishPass && (c.path.closed || op.openSide !== 'on')) {
+      // closed contours and open-side chains get a finish pass at the tool radius; a cut on the line has none
+      const finishLaps = centreLaps(c.path, op, r, tol)?.laps ?? [];
+      finishLaps.forEach((lap, i) => {
+        if (lap.closed) cutClosed(lap, [h.bottom], h, false, index, c.ref, i === 0, false);
+        else cutOpen(lap, [h.bottom], h, false, true);
+      });
     }
   });
 
