@@ -74,13 +74,13 @@ export function GeometryTab({ op }: { op: Operation }) {
 
       <div className="space-y-1.5">
         <Toggle
-          pressed={pickPressed} data-testid="pick-geometry" className="w-full justify-start"
+          pressed={pickPressed} data-testid="pick-geometry" className="w-full justify-start" disabled={op.type === 'face' && op.area === 'stock'}
           onPressedChange={(next) => appStore.getState().setCamPick(next ? { operationId: op.id, target: 'geometry' } : null)}
         >
           <Crosshair className="size-3.5" data-icon="inline-start" />
           Pick in viewport
         </Toggle>
-        <p className="text-xs text-muted-foreground">{PICK_HINT[op.type]}</p>
+        <p className="text-xs text-muted-foreground">{op.type === 'face' && op.area === 'picked' ? 'Click faces or closed paths to pick the area to face' : PICK_HINT[op.type]}</p>
       </div>
 
       <Collapsible defaultOpen data-testid="catalog-list">
@@ -106,7 +106,7 @@ export function GeometryTab({ op }: { op: Operation }) {
               </div>
             ))}
 
-          {geometry?.kind === 'mesh' && (op.type === 'profile' || op.type === 'pocket') &&
+          {geometry?.kind === 'mesh' && (op.type === 'profile' || op.type === 'pocket' || op.type === 'chamfer' || op.type === 'face') &&
             (catalog?.faces ?? []).map((f, i) => {
               const checked = op.geometry.some((r) => sameRef(r, f.ref));
               return (
@@ -117,7 +117,7 @@ export function GeometryTab({ op }: { op: Operation }) {
               );
             })}
 
-          {geometry?.kind === 'mesh' && op.type === 'drill' &&
+          {geometry?.kind === 'mesh' && (op.type === 'drill' || op.type === 'chamfer') &&
             (catalog?.holes ?? []).map((h, i) => {
               const checked = op.geometry.some((r) => sameRef(r, h.ref));
               return (

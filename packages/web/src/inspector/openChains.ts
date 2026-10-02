@@ -11,7 +11,7 @@ export function contourKinds(op: Operation, ctx: CamContext): { closed: boolean;
  * `members` every reference that makes up the chain, `z` the height the drawing lies at.
  */
 export function openChains(op: Operation, ctx: CamContext): { ref: number; members: number[]; z: number; path: Path2D }[] {
-  if (op.type !== 'profile') return [];
+  if (op.type !== 'profile' && op.type !== 'chamfer') return [];
   return resolveGeometry(op, ctx).contours
     .filter((c) => !c.path.closed)
     .map((c) => ({ ref: c.ref, members: c.members ?? [c.ref], z: c.z, path: c.path }));

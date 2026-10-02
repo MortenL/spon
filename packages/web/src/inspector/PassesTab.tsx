@@ -1,10 +1,11 @@
-import { camContext, type DrillCycle, type DrillOp, type EntrySettings, type Operation, type PocketOp, type ProfileOp } from '@sponcam/core';
+import { camContext, type ChamferOp, type DrillCycle, type DrillOp, type EntrySettings, type FaceOp, formatLength, type Operation, type PocketOp, type ProfileOp, resolveGeometry } from '@sponcam/core';
 import { useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { LengthField, NumericField } from '@/panels/NumericField';
 import { runCommand } from '@/state/camView';
 import { useApp } from '@/state/store';
+import { chamferInfo } from './chamferInfo';
 import { contourKinds } from './openChains';
 
 const pctField = (label: string, value: number, testId: string, onCommit: (v: number) => void) => (
@@ -239,9 +240,130 @@ function DrillPasses({ op }: { op: DrillOp }) {
   );
 }
 
+const directionField = (value: 'climb' | 'conventional', onChange: (v: 'climb' | 'conventional') => void) => (
+  <label className="grid grid-cols-[1fr_10rem] items-center gap-2 text-sm">
+    <span className="text-muted-foreground">Direction</span>
+    <ToggleGroup
+      type="single" variant="outline" size="sm" data-testid="pass-direction" value={value}
+      onValueChange={(v) => v && onChange(v as 'climb' | 'conventional')}
+    >
+      <ToggleGroupItem value="climb">Climb</ToggleGroupItem>
+      <ToggleGroupItem value="conventional">Conventional</ToggleGroupItem>
+    </ToggleGroup>
+  </label>
+);
+
+function FacePasses({ op }: { op: FaceOp }) {
+  const patch = (p: Partial<FaceOp>) => runCommand({ type: 'updateOperation', id: op.id, patch: p });
+
+  return (
+    <div className="space-y-3">
+      <label className="grid grid-cols-[1fr_10rem] items-center gap-2 text-sm">
+        <span className="text-muted-foreground">Area</span>
+        <ToggleGroup
+          type="single" variant="outline" size="sm" data-testid="pass-face-area" value={op.area}
+          onValueChange={(v) => v && patch({ area: v as FaceOp['area'] })}
+        >
+          <ToggleGroupItem value="stock">Stock</ToggleGroupItem>
+          <ToggleGroupItem value="picked">Picked</ToggleGroupItem>
+        </ToggleGroup>
+      </label>
+      <label className="grid grid-cols-[1fr_10rem] items-center gap-2 text-sm">
+        <span className="text-muted-foreground">Pattern</span>
+        <ToggleGroup
+          type="single" variant="outline" size="sm" data-testid="pass-face-pattern" value={op.pattern}
+          onValueChange={(v) => v && patch({ pattern: v as FaceOp['pattern'] })}
+        >
+          <ToggleGroupItem value="zigzag">Zig-zag</ToggleGroupItem>
+          <ToggleGroupItem value="spiral">Spiral</ToggleGroupItem>
+        </ToggleGroup>
+      </label>
+      {op.pattern === 'zigzag' && (
+        <>
+          {degField('Angle', op.angleDeg, 'pass-face-angle', (v) => patch({ angleDeg: v }))}
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" data-testid="pass-face-oneway" className="accent-primary" checked={op.oneWay} onChange={(e) => patch({ oneWay: e.target.checked })} />
+            One way
+          </label>
+        </>
+      )}
+      {directionField(op.direction, (v) => patch({ direction: v }))}
+      {pctField('Stepover', op.stepoverPct, 'pass-stepover', (v) => patch({ stepoverPct: v }))}
+      <LengthField label="Overlap" valueMm={op.overlap} testId="pass-face-overlap" min={0} onCommit={(v) => patch({ overlap: v })} />
+      <LengthField label="Stepdown" valueMm={op.stepdown} testId="pass-stepdown" min={0.01} onCommit={(v) => patch({ stepdown: v })} />
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" data-testid="pass-finish" className="accent-primary" checked={op.finishPass} onChange={(e) => patch({ finishPass: e.target.checked })} />
+        Finish pass
+      </label>
+      {op.finishPass && pctField('Finish stepover', op.finishStepoverPct, 'pass-face-finish-stepover', (v) => patch({ finishStepoverPct: v }))}
+    </div>
+  );
+}
+
+function ChamferPasses({ op }: { op: ChamferOp }) {
+  const patch = (p: Partial<ChamferOp>) => runCommand({ type: 'updateOperation', id: op.id, patch: p });
+  const job = useApp((s) => s.job);
+  const geometry = useApp((s) => s.geometry);
+  const units = job.displayUnits;
+  const tool = job.tools.find((t) => t.id === op.toolId) ?? null;
+  const ctx = useMemo(() => camContext(job, geometry), [job, geometry]);
+  const kinds = useMemo(() => contourKinds(op, ctx), [op, ctx]);
+  const holeDiameter = useMemo(() => resolveGeometry(op, ctx).holes[0]?.diameter ?? null, [op, ctx]);
+  const info = chamferInfo(op, tool, holeDiameter);
+
+  return (
+    <div className="space-y-3">
+      <LengthField label="Width" valueMm={op.width} testId="pass-chamfer-width" min={0.01} onCommit={(v) => patch({ width: v })} />
+      <Button variant="outline" size="sm" data-testid="pass-chamfer-deburr" onClick={() => patch({ width: 0.3 })}>
+        Deburr (0.3)
+      </Button>
+      <LengthField label="Tip offset" valueMm={op.tipOffset} testId="pass-chamfer-tip" min={0} onCommit={(v) => patch({ tipOffset: v })} />
+      <div className="grid grid-cols-[1fr_10rem] items-center gap-2 text-sm">
+        <span className="text-muted-foreground">Depth</span>
+        <span data-testid="chamfer-depth" className="text-right font-mono text-xs">{info.depth === null ? '–' : formatLength(info.depth, units)}</span>
+      </div>
+      {holeDiameter !== null && info.topDiameter !== null && (
+        <div className="grid grid-cols-[1fr_10rem] items-center gap-2 text-sm">
+          <span className="text-muted-foreground">Top diameter</span>
+          <span data-testid="chamfer-top-diameter" className="text-right font-mono text-xs">Ø{formatLength(info.topDiameter, units)}</span>
+        </div>
+      )}
+      {info.error && <p data-testid="chamfer-error" className="text-xs text-destructive">{info.error}</p>}
+      {(kinds.closed || !kinds.open) && (
+        <label className="grid grid-cols-[1fr_10rem] items-center gap-2 text-sm">
+          <span className="text-muted-foreground">Side</span>
+          <ToggleGroup
+            type="single" variant="outline" size="sm" data-testid="pass-side" value={op.side}
+            onValueChange={(v) => v && patch({ side: v as ChamferOp['side'] })}
+          >
+            <ToggleGroupItem value="auto">Auto</ToggleGroupItem>
+            <ToggleGroupItem value="outside">Outside</ToggleGroupItem>
+            <ToggleGroupItem value="inside">Inside</ToggleGroupItem>
+          </ToggleGroup>
+        </label>
+      )}
+      {kinds.open && (
+        <label className="grid grid-cols-[1fr_10rem] items-center gap-2 text-sm">
+          <span className="text-muted-foreground">Open side</span>
+          <ToggleGroup
+            type="single" variant="outline" size="sm" data-testid="pass-open-side" value={op.openSide}
+            onValueChange={(v) => v && patch({ openSide: v as ChamferOp['openSide'] })}
+          >
+            <ToggleGroupItem value="left">Left</ToggleGroupItem>
+            <ToggleGroupItem value="right">Right</ToggleGroupItem>
+          </ToggleGroup>
+        </label>
+      )}
+      {directionField(op.direction, (v) => patch({ direction: v }))}
+      <LengthField label="Stepdown (0 = one pass)" valueMm={op.stepdown} testId="pass-stepdown" min={0} onCommit={(v) => patch({ stepdown: v })} />
+    </div>
+  );
+}
+
 export function PassesTab({ op }: { op: Operation }) {
   if (op.type === 'profile') return <ProfilePasses op={op} />;
   if (op.type === 'pocket') return <PocketPasses op={op} />;
   if (op.type === 'drill') return <DrillPasses op={op} />;
-  return null; // facing and chamfer controls arrive with Milestone 4.2 Task 7
+  if (op.type === 'face') return <FacePasses op={op} />;
+  return <ChamferPasses op={op} />;
 }

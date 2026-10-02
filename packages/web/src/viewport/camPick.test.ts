@@ -43,3 +43,21 @@ describe('mesh picking', () => {
     expect(applyPick({ ...o, geometry: [] }, [top])).toEqual([top]);
   });
 });
+
+describe('facing and chamfer picking rules', () => {
+  const { job, geometry } = plateSetup();
+  const ctx = camContext(job, geometry);
+  it('refuses to pick for facing the stock', () => {
+    const face = op(job, 'face');
+    const top = faceAt(geometry as never, 5, 5, 10);
+    expect(face.type === 'face' && face.area).toBe('stock');
+    expect(pickMesh(face, ctx, top.seed, { x: 5, y: 5 }, false)).toMatchObject({ error: expect.stringContaining('Facing the stock') });
+  });
+  it('picks a round hole of a face as a meshHole for chamfers', () => {
+    const top = faceAt(geometry as never, 5, 5, 10);
+    const hole = pickMesh(op(job, 'chamfer'), ctx, top.seed, { x: 64, y: 20 }, true);
+    expect('refs' in hole && hole.refs[0]).toMatchObject({ kind: 'meshHole' });
+    const loop = pickMesh(op(job, 'chamfer'), ctx, top.seed, { x: 5.2, y: 30 }, true);
+    expect('refs' in loop && loop.refs[0]).toMatchObject({ kind: 'meshLoop', loop: 0 });
+  });
+});

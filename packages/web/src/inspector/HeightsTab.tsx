@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { LengthField } from '@/panels/NumericField';
 import { runCommand } from '@/state/camView';
 import { appStore, useApp } from '@/state/store';
+import { chamferInfo } from './chamferInfo';
 import { refLabel } from './geometryLabels';
 
 const COLOR: Record<HeightName, string> = { clearance: '#f97316', retract: '#84cc16', feed: '#22c55e', top: '#38bdf8', bottom: '#1d4ed8' };
@@ -20,6 +21,8 @@ export function HeightsTab({ op }: { op: Operation }) {
   const units = useApp((s) => s.job.displayUnits);
 
   const resolved = camResults[op.id]?.heights ?? null;
+  const job = useApp((s) => s.job);
+  const chamferDepth = op.type === 'chamfer' ? chamferInfo(op, job.tools.find((t) => t.id === op.toolId) ?? null, null).depth : null;
 
   return (
     <div className="space-y-4">
@@ -31,6 +34,23 @@ export function HeightsTab({ op }: { op: Operation }) {
             type: 'updateOperation', id: op.id,
             patch: { heights: { [name]: { from: spec.from, offset: spec.offset, ...(spec.face ? { face: spec.face } : {}), ...patch } } },
           });
+
+        if (op.type === 'chamfer' && name === 'bottom') {
+          return (
+            <div key={name} data-testid="height-bottom" className="space-y-1.5 border-b pb-3 last:border-0">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: COLOR[name] }} />
+                {NAME_LABEL[name]}
+              </div>
+              <div className="grid grid-cols-[1fr_10rem] items-center gap-2 text-sm">
+                <span className="text-muted-foreground">Chamfer depth</span>
+                <span data-testid="height-bottom-computed" className="text-right font-mono text-xs">
+                  Computed: {chamferDepth === null ? '–' : formatLength(chamferDepth, units)}
+                </span>
+              </div>
+            </div>
+          );
+        }
 
         return (
           <div key={name} data-testid={`height-${name}`} className="space-y-1.5 border-b pb-3 last:border-0">
