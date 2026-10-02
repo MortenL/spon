@@ -25,9 +25,9 @@ export interface GougeOptions {
   sagitta?: number;
   /**
    * Slots: tool-centre zones where cutting into the model was chosen (square ends cut to or past the wall). A feed
-   * sample that gouges inside a zone gives that zone's warning once, instead of a gouge.
+   * sample at or above the zone's `minZ` (the slot floor) that gouges inside a zone gives that zone's warning once, instead of a gouge.
    */
-  intended?: { zone: Poly[]; message: string }[];
+  intended?: { zone: Poly[]; message: string; minZ?: number }[];
 }
 
 /** Cell size for a tool radius: clamp(R / 3, 0.5, 3) rounded down to a bucket, so a placement holds at most four indexes. */
@@ -88,7 +88,7 @@ export function gougeCheck(toolpath: Toolpath, tool: Tool, ctx: CamContext, opti
     }
     if (depth > 0) {
       if (!isRapid && intended.length) {
-        const k = intended.findIndex((z) => pointInPolys({ x, y }, z.zone));
+        const k = intended.findIndex((iz) => (iz.minZ === undefined || z >= iz.minZ) && pointInPolys({ x, y }, iz.zone));
         if (k >= 0) { intendedHit[k] = true; prev = null; return; }
       }
       const p = vec3(x, y, z);

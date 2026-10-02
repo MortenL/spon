@@ -96,24 +96,25 @@ export interface DogbonePass { stock: number; dn: number; cuts: SlotCuts }
 /**
  * Tool-centre zones where a square end is cut past its wall by choice (clarification 8, ruled by the controller for dogbones), one per end.
  * endWall: the band within r of the end wall. dogbone: the tool-centre positions of that end's relief moves (q to tip, for every pass in
- * `passes`) swept by 2 tol; the overcut reported is r(1 - 1/sqrt2) less the stock (the tip sits stock + r/sqrt2 from each wall), and an end with none gets no entry.
+ * `passes`) swept by 2 tol; both only excuse tool positions at or above `minZ` (the slot floor), so a floor gouge is never hidden; the overcut reported is r(1 - 1/sqrt2) less the stock (the tip sits stock + r/sqrt2 from each wall), and an end with none gets no entry.
  */
-export function overcutZones(slot: ResolvedSlot, r: number, squareEnds: SquareEnds, tol: number, passes: readonly DogbonePass[] = []): { zone: Poly[]; message: string }[] {
+export function overcutZones(slot: ResolvedSlot, r: number, squareEnds: SquareEnds, tol: number, passes: readonly DogbonePass[] = [], minZ?: number): { zone: Poly[]; message: string; minZ?: number }[] {
   if (squareEnds === 'inside' || slot.centreline.closed) return [];
-  const out: { zone: Poly[]; message: string }[] = [];
+  const out: { zone: Poly[]; message: string; minZ?: number }[] = [];
   const half = slot.width / 2;
   (['start', 'end'] as const).forEach((which) => {
     if ((which === 'start' ? slot.startEnd : slot.endEnd) !== 'square') return;
     if (squareEnds === 'endWall') {
       const { p, t, n } = endFrame(slot.centreline, which);
       const at = (a: number, b: number) => ({ x: p.x + t.x * a + n.x * b, y: p.y + t.y * a + n.y * b });
-      out.push({ zone: [[at(-(r + tol), -half), at(tol, -half), at(tol, half), at(-(r + tol), half)]], message: `Square slot end cut past the model wall by up to ${r.toFixed(2)} mm, as chosen` });
+      const lat = Math.max(tol, half - r + tol); // tool-centre positions that only touch the end wall: not the side walls within r of it
+      out.push({ zone: [[at(-(r + tol), -lat), at(tol, -lat), at(tol, lat), at(-(r + tol), lat)]], minZ, message: `Square slot end cut past the model wall by up to ${r.toFixed(2)} mm, as chosen` });
       return;
     }
     const reliefs = passes.flatMap((ps) => dogboneCorners(slot, r, ps.stock, ps.dn, ps.cuts).filter((c) => c.end === which).map((c) => ({ ...c, stock: ps.stock })));
     const depth = Math.max(0, ...reliefs.map((c) => r * (1 - Math.SQRT1_2) - c.stock));
     if (depth <= 1e-6) return;
-    out.push({ zone: sweepPolylines(reliefs.map((c) => ({ points: [c.q, c.tip], closed: false })), 2 * tol, tol / 8), message: `Square slot end cut past the model wall by up to ${depth.toFixed(2)} mm, as chosen` });
+    out.push({ zone: sweepPolylines(reliefs.map((c) => ({ points: [c.q, c.tip], closed: false })), 2 * tol, tol / 8), minZ, message: `Square slot end cut past the model wall by up to ${depth.toFixed(2)} mm, as chosen` });
   });
   return out;
 }

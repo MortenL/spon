@@ -22,7 +22,7 @@ export interface OpOutput {
   heights: ResolvedHeights | null;
   overlays: OpOverlays;
   /** Areas (tool-centre XY) where cutting into the model is intended, e.g. square slot ends cut to the wall (spec §3.8). */
-  intended?: { zone: Poly[]; message: string }[];
+  intended?: { zone: Poly[]; message: string; minZ?: number }[];
 }
 
 export const emptyOverlays = (): OpOverlays => ({ tabs: [], laps: [], unmachined: [], gouges: [] });

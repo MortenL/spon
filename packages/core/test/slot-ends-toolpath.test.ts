@@ -8,11 +8,11 @@ import { cutsAt, sweptAt, uncovered } from './fixtures/slotSetup';
 const ctx = camContext(setStock(createJob(), { mode: 'fixed', size: { x: 200, y: 200, z: 20 }, modelOffset: { x: 0, y: 0, z: 0 } }), null);
 const rect = (x0: number, y0: number, x1: number, y1: number): Poly[] => [[{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }]];
 
-function cut(ends: [ResolvedSlot['startEnd'], ResolvedSlot['endEnd']], patch: Partial<SlotOp>, width = 10) {
+function cut(ends: [ResolvedSlot['startEnd'], ResolvedSlot['endEnd']], patch: Partial<SlotOp>, width = 10, centreline: ResolvedSlot['centreline'] = pathFromPoints([{ x: 0, y: 0 }, { x: 40, y: 0 }], false)) {
   const base = newOperation('slot', { id: 's', name: 'Slot 1', tool: tool6, modelKind: 'mesh' }) as SlotOp;
   // top at the slot's own top (0), bottom at its slot bottom (-3)
   const op: SlotOp = { ...base, stepdown: 3, heights: { ...base.heights, top: { from: 'contour', offset: 0 } }, ...patch };
-  const slot: ResolvedSlot = { centreline: pathFromPoints([{ x: 0, y: 0 }, { x: 40, y: 0 }], false), width, startEnd: ends[0], endEnd: ends[1], top: 0, bottom: -3, through: false, ref: 0 };
+  const slot: ResolvedSlot = { centreline, width, startEnd: ends[0], endEnd: ends[1], top: 0, bottom: -3, through: false, ref: 0 };
   return slotToolpath(op, tool6, ctx, geoOf({ slots: [slot] }));
 }
 /** Walls plus the tool swept along each relief move: a tool whose edge just reaches a (stock-inset) corner sits one radius from it on the diagonal and its body overlaps the walls beside the corner (+0.05 mm). */
@@ -132,5 +132,35 @@ describe('open slot ends', () => {
     const o = cut(['open', 'round'], { squareEnds: null });
     expect(o.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
     expect(Math.min(...cutsAt(o.toolpath!, -3).flatMap((c) => c.points.map((p) => p.x)))).toBeLessThanOrEqual(-4 + 1e-6);
+  });
+});
+
+describe('endWall ends on a curved slot', () => {
+  // an arc of radius 20 about the origin, 1.2 rad long
+  const arc = { closed: false, segments: [{ kind: 'arc' as const, center: { x: 0, y: 0 }, radius: 20, startAngle: -0.6, sweep: 1.2 }] };
+  for (const [strategy, width] of [['toolWidth', 6], ['wider', 10]] as const) {
+    it(`every feed move, the retreat from each end included, stays in the slot (${strategy}, width ${width})`, () => {
+      const o = cut(['square', 'square'], { squareEnds: 'endWall', strategy, finishWalls: strategy === 'wider' }, width, arc);
+      expect(o.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+      const slack = width / 2 - 3; // tool-centre distance from the centreline
+      for (const c of cutsAt(o.toolpath!, -3)) {
+        for (const p of c.points) {
+          const rho = Math.hypot(p.x, p.y);
+          expect(Math.abs(rho - 20)).toBeLessThanOrEqual(slack + 1e-3);
+        }
+      }
+    });
+  }
+
+  it('finish-wall loops retreat from the end wall before they retract', () => {
+    const o = cut(['square', 'square'], { squareEnds: 'endWall', strategy: 'wider', finishWalls: true });
+    const m = o.toolpath!.moves;
+    // every vertical rapid rise from the slot floor happens at least a tool radius clear of both end walls
+    m.forEach((mv, i) => {
+      const prev = m[i - 1];
+      if (mv.kind !== 'rapid' || !prev || prev.kind === 'cycle' || Math.abs(prev.to.z + 3) > 1e-9 || mv.to.z <= prev.to.z) return;
+      expect(prev.to.x).toBeGreaterThanOrEqual(3 - 1e-6);
+      expect(prev.to.x).toBeLessThanOrEqual(37 + 1e-6);
+    });
   });
 });

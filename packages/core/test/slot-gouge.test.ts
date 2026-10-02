@@ -39,4 +39,15 @@ describe('square slot ends against the model', () => {
     const r = keyway({ squareEnds: 'endWall', heights: { bottom: { from: 'slotBottom', offset: -2 } } });
     expect(codes(r)).toContain('error:gouge');
   });
+
+  it('exports endWall with finish walls and no error', () => {
+    const r = keyway({ squareEnds: 'endWall', finishWalls: true });
+    expect(codes(r).filter((c) => c.startsWith('error'))).toEqual([]);
+    expect(r.toolpath).not.toBeNull();
+  });
+
+  it('does not excuse a floor gouge inside an end zone (zones stop above the slot floor)', () => {
+    const r = keyway({ squareEnds: 'endWall', heights: { bottom: { from: 'slotBottom', offset: -2 } }, strategy: 'trochoidal' });
+    expect(codes(r)).toContain('error:gouge');
+  });
 });
