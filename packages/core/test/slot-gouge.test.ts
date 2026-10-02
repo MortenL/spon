@@ -99,8 +99,15 @@ describe('slots exactly as wide as the tool', () => {
     expect(codes(r)).toContain('error:gouge');
   });
 
-  it('flags a side overcut larger than the tolerance (tool 0.2 mm wider than the slot)', () => {
+  it('refuses a slot 0.2 mm narrower than the tool before cutting', () => {
     const r = keyway({ squareEnds: 'inside' }, { width: 5.8 });
-    expect(codes(r).some((c) => c.startsWith('error'))).toBe(true);
+    expect(codes(r)).toContain('error:tool-too-large');
+  });
+
+  it('flags a side overcut larger than the tolerance (tool 0.04 mm wider than the slot)', () => {
+    // 5.96 still counts as tool width (within 0.05 mm), so the slot is cut and each wall is overcut by 0.02 mm
+    const r = keyway({ squareEnds: 'inside' }, { width: 5.96 });
+    expect(codes(r)).not.toContain('error:tool-too-large');
+    expect(codes(r)).toContain('error:gouge');
   });
 });
