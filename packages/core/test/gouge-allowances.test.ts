@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  applyCommands, buildAdjacency, camContext, createJob, faceRefFromTriangle, generateJob, gougeCheck, type JobCommand, type Mesh, meshIndex, type Move,
+  resolveGeometry, applyCommands, buildAdjacency, camContext, createJob, faceRefFromTriangle, generateJob, gougeCheck, type JobCommand, type Mesh, meshIndex, type Move,
   setModel, setStock, type Toolpath,
 } from '../src';
 import { faceAt, tool6 } from './fixtures/camSetup';
@@ -58,7 +58,7 @@ function pocketBlock(ring: [number, number][]) {
   const mesh: Mesh = { positions, indices, normals };
   const geometry = { kind: 'mesh' as const, mesh, adjacency: buildAdjacency(mesh), rawPoints: positions };
   const job = setStock(setModel(createJob(), { sourceName: 'p.stl', blobId: 'm1', kind: 'mesh', importUnits: 'mm' }), { mode: 'auto', margin: { xy: 0, zTop: 0, zBottom: 0 } });
-  return { geometry, job, top: faceAt(geometry as never, 1, 1, 10), floor: faceAt(geometry as never, 20.5, 20.2, 4) };
+  return { geometry, job, top: (() => { try { return faceAt(geometry as never, 1, 1, 10); } catch { return null as never; } })(), floor: faceAt(geometry as never, 20.5, 20.2, 4) };
 }
 const circle = (sides: number, R: number): [number, number][] => Array.from({ length: sides }, (_, i) => [20 + R * Math.cos((2 * Math.PI * i) / sides), 20 + R * Math.sin((2 * Math.PI * i) / sides)]);
 /** A square of half-size h with corners rounded to radius r in `segs` facets each. */
@@ -202,5 +202,56 @@ describe('gouge check: mesh index cache', () => {
     }
     // nothing was evicted by the sweep: the same four index objects are still cached
     [0.5, 1, 2, 3].forEach((c, i) => expect(meshIndex(ctx, c)).toBe(before[i]));
+  });
+});
+
+describe('gouge check: coarse polygons stay polygons', () => {
+  const oct = Array.from({ length: 8 }, (_, i): [number, number] => [20 + 10 * Math.cos((i * Math.PI) / 4 + Math.PI / 8), 20 + 10 * Math.sin((i * Math.PI) / 4 + Math.PI / 8)]);
+  const h = 10, c = 2;
+  const chamSq: [number, number][] = [[20 + h - c, 20 - h], [20 + h, 20 - h + c], [20 + h, 20 + h - c], [20 + h - c, 20 + h], [20 - h + c, 20 + h], [20 - h, 20 + h - c], [20 - h, 20 - h + c], [20 - h + c, 20 - h]];
+  // the polygon's wall lines: distance from the centre along each edge normal
+  const walls = (poly: [number, number][]) => poly.map((p, i) => {
+    const q = poly[(i + 1) % poly.length];
+    const nx = q[1] - p[1], ny = p[0] - q[0], l = Math.hypot(nx, ny);
+    return { nx: nx / l, ny: ny / l, d: ((p[0] - 20) * nx + (p[1] - 20) * ny) / l };
+  });
+  const cases: [string, [number, number][], number][] = [['octagon', oct, 3], ['chamfered square', chamSq, 3], ['chamfered square', chamSq, 10]];
+  it.each(cases)('%s pocket, %i mm tool: follows the polygon, no gouge', (_name, poly, dia) => {
+    const { geometry, job, floor } = pocketBlock(poly);
+    const tool = { ...t3, diameter: dia };
+    const j = applyCommands(job, [
+      { type: 'addTool', tool }, { type: 'addOperation', opType: 'pocket', toolId: 't3', id: 'k' },
+      { type: 'updateOperation', id: 'k', patch: { geometry: [floor], stockRadial: 0, stockAxial: 0, heights: { bottom: { from: 'face', offset: 0, face: floor } } } as never },
+      { type: 'addOperation', opType: 'profile', toolId: 't3', id: 'p' },
+      { type: 'updateOperation', id: 'p', patch: { geometry: [floor], side: 'inside', stockRadial: 0, heights: { bottom: { from: 'face', offset: 0, face: floor } } } as never },
+    ]);
+    const geo = resolveGeometry(j.operations[0], camContext(j, geometry as never));
+    expect(geo.sagitta).toBeLessThanOrEqual(0.05 + 1e-9); // coarse polygons are not fitted into circles
+    const ws = walls(poly);
+    for (const r of generateJob(j, geometry as never)) {
+      expect(r.toolpath).not.toBeNull();
+      expect(gouges(r)).toEqual([]);
+      for (const m of r.toolpath!.moves) {
+        if (m.kind === 'cycle' || m.kind === 'rapid' || m.to.z > -0.5) continue;
+        // the tool edge never passes a flat wall by more than the tolerance (corners may sit further in, walls only matter in reach)
+        const reach = Math.max(...ws.map((w) => (m.to.x - 20) * w.nx + (m.to.y - 20) * w.ny - w.d)) + dia / 2;
+        expect(reach).toBeLessThanOrEqual(0.01 + 1e-6);
+      }
+    }
+  });
+
+  it('a hand-made path 0.5 mm into a flat octagon wall is flagged', () => {
+    const { geometry, job, floor } = pocketBlock(oct);
+    const j = applyCommands(job, [
+      { type: 'addTool', tool: t3 }, { type: 'addOperation', opType: 'pocket', toolId: 't3', id: 'k' },
+      { type: 'updateOperation', id: 'k', patch: { geometry: [floor], heights: { bottom: { from: 'face', offset: 0, face: floor } } } as never },
+    ]);
+    const ctx = camContext(j, geometry as never);
+    const sag = resolveGeometry(j.operations[0], ctx).sagitta;
+    const apothem = 10 * Math.cos(Math.PI / 8);
+    // wall normal at angle 0 (the first edge is centred on +x after the pi/8 offset): tool edge 0.5 mm beyond it
+    const x = 20 + apothem - 1.5 + 0.5;
+    const path = handPath([{ kind: 'rapid', to: { x, y: 20, z: 5 } }, { kind: 'line', to: { x, y: 20, z: -5 }, feed: 100 }]);
+    expect(gougeCheck(path, t3, ctx, { sagitta: sag }).diagnostics[0]?.message).toMatch(/^Cuts into the model by up to/);
   });
 });

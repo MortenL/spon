@@ -10,6 +10,8 @@ import { type CamContext, toProgram } from '../context';
 import type { CamCode, MeshFaceRef } from '../types';
 
 const COS_1DEG = Math.cos(Math.PI / 180);
+/** Mesh loop arcs may stray this far (mm) from the chords they replace. */
+const MAX_FIT_BULGE = 0.05;
 
 export function faceRefFromTriangle(mesh: Mesh, blobId: string, tri: number): MeshFaceRef {
   const [a, b, c] = triangleVertices(mesh, tri);
@@ -71,9 +73,20 @@ export function faceGeometry(ctx: CamContext, tris: number[]): FaceGeometry {
   const sagittas: number[] = [];
   const loops = order.map((i, k) => {
     const stats: ArcFitStats = { sagitta: 0 };
-    const path = orientPath(fitArcs(polys[i], true, ctx.tolerance, Infinity, stats), k === 0);
+    let fitted = fitArcs(polys[i], true, ctx.tolerance, Math.max(MAX_FIT_BULGE, ctx.tolerance), stats);
+    // A coarse but regular round loop (a 16-gon hole or boss: no chord turns more than 22.5 degrees) is still one circle.
+    // Anything coarser (an octagon, a square with chamfered corners) stays a polygon, so the toolpath follows its walls.
+    if (fitted.segments.length !== 1 || fitted.segments[0].kind !== 'arc') {
+      const loose: ArcFitStats = { sagitta: 0 };
+      const whole = fitArcs(polys[i], true, ctx.tolerance, Infinity, loose);
+      const seg = whole.segments[0];
+      if (whole.segments.length === 1 && seg.kind === 'arc' && Math.abs(seg.sweep) > 2 * Math.PI - 1e-6 && loose.sagitta <= 1.02 * seg.radius * (1 - Math.cos(Math.PI / 16)) + ctx.tolerance) {
+        fitted = whole;
+        stats.sagitta = loose.sagitta;
+      }
+    }
     sagittas.push(stats.sagitta);
-    return path;
+    return orientPath(fitted, k === 0);
   });
   return { tris, z: n ? zSum / n : 0, loops, sagittas };
 }

@@ -65,7 +65,7 @@ export function gougeCheck(toolpath: Toolpath, tool: Tool, ctx: CamContext, opti
     return { ...shape, radius, cornerRadius: Math.min(shape.cornerRadius, radius) };
   };
   // A sample that gouges at full radius is tested again with the reduced one: faceted round walls sit inside their fitted
-  // circles. Without fitted arcs (sagitta 0) the full-radius result stands, which keeps all-gouging paths at one pass.
+  // circles. Without fitted arcs (sagitta 0) the retest would only shrink the tool by gTol, so it is skipped (it costs ~50% on paths that gouge everywhere).
   const reduced = shrink(rAllow);
   const cycleShape = shrink(Math.max(gTol + ctx.tolerance + 0.02 * shape.radius, rAllow));
   let active = shape;
