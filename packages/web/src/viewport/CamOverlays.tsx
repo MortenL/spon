@@ -36,10 +36,11 @@ export function CamOverlays() {
   return (
     <group position={[origin.x, origin.y, origin.z]}>
       <PickedGeometry job={job} geometry={geometry} op={op} />
-      {op.type === 'profile' && <OpenChainArrows job={job} geometry={geometry} op={op} />}
+      {(op.type === 'profile' || op.type === 'chamfer') && <OpenChainArrows job={job} geometry={geometry} op={op} />}
       {inspectorTab === 'heights' && summary?.heights && <HeightsPlanes job={job} geometry={geometry} heights={summary.heights} />}
       {op.type === 'profile' && summary && <TabHandles op={op} overlays={summary.overlays} origin={origin} />}
       {summary && <UnmachinedAreas overlays={summary.overlays} />}
+      {summary && <GougeMarkers overlays={summary.overlays} />}
     </group>
   );
 }
@@ -68,7 +69,7 @@ const ARROW_SIDE = 1.2;
 /** Direction arrows (and a dashed preview of the side cut) for the open lines of a profile. */
 function OpenChainArrows({ job, geometry, op }: { job: Job; geometry: ModelGeometry | null; op: Operation }) {
   const profile = op.type === 'profile' ? op : null;
-  const openSide = profile?.openSide ?? 'on';
+  const openSide = op.type === 'chamfer' ? 'on' : profile?.openSide ?? 'on'; // chamfer: arrow only, no side preview
   const stockRadial = profile?.stockRadial ?? 0;
   const finishPass = profile?.finishPass ?? false;
   const toolDiameter = job.tools.find((t) => t.id === op.toolId)?.diameter ?? null;
@@ -281,6 +282,25 @@ function UnmachinedAreas({ overlays }: { overlays: OpOverlays }) {
             <Line key={i} points={outline} color={UNMACHINED_COLOR} lineWidth={1.5} raycast={noRaycast} />
           ))}
         </group>
+      ))}
+    </>
+  );
+}
+
+// -- gouge markers ---------------------------------------------------------
+
+const GOUGE_RADIUS = 0.6;
+
+/** Small red spheres where the tool cuts into the model, the deepest one slightly larger. */
+function GougeMarkers({ overlays }: { overlays: OpOverlays }) {
+  const gouges = overlays.gouges ?? [];
+  return (
+    <>
+      {gouges.map((g, i) => (
+        <mesh key={i} data-testid={`gouge-marker-${i}`} position={[g.point.x, g.point.y, g.point.z]} raycast={noRaycast}>
+          <sphereGeometry args={[i === 0 ? GOUGE_RADIUS * 1.5 : GOUGE_RADIUS, 12, 12]} />
+          <meshBasicMaterial color={UNMACHINED_COLOR} />
+        </mesh>
       ))}
     </>
   );

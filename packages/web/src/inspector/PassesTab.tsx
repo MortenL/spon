@@ -315,7 +315,7 @@ function ChamferPasses({ op }: { op: ChamferOp }) {
     <div className="space-y-3">
       <LengthField label="Width" valueMm={op.width} testId="pass-chamfer-width" min={0.01} onCommit={(v) => patch({ width: v })} />
       <Button variant="outline" size="sm" data-testid="pass-chamfer-deburr" onClick={() => patch({ width: 0.3 })}>
-        Deburr (0.3)
+        Deburr ({formatLength(0.3, units)})
       </Button>
       <LengthField label="Tip offset" valueMm={op.tipOffset} testId="pass-chamfer-tip" min={0} onCommit={(v) => patch({ tipOffset: v })} />
       <div className="grid grid-cols-[1fr_10rem] items-center gap-2 text-sm">
