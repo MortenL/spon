@@ -7,8 +7,8 @@ Units and coordinates
 Typical flow
 1. new_job (or open_job for an existing .spon).
 2. import_model with an STL, STEP, IGES, DXF or SVG file. If it answers needsUnits or needsBody, call it again with units or body. An SVG without real-world units answers needsScale: call it again with svgDpi (96 for CSS/Inkscape/Affinity, 72 for Illustrator) or svgWidth (mm).
-3. Set up with apply_commands: rotateQuarter / layFlat / setZSpin to orient, setStock, setWcs, applyMachinePreset, setPost { dialect: "grbl" | "linuxcnc" | "fanuc" }. A DXF drawing is flat: give the stock its material thickness with setStock (auto stock margin zBottom = thickness).
-4. describe_geometry lists what can be machined, with short handles: faces F1, F2… (top down, horizontal and facing up), their loops F1.L0 (outer), F1.L1…, holes H1…, and DXF contours C1…. Call it again after importing or reorienting.
+3. Set up with apply_commands: rotateQuarter / layFlat / setZSpin to orient, setStock, setWcs, applyMachinePreset, setPost { dialect: "grbl" | "linuxcnc" | "fanuc" }. A drawing (DXF or SVG) is flat: give the stock its material thickness with setStock (auto stock margin zBottom = thickness).
+4. describe_geometry lists what can be machined, with short handles: faces F1, F2… (top down, horizontal and facing up), their loops F1.L0 (outer), F1.L1…, holes H1…, and drawing (DXF/SVG) contours C1…. Call it again after importing or reorienting.
 5. add_operation for each operation: type profile, pocket or drill; a tool from list_tools (job tool id, T number, or library tool id); geometry handles; params.
 6. generate: read each operation's status and diagnostics and fix errors with apply_commands (updateOperation).
 7. render_preview (top, then iso) to check the toolpaths by eye: feeds are solid, rapids dashed, red hatching is material the tool cannot reach.
@@ -17,7 +17,7 @@ Typical flow
 Operation parameters (add_operation params, or updateOperation patch)
 - heights: { clearance, retract, feed, top, bottom }, each { from, offset }. from is one of stockTop, stockBottom, modelTop, modelBottom, contour, face, origin, holeBottom, retract, feed, top.
 - profile: side (outside | inside | on, for closed contours), openSide (left | on | right, for open lines; seen along the line's direction), direction (climb | conventional), stepdown, stockRadial, finishPass, leads { mode, length }, tabs { enabled, shape, width, height, placement (count | spacing), count, spacing }.
-- Open lines: profile them with openSide left or right to cut beside the line (the line is the part's edge). A handle with a trailing ! (C3!) reverses the line's direction, which swaps left and right.
+- Open lines: profile them with openSide left or right to cut beside the line (the line is the part's edge). A line runs in the drawn direction of its first handle (open contours list from/to in describe_geometry); a trailing ! on any of an open line's handles (C3!) reverses the whole line, which swaps left and right.
 - pocket: stepdown, stepoverPct, finishWalls, finishFloor, entry { mode: auto | helix | ramp | plunge }.
 - drill: cycle (drill | dwell | peck | chipbreak), peck, dwellSeconds, diameterFilter { min, max }.
 - feeds: { rpm, feed, plungeFeed, coolant }.

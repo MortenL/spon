@@ -26,7 +26,7 @@ starts the server in.
 
 To use your browser tool library headless, export it from the web app's tool library dialog and call
 `import_tool_library` with the file. It also reads LinuxCNC `tool.tbl` files (pass `units: "mm"` or `"in"`).
-Geometry handles take a trailing `!` (`C3!`) to reverse an open contour, which swaps its left and right for `openSide`.
+Geometry handles take a trailing `!` (`C3!`): a `!` on any of an open line's handles reverses the whole line (it otherwise runs in its first handle's drawn direction), which swaps its left and right for `openSide`.
 
 ## Tools
 

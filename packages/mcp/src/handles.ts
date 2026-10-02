@@ -61,7 +61,7 @@ export function catalogText(c: HandledCatalog): string {
   for (const h of c.holes) lines.push(`${h.handle} ⌀${mm(h.diameter)} at ${at(h.center)}, z ${mm(h.bottom)} to ${mm(h.top)}, ${h.through ? 'through' : 'blind'}`);
   for (const k of c.contours) {
     const shape = k.circle ? `circle ⌀${mm(k.circle.diameter)} at ${at(k.circle.center)}` : `box ${at(k.bbox.min)} to ${at(k.bbox.max)}`;
-    lines.push(`${k.handle} contour on layer ${k.layer}, ${k.closed ? 'closed' : 'open'}, length ${k.length.toFixed(1)}, ${shape}`);
+    lines.push(`${k.handle} contour on layer ${k.layer}, ${k.closed ? 'closed' : 'open'}, length ${k.length.toFixed(1)}, ${shape}${k.closed ? '' : `, from ${at(k.start)} to ${at(k.end)}`}`);
   }
   return lines.join('\n');
 }
