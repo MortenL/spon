@@ -2,7 +2,9 @@ import { basename } from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { ToolContext } from '../context';
-import { toolSchema } from '../schemas';
+import { SessionError } from '../session';
+import { isToolTableFile } from '@sponcam/core';
+import { lengthUnitSchema, toolSchema } from '../schemas';
 import { type Args, guarded, ok } from './result';
 
 const listShape = {
@@ -11,7 +13,10 @@ const listShape = {
   diameter: z.number().optional().describe('Diameter in mm (±0.01)'),
 };
 const addShape = { tool: toolSchema.describe('A complete tool; lengths in mm, feeds in mm/min') };
-const importShape = { path: z.string().describe('A Spon tool library .json, or a Fusion 360 library .json / .tools') };
+const importShape = {
+  path: z.string().describe('A Spon tool library .json, a Fusion 360 library .json / .tools, or a LinuxCNC tool table .tbl'),
+  units: lengthUnitSchema.optional().describe("LinuxCNC tool tables (.tbl) only: the machine's units"),
+};
 
 export function registerLibraryTools(server: McpServer, ctx: ToolContext): void {
   server.registerTool('list_tools', {
@@ -46,11 +51,12 @@ export function registerLibraryTools(server: McpServer, ctx: ToolContext): void 
 
   server.registerTool('import_tool_library', {
     title: 'Import tool library',
-    description: 'Import tools from a Spon library or a Fusion 360 library into the tool library. Taken T numbers are renumbered.',
+    description: 'Import tools from a Spon library, a Fusion 360 library or a LinuxCNC tool table (.tbl, needs units) into the tool library. Taken T numbers are renumbered.',
     inputSchema: importShape,
   }, guarded('import_tool_library', async (a: Args<typeof importShape>) => {
+    if (isToolTableFile(a.path) && !a.units) throw new SessionError('A LinuxCNC tool table has no units — call import_tool_library again with units: "mm" or "in"');
     const input = await ctx.readInput(a.path);
-    const result = await ctx.library().importFile(basename(input.path), input.bytes, input.path);
+    const result = await ctx.library().importFile(basename(input.path), input.bytes, { label: input.path, units: a.units });
     const lines = [
       `Imported ${result.added} new and ${result.updated} updated tool(s) from ${input.path}.`,
       ...result.notes,

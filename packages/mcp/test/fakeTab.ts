@@ -76,7 +76,7 @@ export function sessionHandler(session: FileSession): { handle: Handle; marked: 
       case 'importProgram': return session.importProgram(p.fileName, fromBase64(p.bytes));
       case 'tools.list': return session.tools.list();
       case 'tools.add': await session.tools.add(p.tool); return {};
-      case 'tools.import': return session.tools.importFile(p.fileName, fromBase64(p.bytes));
+      case 'tools.import': return session.tools.importFile(p.fileName, fromBase64(p.bytes), { units: p.units });
       default: throw new Error(`Unknown method ${method}`);
     }
   };

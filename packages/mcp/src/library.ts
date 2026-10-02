@@ -1,7 +1,7 @@
 import { mkdir, readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { exportToolLibrary, importToolLibrary, mergeToolLibrary, parseToolLibraryFile, sortTools, starterLibrary, type Tool, validateTool } from '@sponcam/core';
+import { exportToolLibrary, importToolLibrary, importToolFile, type LengthUnit, sortTools, starterLibrary, type Tool, validateTool } from '@sponcam/core';
 import { writeFileAtomic } from './files';
 import { type LibraryImportResult, SessionError, type ToolLibraryAccess } from './session';
 
@@ -56,17 +56,17 @@ export class ToolLibraryFile implements ToolLibraryAccess {
   }
 
   /** `fileName` picks the format; `label` (default the file name) is what errors call the file. */
-  importFile(fileName: string, bytes: Uint8Array, label = fileName): Promise<LibraryImportResult> {
+  importFile(fileName: string, bytes: Uint8Array, options: { label?: string; units?: LengthUnit } = {}): Promise<LibraryImportResult> {
+    const label = options.label ?? fileName;
     return this.serial(async () => {
-      let parsed: ReturnType<typeof parseToolLibraryFile>;
+      let result: ReturnType<typeof importToolFile>;
       try {
-        parsed = parseToolLibraryFile(bytes, fileName);
+        result = importToolFile(await this.read(), bytes, fileName, options.units);
       } catch (err) {
         throw new SessionError(`Could not read the tool library file ${label}: ${message(err)}`);
       }
-      const merge = mergeToolLibrary(await this.read(), parsed.tools);
-      await this.write(merge.library);
-      return { added: merge.added, updated: merge.updated, skipped: parsed.skipped, notes: merge.notes };
+      await this.write(result.library);
+      return { added: result.added, updated: result.updated, skipped: result.skipped, notes: result.notes };
     });
   }
 

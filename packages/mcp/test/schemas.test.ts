@@ -28,6 +28,7 @@ const SAMPLES: JobCommand[] = [
   { type: 'moveProgram', id: 'p', delta: 1 },
   { type: 'setProgramInTimeline', id: 'p', inTimeline: false },
   { type: 'removeProgram', id: 'p' },
+  { type: 'updateOperation', id: 'p', patch: { openSide: 'left', geometry: [{ kind: 'dxfPath', blobId: 'b', layer: 0, path: 1, reverse: true }] } },
   { type: 'addOperation', opType: 'pocket', toolId: null, id: 'o', name: 'Pocket A' },
   {
     type: 'updateOperation', id: 'o',

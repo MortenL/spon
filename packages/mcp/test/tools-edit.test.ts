@@ -106,4 +106,18 @@ describe('editing tools', () => {
     expect(text(await stl.call('describe_geometry', { filter: 'holes' }))).toContain('No holes found.');
     expect(text(await stl.call('describe_geometry', { filter: 'contours' }))).toContain('No contours (only DXF drawings have contours).');
   });
+
+  it('profiles an open line on its right with a reversed handle', async () => {
+    const { call } = await connect({}, ['svg/cad.svg']);
+    await call('new_job');
+    await call('import_model', { path: 'cad.svg' });
+    await call('apply_commands', { commands: [{ type: 'setStock', stock: { mode: 'auto', margin: { xy: 10, zTop: 0, zBottom: 6 } } }] });
+    const catalog = data(await call('describe_geometry')) as { contours: { handle: string; closed: boolean }[] };
+    const open = catalog.contours.find((c) => !c.closed)!;
+    const added = await call('add_operation', { type: 'profile', tool: 'starter-flat-6', geometry: [`${open.handle}!`], params: { openSide: 'right' } });
+    expect(added.isError).toBeFalsy();
+    expect(data(added).operation).toMatchObject({ openSide: 'right', geometry: [{ reverse: true }] });
+    const gen = data(await call('generate')) as { operations: { status: string }[] };
+    expect(gen.operations[0].status).not.toBe('error');
+  });
 });

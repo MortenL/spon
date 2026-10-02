@@ -20,7 +20,7 @@ export class LiveSession implements JobSession {
       add: async (tool) => {
         await tab.request('tools.add', { tool });
       },
-      importFile: (fileName, bytes) => tab.request('tools.import', { fileName, bytes: toBase64(bytes) }),
+      importFile: (fileName, bytes, options) => tab.request('tools.import', { fileName, bytes: toBase64(bytes), ...(options?.units ? { units: options.units } : {}) }),
     };
   }
 

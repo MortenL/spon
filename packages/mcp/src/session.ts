@@ -15,7 +15,7 @@ export interface ModelInput { fileName: string; bytes: Uint8Array; units?: Lengt
 export interface ToolLibraryAccess {
   list(): Promise<Tool[]>;
   add(tool: Tool): Promise<void>;
-  importFile(fileName: string, bytes: Uint8Array, label?: string): Promise<LibraryImportResult>;
+  importFile(fileName: string, bytes: Uint8Array, options?: { label?: string; units?: LengthUnit }): Promise<LibraryImportResult>;
 }
 
 /** One open job: a .spon file on disk (FileSession) or the browser tab (LiveSession). */

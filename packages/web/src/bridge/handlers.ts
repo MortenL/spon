@@ -58,5 +58,5 @@ export const handlers: Handlers = {
     await saveLibraryTool(tool);
     return {};
   },
-  'tools.import': ({ fileName, bytes }) => importLibraryBytes(fileName, fromBase64(bytes)),
+  'tools.import': ({ fileName, bytes, units }) => importLibraryBytes(fileName, fromBase64(bytes), units),
 };

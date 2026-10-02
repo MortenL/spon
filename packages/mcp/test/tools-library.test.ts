@@ -33,4 +33,16 @@ describe('library tools', () => {
     expect(r.isError).toBe(true);
     expect(text(r)).toContain(`Could not read the tool library file ${join(dir, 'bad.json')}`);
   });
+
+  it('imports a LinuxCNC tool table, asking for units first', async () => {
+    const { call } = await connect({}, ['tool.tbl']);
+    const ask = await call('import_tool_library', { path: 'tool.tbl' });
+    expect(ask.isError).toBe(true);
+    expect(text(ask)).toBe('A LinuxCNC tool table has no units — call import_tool_library again with units: "mm" or "in"');
+    const done = await call('import_tool_library', { path: 'tool.tbl', units: 'in' });
+    expect(data(done)).toMatchObject({ added: 7 });
+    expect(text(done)).toContain('moved from T');
+    const listed = data(await call('list_tools', { query: 'Spiralbohrer' })) as { tools: { number: number; type: string }[] };
+    expect(listed.tools[0]).toMatchObject({ number: 2, type: 'drill' });
+  });
 });

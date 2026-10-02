@@ -1,6 +1,6 @@
 # Spon MCP server
 
-Lets Claude (or any MCP client) create and edit Spon jobs on disk: import STL, STEP, IGES and DXF models, pick geometry,
+Lets Claude (or any MCP client) create and edit Spon jobs on disk: import STL, STEP, IGES, DXF and SVG models, pick geometry,
 add profile, pocket and drill operations, generate, preview, export G-code and save `.spon` files that open in the web app.
 
 ## Build and register
@@ -25,7 +25,8 @@ starts the server in.
 | `SPON_MCP_LOG` | — | `debug` logs every tool call to stderr. |
 
 To use your browser tool library headless, export it from the web app's tool library dialog and call
-`import_tool_library` with the file.
+`import_tool_library` with the file. It also reads LinuxCNC `tool.tbl` files (pass `units: "mm"` or `"in"`).
+Geometry handles take a trailing `!` (`C3!`) to reverse an open contour, which swaps its left and right for `openSide`.
 
 ## Tools
 

@@ -30,9 +30,13 @@ export class HandleMap {
 
   resolve(item: string | GeometryRef): GeometryRef {
     if (typeof item !== 'string') return item;
-    const ref = this.refs.get(item.trim().toUpperCase());
+    const raw = item.trim().toUpperCase();
+    const reverse = raw.endsWith('!');
+    const ref = this.refs.get(reverse ? raw.slice(0, -1) : raw);
     if (!ref) throw new SessionError(`Unknown handle ${item.trim()} — call describe_geometry for the current list`);
-    return ref;
+    if (!reverse) return ref;
+    if (ref.kind !== 'dxfPath') throw new SessionError('Only drawing contours (C…) can be reversed');
+    return { ...ref, reverse: true };
   }
 
   clear(): void {

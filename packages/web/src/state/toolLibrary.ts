@@ -1,5 +1,5 @@
 import {
-  exportToolLibrary, type LibraryImportResult, mergeToolLibrary, type OperationType, parseToolLibraryFile, sortTools, starterLibrary, type Tool, validateTool,
+  exportToolLibrary, type LibraryImportResult, importToolFile, type LengthUnit, type OperationType, sortTools, starterLibrary, type Tool, validateTool,
 } from '@sponcam/core';
 import { type DBSchema, type IDBPDatabase, openDB } from 'idb';
 import { useStore } from 'zustand';
@@ -74,19 +74,18 @@ export async function listLibraryTools(): Promise<Tool[]> {
   return sortTools(await (await db()).getAll('tools'));
 }
 
-export async function importLibraryBytes(fileName: string, bytes: Uint8Array): Promise<LibraryImportResult> {
-  const result = parseToolLibraryFile(bytes, fileName);
+export async function importLibraryBytes(fileName: string, bytes: Uint8Array, units?: LengthUnit): Promise<LibraryImportResult> {
   const d = await db();
-  const merge = mergeToolLibrary(await d.getAll('tools'), result.tools);
+  const result = importToolFile(await d.getAll('tools'), bytes, fileName, units);
   const tx = d.transaction('tools', 'readwrite');
-  for (const t of merge.incoming) await tx.store.put(t, t.id);
+  for (const t of result.incoming) await tx.store.put(t, t.id);
   await tx.done;
   await refresh();
-  return { added: merge.added, updated: merge.updated, skipped: result.skipped, notes: merge.notes };
+  return { added: result.added, updated: result.updated, skipped: result.skipped, notes: result.notes };
 }
 
-export async function importLibraryFile(file: File): ReturnType<typeof importLibraryBytes> {
-  return importLibraryBytes(file.name, new Uint8Array(await file.arrayBuffer()));
+export async function importLibraryFile(file: File, units?: LengthUnit): ReturnType<typeof importLibraryBytes> {
+  return importLibraryBytes(file.name, new Uint8Array(await file.arrayBuffer()), units);
 }
 
 export function exportLibraryFile(): void {

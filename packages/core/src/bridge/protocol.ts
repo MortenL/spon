@@ -80,7 +80,7 @@ export interface BridgeMethods {
   importProgram: { params: { fileName: string; bytes: string }; result: ProgramRef };
   'tools.list': { params: NoParams; result: Tool[] };
   'tools.add': { params: { tool: Tool }; result: NoParams };
-  'tools.import': { params: { fileName: string; bytes: string }; result: LibraryImportResult };
+  'tools.import': { params: { fileName: string; bytes: string; units?: LengthUnit }; result: LibraryImportResult };
 }
 export type BridgeMethod = keyof BridgeMethods;
 export type BridgeParams<M extends BridgeMethod> = BridgeMethods[M]['params'];

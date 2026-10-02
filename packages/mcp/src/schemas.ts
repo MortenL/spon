@@ -10,7 +10,7 @@ const delta = z.union([z.literal(-1), z.literal(1)]);
 
 const meshFaceRef = z.strictObject({ kind: z.literal('meshFace'), blobId: z.string(), seed: z.number().int(), normal: vec3Schema, point: vec3Schema });
 export const geometryRefSchema = z.discriminatedUnion('kind', [
-  z.strictObject({ kind: z.literal('dxfPath'), blobId: z.string(), layer: z.number().int(), path: z.number().int() }),
+  z.strictObject({ kind: z.literal('dxfPath'), blobId: z.string(), layer: z.number().int(), path: z.number().int(), reverse: z.literal(true).optional() }),
   meshFaceRef,
   z.strictObject({ kind: z.literal('meshLoop'), face: meshFaceRef, loop: z.number().int() }),
   z.strictObject({ kind: z.literal('meshHole'), face: meshFaceRef, loop: z.number().int() }),
@@ -29,6 +29,7 @@ export const operationPatchSchema = z.strictObject({
   heights: z.strictObject({ clearance: heightSpec, retract: heightSpec, feed: heightSpec, top: heightSpec, bottom: heightSpec }).partial(),
   geometry: z.array(geometryRefSchema),
   side: z.enum(['outside', 'inside', 'on']),
+  openSide: z.enum(['left', 'on', 'right']),
   direction: z.enum(['climb', 'conventional']),
   stepdown: z.number(),
   stockRadial: z.number(),
