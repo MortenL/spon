@@ -83,6 +83,7 @@ describe('facing', () => {
   it('refuses tools that are not flat or bull-nose', () => {
     const { run } = spoilboard({}, ball);
     expect(run.results[0].diagnostics.map((d) => d.message)).toContain('Facing needs a flat or bull-nose tool');
+    expect(run.results[0].diagnostics[0].code).toBe('wrong-tool');
   });
 
   it('faces a picked L-shaped area and stays within the overlap of it', () => {
@@ -128,5 +129,54 @@ describe('facing', () => {
     const d = run.results[0].diagnostics;
     expect(d.filter((x) => x.severity === 'error')).toEqual([]);
     expect(d.map((x) => x.message)).toContain('The facing depth goes below the model top');
+    expect(d.find((x) => x.message === 'The facing depth goes below the model top')?.code).toBe('facing-depth');
+  });
+
+  it('covers at an odd angle and stepover with no uncut area', () => {
+    const { run, tp } = spoilboard({ angleDeg: 37, stepoverPct: 70, oneWay: false });
+    expect(run.results[0].diagnostics.map((d) => d.code)).not.toContain('unmachined-area');
+    const left = differencePolys([[{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 60 }, { x: 0, y: 60 }]], covered(tp!, -1, 10));
+    expect(polysArea(left)).toBeLessThan(1e-3);
+  });
+
+  it('climb one-way passes at 30 degrees visit lines from high to low across, conventional the reverse', () => {
+    const across = (direction: string) => {
+      const tp = spoilboard({ angleDeg: 30, oneWay: true, direction, heights: { bottom: { from: 'stockTop', offset: -1 } }, stepdown: 1 }).tp!;
+      const t = (30 * Math.PI) / 180;
+      const cuts: { y: number; dx: number }[] = [];
+      tp.moves.forEach((m, i) => {
+        const p = tp.moves[i - 1];
+        if (m.kind === 'line' && p && 'to' in p && Math.abs(m.to.z - p.to.z) < 1e-9) {
+          const dx = m.to.x - p.to.x, dy = m.to.y - p.to.y;
+          const along = dx * Math.cos(t) + dy * Math.sin(t);
+          if (Math.abs(-dx * Math.sin(t) + dy * Math.cos(t)) < 1e-6 && along > 20) cuts.push({ y: -p.to.x * Math.sin(t) + p.to.y * Math.cos(t), dx: along });
+        }
+      });
+      return cuts;
+    };
+    const climb = across('climb'), conv = across('conventional');
+    expect(climb.length).toBeGreaterThan(3);
+    expect(climb.every((c) => c.dx > 0)).toBe(true);
+    expect(climb.every((c, i) => i === 0 || c.y < climb[i - 1].y)).toBe(true);
+    expect(conv.every((c, i) => i === 0 || c.y > conv[i - 1].y)).toBe(true);
+  });
+
+  it('spiral winding: climb is clockwise, conventional counter-clockwise', () => {
+    const area = (direction: string) => {
+      const tp = spoilboard({ pattern: 'spiral', direction, stepdown: 1 }).tp!;
+      const pts: { x: number; y: number }[] = [];
+      for (const m of tp.moves) {
+        if (m.kind === 'rapid' || !('to' in m)) continue;
+        if (Math.abs(m.to.z + 1) < 1e-9) pts.push(m.to);
+        if (pts.length >= 5 && m.kind === 'line' && pts.length > 5) break;
+      }
+      // the outer ring: its first four corners (line moves at the floor)
+      const ring = pts.slice(0, 5);
+      let a = 0;
+      for (let i = 0; i < ring.length - 1; i++) a += ring[i].x * ring[i + 1].y - ring[i + 1].x * ring[i].y;
+      return a;
+    };
+    expect(area('climb')).toBeLessThan(0);
+    expect(area('conventional')).toBeGreaterThan(0);
   });
 });

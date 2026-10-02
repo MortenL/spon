@@ -26,7 +26,7 @@ export function faceToolpath(op: FaceOp, tool: Tool, ctx: CamContext, geo: Resol
   const diag = (severity: CamSeverity, code: CamCode, message: string, ref?: number) =>
     out.diagnostics.push({ operationId: op.id, severity, code, message, ...(ref === undefined ? {} : { ref }) });
   if (tool.type !== 'flat' && tool.type !== 'bull') {
-    diag('error', 'tool-undersize', 'Facing needs a flat or bull-nose tool');
+    diag('error', 'wrong-tool', 'Facing needs a flat or bull-nose tool');
     return out;
   }
   const tol = ctx.tolerance;
@@ -63,7 +63,8 @@ export function faceToolpath(op: FaceOp, tool: Tool, ctx: CamContext, geo: Resol
 
   const orientRing = (poly: Poly): Path2D => {
     const outerRing = polyArea(poly) > 0;
-    const ccw = outerRing === (op.direction === 'climb');
+    // rings run outside in with the uncut material inside, so climb (material on the right) is clockwise
+    const ccw = outerRing !== (op.direction === 'climb');
     return orientPath(fitArcs(poly, true, fitTol, fitTol), ccw);
   };
 
@@ -100,7 +101,9 @@ export function faceToolpath(op: FaceOp, tool: Tool, ctx: CamContext, geo: Resol
     const lines = scanlineIntervals(centre, op.angleDeg, stepover);
     // climb: uncut material on the cutter's right (M3), so the lines are visited from high to low across
     const ordered = op.direction === 'climb' ? [...lines].reverse() : lines;
-    const passes = ordered.flat().map((iv, k) => (op.oneWay || k % 2 === 0 ? { a: iv.a, b: iv.b } : { a: iv.b, b: iv.a }));
+    // both ways: every other scanline runs backwards, its intervals visited in the order that matches
+    const passes = ordered.flatMap((line, k) =>
+      op.oneWay || k % 2 === 0 ? line.map((iv) => ({ a: iv.a, b: iv.b })) : [...line].reverse().map((iv) => ({ a: iv.b, b: iv.a })));
     return { kind: 'zigzag', passes };
   };
 
@@ -183,7 +186,7 @@ export function faceToolpath(op: FaceOp, tool: Tool, ctx: CamContext, geo: Resol
       for (const poly of area.polys) for (const v of poly) { x0 = Math.min(x0, v.x); y0 = Math.min(y0, v.y); x1 = Math.max(x1, v.x); y1 = Math.max(y1, v.y); }
       const m = ctx.model;
       if (x0 < m.max.x && x1 > m.min.x && y0 < m.max.y && y1 > m.min.y) {
-        diag('warning', 'gouge', 'The facing depth goes below the model top', ref);
+        diag('warning', 'facing-depth', 'The facing depth goes below the model top', ref);
         depthWarned = true;
       }
     }
