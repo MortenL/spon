@@ -71,7 +71,7 @@ export function generateOperation(op: Operation, ctx: CamContext): OperationResu
       // inside its fitted circle lets the cone ride sagitta / tan(half-angle) deeper
       const tanHalf = op.type === 'chamfer' ? Math.tan(chamferGeometry(tool, op.width, op.tipOffset).halfAngle) : 0;
       const allowance = op.type === 'chamfer' ? (op.width + geo.sagitta) / tanHalf : 0;
-      const g = gougeCheck(toolpath, tool, ctx, { allowance, sagitta: geo.sagitta });
+      const g = gougeCheck(toolpath, tool, ctx, { allowance, sagitta: geo.sagitta, intended: res.intended });
       diagnostics.push(...g.diagnostics);
       return { ...base, ...res, diagnostics, toolpath, overlays: { ...overlays, gouges: g.gouges } };
     }

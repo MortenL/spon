@@ -4,6 +4,7 @@ import { nearestS, pathLength, pathStart, pointAt, reversePath, rotateStart } fr
 import type { Path2D, Vec2 } from '../../geometry/path2d';
 import type { Tool } from '../../tools/types';
 import type { CamContext } from '../context';
+import { endFrame } from '../features/slots';
 import type { ResolvedGeometry, ResolvedSlot } from '../features/resolve';
 import { resolveHeights, type ResolvedHeights } from '../heights';
 import type { CamCode, CamSeverity, SlotOp } from '../types';
@@ -53,6 +54,22 @@ export function slotToolpath(op: SlotOp, tool: Tool, ctx: CamContext, geo: Resol
       liftAcross(xy, h, safeZ);
       w.line({ ...xy, z }, plunge);
     }
+  };
+
+  /**
+   * endWall cuts reach the model wall, so the tool finishes inside the overcut. Before the final retract it feeds back along the end
+   * tangent, through ground the layers already cleared, until it is a tool radius clear of the wall: the retract is a rapid, and
+   * rapids are never excused as intended overcut.
+   */
+  const leaveEnds = (slot: ResolvedSlot, z: number) => {
+    if (op.squareEnds !== 'endWall' || slot.centreline.closed || !w.pos) return;
+    (['start', 'end'] as const).forEach((which) => {
+      if ((which === 'start' ? slot.startEnd : slot.endEnd) !== 'square' || !w.pos) return;
+      const { p, t } = endFrame(slot.centreline, which);
+      const a = (w.pos.x - p.x) * t.x + (w.pos.y - p.y) * t.y; // along the outward tangent from the wall
+      const back = a + r + margin;
+      if (a > -(r + margin) + 1e-9 && a < r) w.line({ x: w.pos.x - t.x * back, y: w.pos.y - t.y * back, z }, feed);
+    });
   };
 
   /** Dogbone reliefs at depth z, linked inside `region` (or by lifting) from wherever the tool is. */
@@ -106,14 +123,14 @@ export function slotToolpath(op: SlotOp, tool: Tool, ctx: CamContext, geo: Resol
     clearance = Math.max(clearance, h.clearance);
     const squareEnds = op.squareEnds ?? 'inside';
     const sr = st.strategy === 'toolWidth' ? 0 : op.stockRadial; // clarification 4
-    const cuts = slotCuts(slot, r, squareEnds, sr);
+    const cuts = slotCuts(slot, r, squareEnds, sr, margin);
     const centre = adjustCentreline(slot.centreline, cuts.start, cuts.end);
     if (!centre) { diag('error', 'offset-collapsed', 'The tool does not fit in this slot', slot.ref); continue; }
     if (squareEnds === 'inside' && hasSquareEnd(slot)) diag('warning', 'unmachined-area', 'Square slot ends keep the tool radius in their corners', slot.ref);
     const dn = st.strategy === 'toolWidth' ? 0 : slot.width / 2 - r - sr;
     if (op.squareEnds === 'dogbone' || op.squareEnds === 'endWall') {
       const passes: DogbonePass[] = [{ stock: sr, dn: st.strategy === 'toolWidth' ? 0 : Math.max(0, dn - margin), cuts }];
-      if (op.finishWalls && st.strategy !== 'toolWidth') passes.push({ stock: 0, dn: Math.max(0, slot.width / 2 - r - margin), cuts: slotCuts(slot, r, squareEnds, 0) });
+      if (op.finishWalls && st.strategy !== 'toolWidth') passes.push({ stock: 0, dn: Math.max(0, slot.width / 2 - r - margin), cuts: slotCuts(slot, r, squareEnds, 0, margin) });
       out.intended!.push(...overcutZones(slot, r, squareEnds, tol, passes));
     }
 
@@ -143,6 +160,7 @@ export function slotToolpath(op: SlotOp, tool: Tool, ctx: CamContext, geo: Resol
           if (w.pos && Math.hypot(w.pos.x - e.x, w.pos.y - e.y) < Math.hypot(w.pos.x - pathStart(cur).x, w.pos.y - pathStart(cur).y)) cur = reversePath(cur);
         });
       }
+      leaveEnds(slot, w.pos!.z);
       w.up(h.retract);
       continue;
     }
@@ -171,6 +189,7 @@ export function slotToolpath(op: SlotOp, tool: Tool, ctx: CamContext, geo: Resol
         dogbones(slot, cuts, dn - margin, sr, region, h, z, entryZ);
         prev = z;
       });
+      leaveEnds(slot, w.pos!.z);
       w.up(h.retract);
       if (op.finishWalls) finishWalls(slot, h, r);
       continue;
@@ -208,6 +227,7 @@ export function slotToolpath(op: SlotOp, tool: Tool, ctx: CamContext, geo: Resol
         dogbones(slot, cuts, dn - margin, sr, region, h, z, entryZ);
         prev = z;
       });
+      leaveEnds(slot, w.pos!.z);
       w.up(h.retract);
       if (op.finishWalls) finishWalls(slot, h, r);
     }
@@ -215,7 +235,7 @@ export function slotToolpath(op: SlotOp, tool: Tool, ctx: CamContext, geo: Resol
 
   /** One pass at the bottom along the final wall offset (stock 0), entering by a ramp from feed height as pockets do. */
   function finishWalls(slot: ResolvedSlot, h: ResolvedHeights, radius: number) {
-    const cuts = slotCuts(slot, radius, op.squareEnds ?? 'inside', 0);
+    const cuts = slotCuts(slot, radius, op.squareEnds ?? 'inside', 0, margin);
     const d = slot.width / 2 - radius - margin;
     const region = centreRegion(slot.centreline, cuts, d, tol);
     for (const path of regionLoops(region, climb, fitTol)) {

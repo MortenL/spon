@@ -10,10 +10,12 @@ export type EndCut = number | null;
 export interface SlotCuts { start: EndCut; end: EndCut }
 type SquareEnds = NonNullable<SlotOp['squareEnds']>;
 
-/** Plan clarification 6: round ends are not cut; open ends run out r + 1 mm; square ends stop at the wall (endWall) or r + stock inside it. */
-export function slotCuts(slot: Pick<ResolvedSlot, 'centreline' | 'startEnd' | 'endEnd'>, r: number, squareEnds: SquareEnds, stockRadial: number): SlotCuts {
+/**
+ * Plan clarification 6 (`pull` mm extra, so a square end cut inside its wall stops short of it by the same margin as the sides, and the tool
+ * never exactly touches the wall where the gouge check would see it): round ends are not cut; open ends run out r + 1 mm; square ends stop at the wall (endWall) or r + stock inside it. */
+export function slotCuts(slot: Pick<ResolvedSlot, 'centreline' | 'startEnd' | 'endEnd'>, r: number, squareEnds: SquareEnds, stockRadial: number, pull = 0): SlotCuts {
   if (slot.centreline.closed) return { start: null, end: null };
-  const cut = (e: SlotEnd): EndCut => (e === 'round' ? null : e === 'open' ? r + 1 : squareEnds === 'endWall' ? 0 : -(r + stockRadial));
+  const cut = (e: SlotEnd): EndCut => (e === 'round' ? null : e === 'open' ? r + 1 : squareEnds === 'endWall' ? 0 : -(r + stockRadial + pull));
   return { start: cut(slot.startEnd), end: cut(slot.endEnd) };
 }
 
