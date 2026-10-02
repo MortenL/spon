@@ -1,7 +1,7 @@
 import { applyCommands, camContext, createJob, pathFromPoints, segmentStart, setModel, setStock } from '@sponcam/core';
 import { describe, expect, it } from 'vitest';
 import type { ModelGeometry } from '@/state/store';
-import { contourKinds, openChains, toggleChainReverse, chainReversed } from './openChains';
+import { chamferRunsAsDrawn, contourKinds, openChains, toggleChainReverse, chainReversed } from './openChains';
 
 const geometry: ModelGeometry = {
   kind: 'drawing',
@@ -50,5 +50,16 @@ describe('open chains in the inspector', () => {
     expect(toggleChainReverse([ref(0, true), ref(1, true), ref(2, true)], [0, 1], 0)).toEqual([ref(0), ref(1), ref(2, true)]);
     expect(chainReversed([ref(0), ref(1, true)], [0, 1])).toBe(true);
     expect(chainReversed([ref(0), ref(1, true)], [0])).toBe(false);
+  });
+});
+
+describe('chamferRunsAsDrawn', () => {
+  it.each([
+    ['left', 'climb', true],
+    ['left', 'conventional', false],
+    ['right', 'climb', false],
+    ['right', 'conventional', true],
+  ] as const)('%s + %s -> %s', (side, dir, expected) => {
+    expect(chamferRunsAsDrawn(side, dir)).toBe(expected);
   });
 });

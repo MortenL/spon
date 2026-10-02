@@ -45,7 +45,7 @@ export function describeGeometry(job: Job, geometry: CamGeometry): GeometryCatal
       for (const r of tris) visited[r] = 1;
       const f = faceGeometry(ctx, tris);
       const ref = faceRefFromTriangle(geometry.mesh, model.blobId, t);
-      const loops = f.loops.map((l, index) => ({ index, kind: index === 0 ? 'outer' as const : 'hole' as const, length: pathLength(l), circle: index > 0 ? circleOf(l) : null }));
+      const loops = f.loops.map((l, index) => ({ index, kind: index === 0 ? 'outer' as const : 'hole' as const, length: pathLength(l), circle: index > 0 ? f.circles[index] : null }));
       out.faces.push({ ref, z: f.z, area: f.loops.reduce((a, l) => a + polyArea(flattenPath(l, 0.01)), 0), loops });
       for (const l of loops) {
         if (!l.circle) continue;

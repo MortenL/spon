@@ -4,6 +4,7 @@ import { writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { igesFile, stepFile } from './cadWriters.mjs';
+import { steppedData } from './steppedData.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -209,4 +210,10 @@ writeFileSync(join(here, 'two-bodies.step'), stepFile('two-bodies.step', [
   { name: 'Large block', origin: [30, 0, 0], size: [40, 20, 10] },
 ]));
 writeFileSync(join(here, 'box.iges'), igesFile('box.iges', { origin: [0, 0, 0], size: [20, 10, 5] }));
-console.log('Wrote box-20x10x5.stl, plate-pocket.stl, plate-mm.dxf, cam-part.dxf, box-hole.step, two-bodies.step and box.iges');
+console.log('Wrote box-20x10x5.stl, plate-pocket.stl, plate-mm.dxf, cam-part.dxf, box-hole.step, two-bodies.step, box.iges and stepped.stl');
+
+// stepped.stl: the slab with a boss from stepped.ts, written from the same vertex list
+const stepped = steppedData();
+const steppedTris = [];
+for (let t = 0; t < stepped.idx.length; t += 3) steppedTris.push([0, 1, 2].flatMap((k) => stepped.pos.slice(stepped.idx[t + k] * 3, stepped.idx[t + k] * 3 + 3)));
+writeFileSync(join(here, 'stepped.stl'), binaryStl(steppedTris, 'Spon fixture: 60 x 40 slab with a 20 x 20 boss'));

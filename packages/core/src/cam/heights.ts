@@ -7,6 +7,8 @@ export interface HeightInputs {
   contourZ: number | null;
   holeBottom: number | null;
   faceZ?: (ref: MeshFaceRef) => number | null;
+  /** Facing: an empty depth reads "Set the facing depth" rather than a generic order error. */
+  facing?: boolean;
 }
 
 const LABEL: Record<HeightName, string> = { clearance: 'Clearance', retract: 'Retract', feed: 'Feed', top: 'Top', bottom: 'Bottom' };
@@ -48,7 +50,7 @@ export function resolveHeights(h: Heights, ctx: CamContext, inputs: HeightInputs
   }
   if (errors.length) return { values: null, errors };
   const r = v as ResolvedHeights;
-  if (r.bottom >= r.top) errors.push('Bottom height must be below top height');
+  if (r.bottom >= r.top) errors.push(inputs.facing ? 'Set the facing depth (Heights → Bottom)' : 'Bottom height must be below top height');
   if (r.feed < r.top) errors.push('Feed height must not be below top height');
   if (r.retract < r.feed) errors.push('Retract height must not be below feed height');
   if (r.clearance < r.retract) errors.push('Clearance height must not be below retract height');

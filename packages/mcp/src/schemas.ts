@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const vec3Schema = z.strictObject({ x: z.number(), y: z.number(), z: z.number() });
 const vec3Partial = vec3Schema.partial();
 export const lengthUnitSchema = z.enum(['mm', 'in']);
-export const operationTypeSchema = z.enum(['profile', 'pocket', 'drill']);
+export const operationTypeSchema = z.enum(['profile', 'pocket', 'drill', 'face', 'chamfer']);
 export const dialectSchema = z.enum(['grbl', 'linuxcnc', 'fanuc']);
 export const machinePresetSchema = z.enum(['Hobby GRBL router', 'Generic VMC']);
 const delta = z.union([z.literal(-1), z.literal(1)]);
@@ -28,7 +28,7 @@ export const operationPatchSchema = z.strictObject({
   feeds: z.strictObject({ presetName: z.string().nullable(), rpm: z.number(), feed: z.number(), plungeFeed: z.number(), coolant }).partial(),
   heights: z.strictObject({ clearance: heightSpec, retract: heightSpec, feed: heightSpec, top: heightSpec, bottom: heightSpec }).partial(),
   geometry: z.array(geometryRefSchema),
-  side: z.enum(['outside', 'inside', 'on']),
+  side: z.enum(['outside', 'inside', 'on', 'auto']),
   openSide: z.enum(['left', 'on', 'right']),
   direction: z.enum(['climb', 'conventional']),
   stepdown: z.number(),
@@ -44,6 +44,14 @@ export const operationPatchSchema = z.strictObject({
   stepoverPct: z.number(),
   finishWalls: z.boolean(),
   finishFloor: z.boolean(),
+  area: z.enum(['stock', 'picked']),
+  overlap: z.number(),
+  pattern: z.enum(['zigzag', 'spiral']),
+  angleDeg: z.number(),
+  oneWay: z.boolean(),
+  finishStepoverPct: z.number(),
+  width: z.number(),
+  tipOffset: z.number(),
   cycle: z.enum(['drill', 'dwell', 'peck', 'chipbreak']),
   peck: z.number(),
   dwellSeconds: z.number(),

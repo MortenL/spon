@@ -1,5 +1,5 @@
 import {
-  camContext, type CamContext, circleOf, type DxfPathRef, drawingPath, drawingPathToProgram, flattenPath, type GeometryRef,
+  camContext, type CamContext, type DxfPathRef, drawingPath, drawingPathToProgram, flattenPath, type GeometryRef,
   HEIGHT_NAMES, type HeightName, type Job, offsetOpenPath, pathLength, pointAt, type LapPosition, type Operation, type OpOverlays, type Path2D, type ResolvedHeights,
   programContext, programOrigin, resolveFaceRef, type Vec2, type Vec3,
 } from '@sponcam/core';
@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from 'react';
 import * as THREE from 'three';
 import { runCommand } from '@/state/camView';
 import { type ModelGeometry, useApp } from '@/state/store';
-import { openChains } from '@/inspector/openChains';
+import { chamferRunsAsDrawn, openChains } from '@/inspector/openChains';
 import { regionShape } from './convert';
 import { noRaycast } from './SceneObjects';
 
@@ -36,10 +36,11 @@ export function CamOverlays() {
   return (
     <group position={[origin.x, origin.y, origin.z]}>
       <PickedGeometry job={job} geometry={geometry} op={op} />
-      {op.type === 'profile' && <OpenChainArrows job={job} geometry={geometry} op={op} />}
+      {(op.type === 'profile' || op.type === 'chamfer') && <OpenChainArrows job={job} geometry={geometry} op={op} />}
       {inspectorTab === 'heights' && summary?.heights && <HeightsPlanes job={job} geometry={geometry} heights={summary.heights} />}
       {op.type === 'profile' && summary && <TabHandles op={op} overlays={summary.overlays} origin={origin} />}
       {summary && <UnmachinedAreas overlays={summary.overlays} />}
+      {summary && <GougeMarkers overlays={summary.overlays} />}
     </group>
   );
 }
@@ -68,9 +69,11 @@ const ARROW_SIDE = 1.2;
 /** Direction arrows (and a dashed preview of the side cut) for the open lines of a profile. */
 function OpenChainArrows({ job, geometry, op }: { job: Job; geometry: ModelGeometry | null; op: Operation }) {
   const profile = op.type === 'profile' ? op : null;
-  const openSide = profile?.openSide ?? 'on';
+  const openSide = op.type === 'chamfer' ? 'on' : profile?.openSide ?? 'on'; // chamfer: arrow only, no side preview
   const stockRadial = profile?.stockRadial ?? 0;
   const finishPass = profile?.finishPass ?? false;
+  // a chamfer may cut against the drawn direction
+  const flip = op.type === 'chamfer' && !chamferRunsAsDrawn(op.openSide, op.direction);
   const toolDiameter = job.tools.find((t) => t.id === op.toolId)?.diameter ?? null;
   // only what the preview depends on: unrelated job edits do not recompute the offsets
   const items = useMemo(
@@ -79,7 +82,9 @@ function OpenChainArrows({ job, geometry, op }: { job: Job; geometry: ModelGeome
       const dashed = (c: { path: Path2D; z: number }, radius: number) =>
         (offsetOpenPath(c.path, openSide as 'left' | 'right', radius, 0.05)?.paths ?? []).map((p) => flattenPath(p, 0.05).map((q): Point3 => [q.x, q.y, c.z]));
       return openChains(op, ctx).map((c) => {
-        const { point, tangent } = pointAt(c.path, pathLength(c.path) / 2);
+        const at = pointAt(c.path, pathLength(c.path) / 2);
+        const point = at.point;
+        const tangent = flip ? { x: -at.tangent.x, y: -at.tangent.y } : at.tangent;
         const nx = -tangent.y, ny = tangent.x;
         const bx = point.x - tangent.x * ARROW_BACK, by = point.y - tangent.y * ARROW_BACK;
         const arrow: Point3[] = [
@@ -95,7 +100,7 @@ function OpenChainArrows({ job, geometry, op }: { job: Job; geometry: ModelGeome
       });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [op.geometry, openSide, stockRadial, finishPass, toolDiameter, job.model, job.stock, job.wcs, job.tolerance, geometry],
+    [op.geometry, openSide, flip, stockRadial, finishPass, toolDiameter, job.model, job.stock, job.wcs, job.tolerance, geometry],
   );
   return (
     <>
@@ -125,7 +130,7 @@ function refLoops(ctx: CamContext, ref: GeometryRef): Point3[][] {
   const loop = face.loops[ref.loop];
   if (!loop) return [];
   if (ref.kind === 'meshHole') {
-    const circle = circleOf(loop);
+    const circle = face.circles[ref.loop];
     if (circle) return [circlePoints(circle.center, circle.diameter / 2, face.z)];
   }
   return [closedLoopPoints(loop, face.z)];
@@ -281,6 +286,29 @@ function UnmachinedAreas({ overlays }: { overlays: OpOverlays }) {
             <Line key={i} points={outline} color={UNMACHINED_COLOR} lineWidth={1.5} raycast={noRaycast} />
           ))}
         </group>
+      ))}
+    </>
+  );
+}
+
+// -- gouge markers ---------------------------------------------------------
+
+const GOUGE_RADIUS = 0.6;
+const gougeGeometry = new THREE.SphereGeometry(1, 8, 6);
+const gougeMaterial = new THREE.MeshBasicMaterial({ color: UNMACHINED_COLOR });
+
+/** Small red spheres where the tool cuts into the model, the deepest one slightly larger. */
+function GougeMarkers({ overlays }: { overlays: OpOverlays }) {
+  const gouges = overlays.gouges ?? [];
+  const maxDepth = Math.max(...gouges.map((g) => g.depth));
+  const deepest = gouges.findIndex((g) => g.depth === maxDepth);
+  return (
+    <>
+      {gouges.map((g, i) => (
+        <mesh
+          key={i} data-testid={`gouge-marker-${i}`} position={[g.point.x, g.point.y, g.point.z]}
+          scale={i === deepest ? GOUGE_RADIUS * 1.5 : GOUGE_RADIUS} geometry={gougeGeometry} material={gougeMaterial} raycast={noRaycast}
+        />
       ))}
     </>
   );

@@ -35,7 +35,10 @@ export function connectedDxfRefs(ctx: CamContext, ref: DxfPathRef, hidden: Reado
   return chain.map((c) => c.ref);
 }
 
+const STOCK_FACING = 'Facing the stock needs no geometry; switch the area to Picked to pick';
+
 export function pickDxf(op: Operation, ctx: CamContext, q: Vec2, hidden: ReadonlySet<string>): { refs: DxfPathRef[] } | { error: string } {
+  if (op.type === 'face' && op.area === 'stock') return { error: STOCK_FACING };
   const g = ctx.geometry;
   if (!g || g.kind !== 'drawing') return { error: 'Nothing to pick here' };
   if (op.type === 'drill') {
@@ -60,21 +63,24 @@ export function pickDxf(op: Operation, ctx: CamContext, q: Vec2, hidden: Readonl
 }
 
 export function pickMesh(op: Operation, ctx: CamContext, tri: number, q: Vec2, alt: boolean): { refs: GeometryRef[] } | { error: string } {
+  if (op.type === 'face' && op.area === 'stock') return { error: STOCK_FACING };
   const g = ctx.geometry;
   if (!g || g.kind !== 'mesh' || !ctx.job.model) return { error: 'Nothing to pick here' };
   const face = faceRefFromTriangle(g.mesh, ctx.job.model.blobId, tri);
   const res = resolveFaceRef(ctx, face);
   if (!res.ok) return { error: res.message };
-  if (!alt || op.type === 'pocket') return { refs: [face] };
+  if (!alt || op.type === 'pocket' || op.type === 'face') return { refs: [face] };
   let best = -1;
   let bestD = Infinity;
   res.face.loops.forEach((loop, i) => {
-    if (op.type === 'drill' && (i === 0 || !circleOf(loop))) return;
+    if (op.type === 'drill' && (i === 0 || !res.face.circles[i])) return;
     const d = nearestS(loop, q).distance;
     if (d < bestD) { bestD = d; best = i; }
   });
   if (best < 0) return { error: 'This face has no round holes' };
-  return { refs: [op.type === 'drill' ? { kind: 'meshHole', face, loop: best } : { kind: 'meshLoop', face, loop: best }] };
+  // a chamfer treats a round inner loop as a hole (a countersink) and any other loop as an edge
+  const asHole = op.type === 'drill' || (op.type === 'chamfer' && best > 0 && res.face.circles[best] !== null);
+  return { refs: [asHole ? { kind: 'meshHole', face, loop: best } : { kind: 'meshLoop', face, loop: best }] };
 }
 
 export function applyPick(op: Operation, refs: readonly GeometryRef[]): GeometryRef[] {

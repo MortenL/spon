@@ -18,7 +18,7 @@ const { allPrograms } = await import('./programList');
 
 const parsed = { table: { count: 0 }, analysis: { summary: { totalSeconds: 3 }, diagnostics: [] }, interpretDiagnostics: [] } as never;
 const run = (names: string[]): CamRun => ({
-  results: [{ operationId: 'o1', diagnostics: [], heights: null, overlays: { tabs: [], laps: [], unmachined: [] }, hasToolpath: true }],
+  results: [{ operationId: 'o1', diagnostics: [], heights: null, overlays: { tabs: [], laps: [], unmachined: [], gouges: [] }, hasToolpath: true }],
   files: names.map((name) => ({ name, text: `(${name})\n`, operationIds: ['o1'], tools: [1], sections: [{ operationId: 'o1', firstLine: 0, lastLine: 0 }], parsed, postErrors: [] })),
   catalog: null,
 });

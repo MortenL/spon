@@ -7,11 +7,12 @@ export function contourKinds(op: Operation, ctx: CamContext): { closed: boolean;
 }
 
 /**
- * Open chains of a profile in the direction they will be cut along (any reverse applied). `ref` is the seed reference,
+ * Open chains of a profile or chamfer as drawn (any reverse applied); a profile cuts along them, a chamfer may run
+ * against them, see `chamferRunsAsDrawn`. `ref` is the seed reference,
  * `members` every reference that makes up the chain, `z` the height the drawing lies at.
  */
 export function openChains(op: Operation, ctx: CamContext): { ref: number; members: number[]; z: number; path: Path2D }[] {
-  if (op.type !== 'profile') return [];
+  if (op.type !== 'profile' && op.type !== 'chamfer') return [];
   return resolveGeometry(op, ctx).contours
     .filter((c) => !c.path.closed)
     .map((c) => ({ ref: c.ref, members: c.members ?? [c.ref], z: c.z, path: c.path }));
@@ -35,4 +36,9 @@ export function toggleChainReverse(geometry: readonly GeometryRef[], members: re
     }
     return !clear && i === seed ? { ...g, reverse: true as const } : g;
   });
+}
+
+/** Whether a chamfer cuts an open chain in its drawn direction. Mirrors `forward` in core's cam/ops/chamfer.ts. */
+export function chamferRunsAsDrawn(openSide: 'left' | 'right', direction: 'climb' | 'conventional'): boolean {
+  return (openSide === 'left') === (direction === 'climb');
 }

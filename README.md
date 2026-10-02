@@ -14,6 +14,7 @@ An MCP server lets Claude (or any MCP client) drive the same jobs: on `.spon` fi
 **Setup**
 - Orient the model by quarter turns, by laying a face flat, or by spinning it about Z.
 - Auto or fixed stock, and a work coordinate system (G54–G59) anchored to the corners, edges or centre of the stock, with an offset.
+- With no model, set the stock size yourself: a spoilboard or blank can be faced without importing anything.
 - Machine profiles (rapid speeds, acceleration, maximum feed) for cycle-time estimates and feed checks.
 
 **Operations**
@@ -23,6 +24,9 @@ An MCP server lets Claude (or any MCP client) drive the same jobs: on `.spon` fi
   - Ramp, helix or plunge entry; arc or line leads; and tabs you can drag in the viewport.
 - **Pocket** with islands, stepover, and wall and floor finishing; unmachined areas are shown.
 - **Drill**: plain drilling, dwell, peck and chip-break cycles, with a diameter filter.
+- **Face** the whole stock or picked areas, zig-zag or spiral, with overlap, stepdown and a finish pass.
+- **Chamfer** an edge or contour with a chamfer mill or V-bit, countersink a hole, or cut an open line to its left or right. You give the chamfer width, and Spon computes the depth from the tool's tip angle. A deburr button sets a small edge break.
+- **Gouge check.** Toolpaths are checked against the model (chamfer depth and the facets of round walls are allowed for). A cut into it is an error that keeps the toolpath, shows red markers in the viewport and blocks export.
 - Geometry is picked in the viewport, or from a catalog of faces, edge loops, holes and drawing contours.
 
 **Tools**
@@ -35,7 +39,7 @@ An MCP server lets Claude (or any MCP client) drive the same jobs: on `.spon` fi
 - Export refuses on errors. Warnings ask for confirmation.
 
 **Claude integration (MCP)**
-- `packages/mcp` is a local stdio MCP server with tools for jobs, import, setup, geometry, operations, generation, a PNG preview, export and the tool library.
+- `packages/mcp` is a local stdio MCP server with tools for jobs, import, setup, geometry, operations (profile, pocket, drill, face and chamfer), generation, a PNG preview, export and the tool library.
 - **Live mode.** Click **Claude** in the app's status bar, and Claude drives the job open in that tab. Each change is one undo step.
 - See [`packages/mcp/README.md`](packages/mcp/README.md).
 
@@ -92,12 +96,13 @@ More detail is in [`.claude/skills/spon-dev/SKILL.md`](.claude/skills/spon-dev/S
 | 3.2 | STEP and IGES import | Done |
 | 3.5 | MCP API: headless server and live bridge to the browser tab | Done |
 | 4.1 | SVG import, LinuxCNC tool tables, open-line profile sides | Done |
-| 4.2 | Facing, chamfer and slot operations | Next |
-| 4.3 | Engraving and V-carve | Planned |
-| 4.4 | Thread milling | Planned |
-| 4.5 | Automatic operation suggestions | Planned |
+| 4.2 | Facing, chamfer and the gouge check | Done |
+| 4.3 | Slots | Next |
+| 4.4 | Engraving and V-carve | Planned |
+| 4.5 | Thread milling | Planned |
+| 4.6 | Automatic operation suggestions | Planned |
 
-Later: adaptive and zig-zag clearing, rest machining, cutter-compensation output, material-removal simulation, Heidenhain and Siemens dialects, and 3D operations.
+Later: adaptive clearing, rest machining, cutter-compensation output, material-removal simulation, Heidenhain and Siemens dialects, and 3D operations.
 
 ## License
 

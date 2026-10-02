@@ -10,7 +10,7 @@ const base = (): ExportState => {
   const job = { ...createJob('My Part'), operations: [{ id: 'o', name: 'Pocket 1' }] as never };
   return {
     job,
-    camResults: { o: { operationId: 'o', diagnostics: [], heights: null, overlays: { tabs: [], laps: [], unmachined: [] }, hasToolpath: true } },
+    camResults: { o: { operationId: 'o', diagnostics: [], heights: null, overlays: { tabs: [], laps: [], unmachined: [], gouges: [] }, hasToolpath: true } },
     camFiles: [{ name: 'a.nc', blobId: 'gen:a.nc', operationIds: ['o'], sections: [], postErrors: [] }],
     programData: { 'gen:a.nc': { status: 'ready' as const, text: 'G0 X1\n', parsed: parsed(), error: null } },
   };

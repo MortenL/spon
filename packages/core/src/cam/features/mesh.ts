@@ -1,6 +1,6 @@
 import type { Adjacency } from '../../geometry/adjacency';
 import { type Mesh, triangleCount, triangleNormal, triangleVertices, vertexAt } from '../../geometry/mesh';
-import { fitArcs } from '../../geometry/offset/arcFit';
+import { type ArcFitStats, fitArcs } from '../../geometry/offset/arcFit';
 import { orientPath, polyArea, v2 } from '../../geometry/offset/pathOps';
 import type { Path2D, Vec2 } from '../../geometry/path2d';
 import { faceRegion } from '../../geometry/faces';
@@ -8,8 +8,13 @@ import { quatRotate } from '../../geometry/quat';
 import { v3dot, vec3 } from '../../geometry/vec3';
 import { type CamContext, toProgram } from '../context';
 import type { CamCode, MeshFaceRef } from '../types';
+import { circleOf } from './dxf';
 
 const COS_1DEG = Math.cos(Math.PI / 180);
+/** Mesh loop arcs may stray this far (mm) from the chords they replace. */
+const MAX_FIT_BULGE = 0.05;
+/** A coarse round loop is still one circle only while its facets stay this close (mm) to it. */
+const MAX_ROUND_BULGE = 0.1;
 
 export function faceRefFromTriangle(mesh: Mesh, blobId: string, tri: number): MeshFaceRef {
   const [a, b, c] = triangleVertices(mesh, tri);
@@ -56,6 +61,12 @@ export interface FaceGeometry {
   z: number;
   /** Loop 0 = outer (counter-clockwise); the others are holes (clockwise); program coordinates. */
   loops: Path2D[];
+  /** Per loop: the largest gap between a mesh chord and the arc fitted over it (mm); 0 for a loop without fitted arcs. */
+  sagittas: number[];
+  /** Per loop: the round hole it stands for, fitted to its vertices however coarse the faceting (null when it is not round). */
+  circles: ({ center: Vec2; diameter: number } | null)[];
+  /** Per loop: the largest gap between a mesh chord and `circles[k]` (mm); 0 when there is no circle. */
+  circleSagittas: number[];
 }
 
 export function faceGeometry(ctx: CamContext, tris: number[]): FaceGeometry {
@@ -66,8 +77,32 @@ export function faceGeometry(ctx: CamContext, tris: number[]): FaceGeometry {
   for (const loop of loops3) for (const p of loop) { zSum += p.z; n++; }
   const polys: Vec2[][] = loops3.map((loop) => loop.map((p) => v2(p.x, p.y)));
   const order = polys.map((p, i) => ({ i, area: Math.abs(polyArea(p)) })).sort((a, b) => b.area - a.area).map((o) => o.i);
-  const loops = order.map((i, k) => orientPath(fitArcs(polys[i], true, ctx.tolerance), k === 0));
-  return { tris, z: n ? zSum / n : 0, loops };
+  const sagittas: number[] = [];
+  const circles: ({ center: Vec2; diameter: number } | null)[] = [];
+  const circleSagittas: number[] = [];
+  const loops = order.map((i, k) => {
+    const stats: ArcFitStats = { sagitta: 0 };
+    let fitted = fitArcs(polys[i], true, ctx.tolerance, Math.max(MAX_FIT_BULGE, ctx.tolerance), stats);
+    // Hole recognition (drilling, countersinks, the catalog) accepts any full circle through the vertices, as before;
+    // only the milling path below is held to a small bulge.
+    const loose: ArcFitStats = { sagitta: 0 };
+    const whole = fitArcs(polys[i], true, ctx.tolerance, Infinity, loose);
+    const circle = circleOf(whole);
+    circles.push(circle);
+    circleSagittas.push(circle ? loose.sagitta : 0);
+    // A coarse but regular round loop (a 16-gon hole or boss: no chord turns more than 22.5 degrees) is still one circle.
+    // Anything coarser (an octagon, a square with chamfered corners, a big circle with long facets) stays a polygon, so the toolpath follows its walls.
+    if (fitted.segments.length !== 1 || fitted.segments[0].kind !== 'arc') {
+      const seg = whole.segments[0];
+      if (whole.segments.length === 1 && seg.kind === 'arc' && Math.abs(seg.sweep) > 2 * Math.PI - 1e-6 && loose.sagitta <= Math.min(1.02 * seg.radius * (1 - Math.cos(Math.PI / 16)) + ctx.tolerance, Math.max(MAX_ROUND_BULGE, ctx.tolerance))) {
+        fitted = whole;
+        stats.sagitta = loose.sagitta;
+      }
+    }
+    sagittas.push(stats.sagitta);
+    return orientPath(fitted, k === 0);
+  });
+  return { tris, z: n ? zSum / n : 0, loops, sagittas, circles, circleSagittas };
 }
 
 /** Checks a face reference against the loaded mesh and the current orientation, then builds its geometry. */

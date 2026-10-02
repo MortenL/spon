@@ -1,6 +1,6 @@
 import { OPERATION_LABELS, type Operation, type OperationType } from '@sponcam/core';
 import {
-  ArrowDown, ArrowUp, Check, Circle, CircleX, Copy, Loader2, Plus, Scissors, SquareDashed, Trash2, TriangleAlert,
+  ArrowDown, ArrowUp, Check, Circle, CircleX, Copy, Layers, Loader2, Plus, Scissors, SquareDashed, Trash2, Triangle, TriangleAlert,
 } from 'lucide-react';
 import type React from 'react';
 import { useState } from 'react';
@@ -12,8 +12,8 @@ import { appStore, useApp } from '@/state/store';
 import { formatDuration } from './format';
 import { PanelSection } from './PanelSection';
 
-const TYPE_ICON: Record<OperationType, typeof Scissors> = { profile: Scissors, pocket: SquareDashed, drill: Circle };
-const OP_TYPES: readonly OperationType[] = ['profile', 'pocket', 'drill'];
+const TYPE_ICON: Record<OperationType, typeof Scissors> = { profile: Scissors, pocket: SquareDashed, drill: Circle, face: Layers, chamfer: Triangle };
+const OP_TYPES: readonly OperationType[] = ['profile', 'pocket', 'drill', 'face', 'chamfer'];
 
 function StatusBadge({ status }: { status: OperationStatus }) {
   switch (status) {

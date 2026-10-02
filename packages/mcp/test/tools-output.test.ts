@@ -97,4 +97,22 @@ describe('output tools', () => {
     expect(text(one)).toContain('with 1 operation(s)');
     expect(data(one)).toEqual({ view: 'iso', operations: [op.id] });
   });
+
+  it('reports a gouge as an error and refuses to export it', async () => {
+    const { call, dir } = await connect({}, ['stepped.stl']);
+    await call('new_job', { name: 'Stepped' });
+    await call('import_model', { path: 'stepped.stl', units: 'mm' });
+    const faces = data(await call('describe_geometry', { filter: 'faces' })).faces as { handle: string; z: number }[];
+    const top = faces[0]; // faces are listed top down: the boss top
+    const added = await call('add_operation', { type: 'profile', tool: 'starter-flat-6', geometry: [top.handle + '.L0'] });
+    expect(added.isError).toBeFalsy();
+    const generated = data(await call('generate'));
+    expect(generated.operations[0].status).toBe('error');
+    expect(JSON.stringify(generated.operations[0].diagnostics)).toContain('gouge');
+    const blocked = await call('export_gcode', { dir: 'out' });
+    expect(blocked.isError).toBe(true);
+    expect(text(blocked)).toContain('Export blocked by errors:');
+    expect(text(blocked)).toContain('Cuts into the model by up to');
+    expect(existsSync(join(dir, 'out'))).toBe(false);
+  });
 });

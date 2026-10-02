@@ -47,7 +47,7 @@ export const tool6: Tool = {
 
 /** A ResolvedGeometry built by hand (contours, shapes or holes in program coordinates). */
 export function geoOf(parts: Partial<Pick<ResolvedGeometry, 'contours' | 'shapes' | 'holes'>>): ResolvedGeometry {
-  return { contours: [], shapes: [], holes: [], diagnostics: [], faceZ: () => null, ...parts };
+  return { contours: [], shapes: [], holes: [], diagnostics: [], sagitta: 0, faceZ: () => null, ...parts };
 }
 
 export type CutMove = Extract<Move, { kind: 'line' | 'arc' }>;
