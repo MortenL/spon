@@ -1,6 +1,6 @@
 import {
   type CamContext, circleOf, drawingPath, drawingPathToProgram, type DxfPathRef, dist2, faceRefFromTriangle, type GeometryRef,
-  nearestDxfPath, nearestS, type Operation, pathEnd, pathStart, resolveFaceRef, type Vec2,
+  type MeshSlotRef, meshSlots, nearestDxfPath, nearestS, offsetPolys, type Operation, pathEnd, pathStart, pointInPolys, resolveFaceRef, type Vec2,
 } from '@sponcam/core';
 import { sameRef } from '@/inspector/geometryLabels';
 
@@ -62,10 +62,20 @@ export function pickDxf(op: Operation, ctx: CamContext, q: Vec2, hidden: Readonl
   return { refs: raw?.closed ? [ref] : connectedDxfRefs(ctx, ref, hidden) };
 }
 
+/** The recognised slot whose outline, grown by 1 mm so its top edge, walls and floor all count, contains q. */
+export function pickSlot(ctx: CamContext, q: Vec2): MeshSlotRef | null {
+  for (const s of meshSlots(ctx)) if (pointInPolys(q, offsetPolys([s.outline], 1, 0.05))) return s.ref;
+  return null;
+}
+
 export function pickMesh(op: Operation, ctx: CamContext, tri: number, q: Vec2, alt: boolean): { refs: GeometryRef[] } | { error: string } {
   if (op.type === 'face' && op.area === 'stock') return { error: STOCK_FACING };
   const g = ctx.geometry;
   if (!g || g.kind !== 'mesh' || !ctx.job.model) return { error: 'Nothing to pick here' };
+  if (op.type === 'slot') {
+    const ref = pickSlot(ctx, q);
+    return ref ? { refs: [ref] } : { error: 'Click a slot, or pick drawn centrelines' };
+  }
   const face = faceRefFromTriangle(g.mesh, ctx.job.model.blobId, tri);
   const res = resolveFaceRef(ctx, face);
   if (!res.ok) return { error: res.message };

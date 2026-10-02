@@ -64,7 +64,7 @@ export function HeightsTab({ op }: { op: Operation }) {
                 data-testid={`height-${name}-from`} value={spec.from} className="h-8 rounded-md border bg-transparent px-2 text-sm"
                 onChange={(e) => setSpec({ from: e.target.value as HeightFrom })}
               >
-                {HEIGHT_FROM[name].map((f) => <option key={f} value={f} className="bg-background">{FROM_LABEL[f]}</option>)}
+                {HEIGHT_FROM[name].filter((f) => f !== 'slotBottom' || op.type === 'slot' || spec.from === f).map((f) => <option key={f} value={f} className="bg-background">{FROM_LABEL[f]}</option>)}
               </select>
             </label>
             <LengthField label="Offset" valueMm={spec.offset} testId={`height-${name}-offset`} onCommit={(v) => setSpec({ offset: v })} />

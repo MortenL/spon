@@ -19,9 +19,12 @@ export function toggleRef(list: readonly GeometryRef[], ref: GeometryRef): Geome
 export function refLabel(ref: GeometryRef, catalog: GeometryCatalog | null, layers: string[] | null, units: LengthUnit): string {
   const L = (mm: number) => formatLength(mm, units);
   if (ref.kind === 'dxfPath') return `${layers?.[ref.layer] ?? `Layer ${ref.layer + 1}`} · path ${ref.path + 1}`;
+  if (ref.kind === 'meshSlot') {
+    const slot = catalog?.slots.find((s) => sameRef(s.ref, ref));
+    return slot ? `Slot ${L(slot.width)} × ${L(slot.length)}` : 'Slot (not found)';
+  }
   const faceRef = ref.kind === 'meshFace' ? ref : ref.face;
   const face = catalog?.faces.find((f) => sameFace(f.ref, faceRef));
-  if (ref.kind === 'meshSlot') return 'Slot';
   if (!face) return ref.kind === 'meshFace' ? 'Face (not found)' : ref.kind === 'meshHole' ? 'Hole (not found)' : 'Edge loop (not found)';
   if (ref.kind === 'meshFace') return `Face at Z ${L(face.z)}`;
   const circle = face.loops[ref.loop]?.circle;

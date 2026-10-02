@@ -118,6 +118,19 @@ export function GeometryTab({ op }: { op: Operation }) {
               );
             })}
 
+          {geometry?.kind === 'mesh' && op.type === 'slot' &&
+            (catalog?.slots ?? []).map((s, i) => {
+              const checked = op.geometry.some((r) => sameRef(r, s.ref));
+              return (
+                <label key={i} data-testid={`catalog-slot-${i}`} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" className="accent-primary" checked={checked} onChange={() => setGeometry(toggleRef(op.geometry, s.ref))} />
+                  <span className="min-w-0 flex-1 truncate">
+                    {formatLength(s.width, units)} × {formatLength(s.length, units)} · {s.through ? 'through' : `blind to Z ${formatLength(s.bottom, units)}`} · {s.ends.join(' / ')}
+                  </span>
+                </label>
+              );
+            })}
+
           {geometry?.kind === 'mesh' && (op.type === 'drill' || op.type === 'chamfer') &&
             (catalog?.holes ?? []).map((h, i) => {
               const checked = op.geometry.some((r) => sameRef(r, h.ref));
