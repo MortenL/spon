@@ -6,6 +6,13 @@ import { arcSlotPts, obroundPts, rectPts } from './fixtures/terraced.mjs';
 
 const plate = rectPts(0, 0, 100, 60);
 /** A loop as faceGeometry gives it: points fitted with lines and arcs. */
+/** The centreline end points of a straight shape, rounded to 0.01 mm. */
+const endPts = (s: NonNullable<ReturnType<typeof slotShapeOf>>) => {
+  const g = s.centreline.segments[0] as { from: { x: number; y: number }; to: { x: number; y: number } };
+  return [g.from, g.to].map((q) => [Math.round(q.x * 10) / 10 + 0, Math.round(q.y * 10) / 10 + 0]);
+};
+/** The centreline end points, ordered by x. */
+const ends = (s: NonNullable<ReturnType<typeof slotShapeOf>>) => endPts(s).sort((a, b) => a[0] - b[0]);
 const loopOf = (pts: number[][]) => fitArcs(pts.map(([x, y]) => ({ x, y })), true, 0.01);
 
 /** The closed slots of the plate's top face (raw z 10), recognised loop by loop. */
@@ -23,8 +30,21 @@ describe('slot shapes', () => {
     const ob = slotShapeOf(loopOf(obroundPts(10, 30, 0, 8)), 0.01)!;
     expect(ob).toMatchObject({ kind: 'line', ends: ['round', 'round'] });
     expect(ob.width).toBeCloseTo(8, 3);
+    expect(ends(ob)).toEqual([[10, 0], [30, 0]]);
     const r = slotShapeOf(loopOf(rectPts(0, 0, 40, 8)), 0.01)!;
     expect(r).toMatchObject({ kind: 'line', ends: ['square', 'square'] });
+  });
+
+  it('fits a slot with one round and one square end', () => {
+    const pts: number[][] = [[0, 0], [30, 0]];
+    for (let i = 1; i < 32; i++) { const a = -Math.PI / 2 + (Math.PI * i) / 32; pts.push([30 + 4 * Math.cos(a), 4 + 4 * Math.sin(a)]); }
+    pts.push([30, 8], [0, 8]);
+    const s = slotShapeOf(loopOf(pts), 0.01)!;
+    expect(s.ends.slice().sort()).toEqual(['round', 'square']);
+    const [a, b] = endPts(s);
+    const [sq, rd] = s.ends[0] === 'square' ? [a, b] : [b, a];
+    expect(sq).toEqual([0, 4]);
+    expect(rd).toEqual([30, 4]);
   });
 
   it('fits an arc slot about its centre', () => {
@@ -41,6 +61,13 @@ describe('slot shapes', () => {
     expect(slotShapeOf(P(rectPts(0, 0, 12, 8)), 0.01)).toBeNull();
     expect(slotShapeOf(P(Array.from({ length: 64 }, (_, i) => [5 * Math.cos((i * Math.PI) / 32), 5 * Math.sin((i * Math.PI) / 32)])), 0.01)).toBeNull();
     expect(slotShapeOf(P([[0, 0], [40, 0], [38, 8], [2, 8]]), 0.01)).toBeNull();
+    expect(slotShapeOf(P([[3, 0], [40, 0], [40, 8], [0, 8], [0, 3]]), 0.01)).toBeNull(); // 3 mm corner chamfer
+    expect(slotShapeOf(P([[0, 0], [40, 0], [39.3, 8], [0.7, 8]]), 0.01)).toBeNull(); // 0.7 mm end offsets
+    // an arc slot with one slanted (non-radial) square end
+    const slant: number[][] = [];
+    for (let i = 0; i <= 32; i++) { const a = Math.PI / 4 + (Math.PI / 2) * (i / 32); slant.push([34 * Math.cos(a), 34 * Math.sin(a)]); }
+    for (let i = 32; i >= 0; i--) { const a = Math.PI / 4 + 0.15 + (Math.PI / 2 - 0.15) * (i / 32); slant.push([26 * Math.cos(a), 26 * Math.sin(a)]); }
+    expect(slotShapeOf(P(slant), 0.01)).toBeNull();
   });
 });
 
@@ -53,7 +80,11 @@ describe('closed slots in models', () => {
   });
 
   it('finds a coarse 16-sided-end obround (review focus 2)', () => {
-    expect(topSlots([{ poly: obroundPts(30, 50, 30, 10, 8), z: 4 }])).toHaveLength(1);
+    const found = topSlots([{ poly: obroundPts(30, 50, 30, 10, 8), z: 4 }]);
+    expect(found).toHaveLength(1);
+    expect(found[0].ends).toEqual(['round', 'round']);
+    expect(found[0].shape.width).toBeCloseTo(10, 1);
+    expect(ends(found[0].shape).map(([x, y]) => [x - 5, y - 5])).toEqual([[30, 30], [50, 30]]);
   });
 
   it('finds a blind arc slot and its floor', () => {
@@ -66,6 +97,7 @@ describe('closed slots in models', () => {
     const [s] = topSlots([{ poly: rectPts(20, 26, 60, 34), z: 7 }]);
     expect(s).toMatchObject({ ends: ['square', 'square'], through: false });
     expect(s.shape.width).toBeCloseTo(8, 6);
+    expect(ends(s.shape).map(([x, y]) => [x - 5, y - 5])).toEqual([[20, 30], [60, 30]]);
   });
 
   it('skips stepped floors, short rectangles and round holes', () => {

@@ -17,6 +17,21 @@ const MAX_DEV = 0.1;
 /** The fitted shape's area must match the loop's within this fraction. */
 const AREA_TOL = 0.02;
 const MIN_WIDTH = 0.5;
+/** Spacing (mm) of the extra points tested along each edge of a loop. */
+const EDGE_STEP = 1;
+const minOf = (a: number[]) => a.reduce((m, x) => (x < m ? x : m), Infinity);
+const maxOf = (a: number[]) => a.reduce((m, x) => (x > m ? x : m), -Infinity);
+
+/** The closed loop's points with each edge subdivided (at least its midpoint, then every EDGE_STEP mm), so edges are tested too. */
+function densify(pts: Vec2[]): Vec2[] {
+  const out: Vec2[] = [];
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length];
+    const n = Math.max(2, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / EDGE_STEP));
+    for (let k = 0; k < n; k++) out.push({ x: a.x + ((b.x - a.x) * k) / n, y: a.y + ((b.y - a.y) * k) / n });
+  }
+  return out;
+}
 type Kind = 'round' | 'square';
 const END_COMBOS: readonly [Kind, Kind][] = [['round', 'round'], ['round', 'square'], ['square', 'round'], ['square', 'square']];
 
@@ -53,7 +68,10 @@ function straightSlot(pts: Vec2[], area: number, axis: Extract<Segment, { kind: 
   const n = { x: -t.y, y: t.x };
   const u = pts.map((p) => p.x * t.x + p.y * t.y);
   const v = pts.map((p) => p.x * n.x + p.y * n.y);
-  const umin = Math.min(...u), umax = Math.max(...u), vmin = Math.min(...v), vmax = Math.max(...v);
+  const umin = minOf(u), umax = maxOf(u), vmin = minOf(v), vmax = maxOf(v);
+  const dense = densify(pts);
+  const du = dense.map((p) => p.x * t.x + p.y * t.y);
+  const dv = dense.map((p) => p.x * n.x + p.y * n.y);
   const w = vmax - vmin, h = w / 2, vc = (vmin + vmax) / 2;
   if (w < MIN_WIDTH) return null;
   for (const [ks, ke] of END_COMBOS) {
@@ -62,10 +80,10 @@ function straightSlot(pts: Vec2[], area: number, axis: Extract<Segment, { kind: 
     if ((ks === 'square' || ke === 'square') && umax - umin < 2 * w) continue;
     const expect = (tb - ta) * w + (ks === 'round' ? (Math.PI * h * h) / 2 : 0) + (ke === 'round' ? (Math.PI * h * h) / 2 : 0);
     if (Math.abs(expect - area) > AREA_TOL * expect) continue;
-    const ok = pts.every((_, i) => {
-      const y = v[i] - vc;
-      const side = u[i] >= ta - 1e-9 && u[i] <= tb + 1e-9 ? Math.abs(Math.abs(y) - h) : Infinity;
-      return Math.min(side, endDist(ta - u[i], y, ks, h), endDist(u[i] - tb, y, ke, h)) <= dev;
+    const ok = dense.every((_, i) => {
+      const y = dv[i] - vc;
+      const side = du[i] >= ta - 1e-9 && du[i] <= tb + 1e-9 ? Math.abs(Math.abs(y) - h) : Infinity;
+      return Math.min(side, endDist(ta - du[i], y, ks, h), endDist(du[i] - tb, y, ke, h)) <= dev;
     });
     if (!ok) continue;
     const at = (uu: number): Vec2 => ({ x: t.x * uu + n.x * vc, y: t.y * uu + n.y * vc });
@@ -76,7 +94,7 @@ function straightSlot(pts: Vec2[], area: number, axis: Extract<Segment, { kind: 
 
 function arcSlot(pts: Vec2[], area: number, c: Vec2, dev: number): SlotShape | null {
   const rho = pts.map((p) => Math.hypot(p.x - c.x, p.y - c.y));
-  const inner = Math.min(...rho), outer = Math.max(...rho);
+  const inner = minOf(rho), outer = maxOf(rho);
   const w = outer - inner, h = w / 2, rc = (inner + outer) / 2;
   if (w < MIN_WIDTH || inner < 1e-3) return null;
   const ang = pts.map((p) => Math.atan2(p.y - c.y, p.x - c.x)).sort((a, b) => a - b);
@@ -85,6 +103,7 @@ function arcSlot(pts: Vec2[], area: number, c: Vec2, dev: number): SlotShape | n
   for (let i = 1; i < ang.length; i++) if (ang[i] - ang[i - 1] > gap) { gap = ang[i] - ang[i - 1]; from = ang[i]; }
   if (gap < 1e-3) return null;
   const span = 2 * Math.PI - gap;
+  const dense = densify(pts);
   const cap = Math.asin(Math.min(1, h / rc)); // a round end's cap reaches this far (as seen from c) past its centre
   for (const [ks, ke] of END_COMBOS) {
     const pa = from + (ks === 'round' ? cap : 0), pb = from + span - (ke === 'round' ? cap : 0);
@@ -94,12 +113,13 @@ function arcSlot(pts: Vec2[], area: number, c: Vec2, dev: number): SlotShape | n
     const expect = sweep * rc * w + (ks === 'round' ? (Math.PI * h * h) / 2 : 0) + (ke === 'round' ? (Math.PI * h * h) / 2 : 0);
     if (Math.abs(expect - area) > AREA_TOL * expect) continue;
     const P = (a: number): Vec2 => ({ x: c.x + rc * Math.cos(a), y: c.y + rc * Math.sin(a) });
-    const ok = pts.every((p, i) => {
+    const ok = dense.every((p) => {
+      const rhoP = Math.hypot(p.x - c.x, p.y - c.y);
       // the point angle from pa, in (-(2π - sweep)/2, sweep + (2π - sweep)/2]: negative before the start, > sweep past the end
       let phi = Math.atan2(p.y - c.y, p.x - c.x) - pa;
       phi = ((phi % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
       if (phi > sweep + (2 * Math.PI - sweep) / 2) phi -= 2 * Math.PI;
-      const side = phi >= -1e-9 && phi <= sweep + 1e-9 ? Math.min(Math.abs(rho[i] - inner), Math.abs(rho[i] - outer)) : Infinity;
+      const side = phi >= -1e-9 && phi <= sweep + 1e-9 ? Math.min(Math.abs(rhoP - inner), Math.abs(rhoP - outer)) : Infinity;
       const endAt = (a: number, kind: Kind, before: boolean) => {
         const q = P(a);
         const tx = -Math.sin(a) * (before ? -1 : 1), ty = Math.cos(a) * (before ? -1 : 1); // outward along the centreline
@@ -131,8 +151,8 @@ export interface RecognisedSlot {
 function slotFloor(ctx: CamContext, outline: Vec2[], top: number): { bottom: number; through: boolean } | null {
   const zs = upFacingCentroids(ctx).filter((c) => c.z < top - 1e-6 && pointInPolys(c, [outline])).map((c) => c.z);
   if (!zs.length) return { bottom: ctx.stock?.min.z ?? ctx.model?.min.z ?? top, through: true };
-  const hi = Math.max(...zs);
-  return hi - Math.min(...zs) <= 0.01 ? { bottom: hi, through: false } : null;
+  const hi = maxOf(zs);
+  return hi - minOf(zs) <= 0.01 ? { bottom: hi, through: false } : null;
 }
 
 /** Inner loop `loop` of face `f` as a closed slot (spec §4.1), or null. */
