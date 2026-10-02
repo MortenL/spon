@@ -1,9 +1,16 @@
 import { pointInPolys } from '../../geometry/offset/clipper';
-import { flattenPath, pathLength, pointAt, polyArea, segmentLength } from '../../geometry/offset/pathOps';
+import { faceRegion } from '../../geometry/faces';
+import { triangleCount, triangleNormal } from '../../geometry/mesh';
+import { flattenPath, pathEnd, pathLength, pathStart, pointAt, polyArea, segmentLength } from '../../geometry/offset/pathOps';
 import type { Path2D, Segment, Vec2 } from '../../geometry/path2d';
+import { quatRotate } from '../../geometry/quat';
 import type { CamContext } from '../context';
+import { dropCutter } from '../gouge/dropCutter';
+import { meshIndex } from '../gouge/meshIndex';
+import type { ToolShape } from '../gouge/toolShape';
 import type { MeshFaceRef, MeshSlotRef, SlotEnd } from '../types';
-import { type FaceGeometry, upFacingCentroids } from './mesh';
+import type { ResolvedSlot } from './resolve';
+import { type FaceGeometry, faceGeometry, faceRefFromTriangle, upFacingCentroids } from './mesh';
 
 /** An end of an open path: its point, the unit tangent pointing out of the path there, and that tangent turned +90°. */
 export function endFrame(path: Path2D, which: 'start' | 'end'): { p: Vec2; t: Vec2; n: Vec2 } {
@@ -165,3 +172,99 @@ export function closedSlotOf(ctx: CamContext, f: FaceGeometry, face: MeshFaceRef
   if (!floor) return null;
   return { ref: { kind: 'meshSlot', face, loop }, shape, ends: shape.ends, top: f.z, ...floor, outline };
 }
+
+const COS_1DEG = Math.cos(Math.PI / 180);
+const PROBE: ToolShape = { radius: 0.05, kind: 'torus', cornerRadius: 0, halfAngle: 0 };
+
+/** The highest mesh Z under a 0.05 mm disc at a program XY (−Infinity where there is none); null without a mesh. */
+export function surfaceProbe(ctx: CamContext): ((x: number, y: number) => number) | null {
+  const index = meshIndex(ctx, 1);
+  return index ? (x, y) => dropCutter(index, PROBE, x, y, ctx.tolerance) : null;
+}
+
+/** Face `f` as the floor of an open slot (spec §4.2): a strip with walls along both sides and at least one end without one. */
+export function openSlotOf(ctx: CamContext, f: FaceGeometry, face: MeshFaceRef): RecognisedSlot | null {
+  const shape = slotShapeOf(f.loops[0], ctx.tolerance);
+  const probe = shape && surfaceProbe(ctx);
+  if (!shape || !probe) return null;
+  const h = shape.width / 2;
+  const L = pathLength(shape.centreline);
+  let top = -Infinity;
+  for (const s of [0.25, 0.5, 0.75]) {
+    const { point: p, tangent: t } = pointAt(shape.centreline, s * L);
+    for (const side of [1, -1]) {
+      const z = probe(p.x - t.y * side * (h + 0.5), p.y + t.x * side * (h + 0.5));
+      if (!(z > f.z + 0.1)) return null; // no wall rising beside the floor here
+      top = Math.max(top, z);
+    }
+  }
+  const ends = shape.ends.map((kind, i) => {
+    const { p, t } = endFrame(shape.centreline, i === 0 ? 'start' : 'end');
+    const reach = (kind === 'round' ? h : 0) + 1;
+    return probe(p.x + t.x * reach, p.y + t.y * reach) > f.z + 1e-3 ? kind : 'open';
+  }) as [SlotEnd, SlotEnd];
+  if (!ends.includes('open')) return null;
+  return { ref: { kind: 'meshSlot', face }, shape, ends, top, bottom: f.z, through: false, outline: flattenPath(f.loops[0], Math.max(ctx.tolerance, 0.01)) };
+}
+
+const cache = new WeakMap<CamContext, RecognisedSlot[]>();
+
+/** Every recognised slot of the placed mesh, face by face in the order describeGeometry visits them. */
+export function meshSlots(ctx: CamContext): RecognisedSlot[] {
+  const hit = cache.get(ctx);
+  if (hit) return hit;
+  const out: RecognisedSlot[] = [];
+  const g = ctx.geometry, model = ctx.job.model;
+  if (g && g.kind === 'mesh' && model && ctx.placement) {
+    const visited = new Uint8Array(triangleCount(g.mesh));
+    for (let t = 0; t < visited.length; t++) {
+      if (visited[t] || quatRotate(ctx.placement.rotation, triangleNormal(g.mesh, t)).z < COS_1DEG) continue;
+      const tris = faceRegion(g.mesh, g.adjacency, t);
+      for (const r of tris) visited[r] = 1;
+      out.push(...faceSlots(ctx, faceGeometry(ctx, tris), faceRefFromTriangle(g.mesh, model.blobId, t)));
+    }
+  }
+  cache.set(ctx, out);
+  return out;
+}
+
+/** The closed slots in a face's inner loops and the open slot it is the floor of. */
+export function faceSlots(ctx: CamContext, f: FaceGeometry, face: MeshFaceRef): RecognisedSlot[] {
+  const out: RecognisedSlot[] = [];
+  for (let k = 1; k < f.loops.length; k++) {
+    const s = closedSlotOf(ctx, f, face, k);
+    if (s) out.push(s);
+  }
+  const open = openSlotOf(ctx, f, face);
+  if (open) out.push(open);
+  return out;
+}
+
+export interface CatalogSlot {
+  ref: MeshSlotRef;
+  kind: 'line' | 'arc';
+  /** Centreline ends, program coordinates. */
+  start: Vec2;
+  end: Vec2;
+  center?: Vec2;
+  radius?: number;
+  length: number;
+  width: number;
+  ends: [SlotEnd, SlotEnd];
+  top: number;
+  bottom: number;
+  through: boolean;
+}
+
+export function catalogSlot(s: RecognisedSlot): CatalogSlot {
+  const cl = s.shape.centreline;
+  const seg = cl.segments[0];
+  return {
+    ref: s.ref, kind: s.shape.kind, start: pathStart(cl), end: pathEnd(cl), ...(seg.kind === 'arc' ? { center: seg.center, radius: seg.radius } : {}),
+    length: pathLength(cl), width: s.shape.width, ends: s.ends, top: s.top, bottom: s.bottom, through: s.through,
+  };
+}
+
+export const resolvedSlotOf = (s: RecognisedSlot, ref: number): ResolvedSlot => ({
+  centreline: s.shape.centreline, width: s.shape.width, startEnd: s.ends[0], endEnd: s.ends[1], top: s.top, bottom: s.bottom, through: s.through, ref,
+});

@@ -5,6 +5,7 @@ import type { CamCode, CamDiagnostic, MeshFaceRef, Operation, SlotEnd } from '..
 import { chainPaths, nestLoops, type Shape } from './chain';
 import { circleOf, drawingPath } from './dxf';
 import { type FaceGeometry, holeBottom, resolveFaceRef } from './mesh';
+import { closedSlotOf, openSlotOf, resolvedSlotOf } from './slots';
 
 /** `members` (open chains only): the geometry indices of every reference that makes up the chain; `ref` is its seed. */
 export interface ResolvedContour {
@@ -72,11 +73,18 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
       return;
     }
     const faceRef = g.kind === 'meshFace' ? g : g.face;
-    const slotOnly = () => fail(i, 'wrong-geometry', 'Slots need a centreline or a recognised slot');
     const r = face(faceRef);
     if (!r.ok) return fail(i, r.code, r.message);
     const f = r.face;
-    if (g.kind === 'meshSlot' || op.type === 'slot') return slotOnly();
+    if (g.kind === 'meshSlot' || op.type === 'slot') {
+      if (g.kind !== 'meshSlot') return fail(i, 'wrong-geometry', 'Slots need a centreline or a recognised slot');
+      if (op.type !== 'slot') return fail(i, 'wrong-geometry', 'A recognised slot can only be cut by a Slot operation');
+      const rec = g.loop === undefined ? openSlotOf(ctx, f, g.face) : closedSlotOf(ctx, f, g.face, g.loop);
+      if (!rec) return fail(i, 'ref-changed', 'The picked slot is no longer a slot');
+      usesLoops(f, [g.loop ?? 0]);
+      out.slots.push(resolvedSlotOf(rec, i));
+      return;
+    }
     if (g.kind === 'meshFace') {
       if (op.type !== 'drill' && op.type !== 'pocket') usesLoops(f, [0]);
       if (op.type === 'pocket') usesLoops(f, f.loops.keys());

@@ -34,7 +34,7 @@ describe('HandleMap', () => {
     const map = new HandleMap();
     map.assign(plateCatalog());
     expect(map.size).toBeGreaterThan(0);
-    map.assign({ faces: [], holes: [], contours: [] });
+    map.assign({ faces: [], holes: [], contours: [], slots: [] });
     expect(() => map.resolve('F1')).toThrow('Unknown handle F1');
     map.assign(plateCatalog());
     map.clear();

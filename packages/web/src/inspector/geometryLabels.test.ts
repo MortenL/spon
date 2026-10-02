@@ -5,7 +5,7 @@ import { refLabel, sameRef, toggleRef } from './geometryLabels';
 const face = { kind: 'meshFace' as const, blobId: 'm', seed: 7, normal: { x: 0, y: 0, z: 1 }, point: { x: 0, y: 0, z: 0 } };
 const catalog = {
   faces: [{ ref: face, z: -4, area: 600, loops: [{ index: 0, kind: 'outer' as const, length: 100, circle: null }, { index: 1, kind: 'hole' as const, length: 18.8, circle: { center: { x: 30, y: 30 }, diameter: 6 } }] }],
-  contours: [], holes: [{ ref: { kind: 'meshHole' as const, face, loop: 1 }, center: { x: 30, y: 30 }, diameter: 6, top: -4, bottom: -7, through: false }],
+  contours: [], slots: [], holes: [{ ref: { kind: 'meshHole' as const, face, loop: 1 }, center: { x: 30, y: 30 }, diameter: 6, top: -4, bottom: -7, through: false }],
 };
 
 describe('geometry labels', () => {
