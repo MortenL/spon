@@ -87,8 +87,8 @@ Worked out from the job and the loaded geometry by one pure function, `setupStat
 - CAM icons have no dot. Problems with operations already show in the operation rows.
 
 ### 4.5 Setup summary
-- At the bottom of the Operations, Post and Programs panels, one line summarises the setup, e.g. `bracket.step · Z up · 110 × 70 × 22 · origin top-left (G54)`.
-  - The parts are: the model's file name; the up axis from the orientation (`Z up`, `Y up` and so on, or `custom` when the rotation is not a 90° multiple); the stock size in display units; and the origin anchor in words plus the work offset.
+- At the bottom of the Operations, Post and Programs panels, one line summarises the setup, e.g. `bracket.step · Z up · 110 × 70 × 22 mm · origin front-left, top (G54)`.
+  - The parts are: the model's file name; the up axis from the orientation (`Z up`, `Y up` and so on, or `custom` when the rotation is not a 90° multiple); the stock size in display units; and the origin anchor in words (front/back and left/right as seen from above, then top or bottom, plus `+ offset` when an offset is set) and the work offset.
   - With no model: `No model · fixed stock 600 × 400 × 18 · origin …`, or just `No model` when the stock isn't fixed.
 - Each part is a button that opens its setup panel. A part whose step is in `attention` is shown in amber.
 - `data-testid="setup-summary"`; the parts are `setup-summary-<id>`.
