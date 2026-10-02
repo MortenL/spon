@@ -215,7 +215,9 @@ describe('gouge check: coarse polygons stay polygons', () => {
     const nx = q[1] - p[1], ny = p[0] - q[0], l = Math.hypot(nx, ny);
     return { nx: nx / l, ny: ny / l, d: ((p[0] - 20) * nx + (p[1] - 20) * ny) / l };
   });
-  const cases: [string, [number, number][], number][] = [['octagon', oct, 3], ['chamfered square', chamSq, 3], ['chamfered square', chamSq, 10]];
+  // a regular 16-gon of R 15: round enough to look like a circle, but its facets sit 0.29 mm inside it
+  const gon16 = Array.from({ length: 16 }, (_, i): [number, number] => [20 + 15 * Math.cos((i * Math.PI) / 8), 20 + 15 * Math.sin((i * Math.PI) / 8)]);
+  const cases: [string, [number, number][], number][] = [['octagon', oct, 3], ['chamfered square', chamSq, 3], ['chamfered square', chamSq, 10], ['coarse 16-gon', gon16, 3]];
   it.each(cases)('%s pocket, %i mm tool: follows the polygon, no gouge', (_name, poly, dia) => {
     const { geometry, job, floor } = pocketBlock(poly);
     const tool = { ...t3, diameter: dia };
