@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { offsetPolys, pathFromPoints, type Path2D, type Toolpath } from '../src';
+import { offsetPolys, pathFromPoints, pathStart, type Path2D, type Toolpath } from '../src';
 import { tool6 } from './fixtures/camSetup';
 import { cutsAt, drawingSlotJob, plunges, slotOutline, sweptAt, uncovered } from './fixtures/slotSetup';
 
@@ -66,6 +66,61 @@ describe('wider slots', () => {
     const { tp } = drawingSlotJob([straight], { width: 16, ...bottom });
     expect(tp!.moves.some((m) => m.kind === 'arc' && m.to.z < 0 && m.to.z > -1 + 1e-6)).toBe(true);
   });
+});
+
+describe('trochoidal slots', () => {
+  const troch = { width: 10, strategy: 'trochoidal', trochoidal: { stepPct: 10 }, ...bottom };
+  const circles = (tp: Toolpath) => tp.moves.flatMap((m, i) => {
+    const prev = tp.moves[i - 1];
+    const p = prev && prev.kind !== 'cycle' ? prev.to : undefined;
+    return m.kind === 'arc' && p && Math.hypot(m.to.x - p.x, m.to.y - p.y) < 1e-9 && Math.abs(m.to.z - p.z) < 1e-9 ? [{ c: m.center, r: Math.hypot(p.x - m.center.x, p.y - m.center.y), z: m.to.z }] : [];
+  });
+
+  for (const [name, path] of [['straight', straight], ['arc', arc], ['freeform', freeform], ['ring', ring]] as const) {
+    it(`clears a ${name} slot with loops no more than one step apart`, () => {
+      const r = drawingSlotJob([path], troch);
+      expectExactSlot(r, 10);
+      const cs = circles(r.tp!).filter((c) => Math.abs(c.z + 3) < 1e-6);
+      expect(cs.length).toBeGreaterThan(5);
+      for (const c of cs) expect(Math.abs(c.r - 2)).toBeLessThan(0.02); // R = width/2 - r, less the fitting margin
+      for (let i = 1; i < cs.length; i++) expect(Math.hypot(cs[i].c.x - cs[i - 1].c.x, cs[i].c.y - cs[i - 1].c.y)).toBeLessThanOrEqual(0.6 + 1e-6);
+    }, 60_000);
+  }
+
+  it('cuts in layers no deeper than the flutes, with no rapid inside a layer', () => {
+    const { tp, diagnostics } = drawingSlotJob([straight], { ...troch, heights: { bottom: { from: 'stockTop', offset: -30 } } });
+    expect(diagnostics.map((d) => d.code)).not.toContain('stepdown-exceeds-flute');
+    expect(new Set(circles(tp!).map((c) => c.z.toFixed(3)))).toEqual(new Set(['-15.000', '-30.000']));
+    const loopsAt = (z: number) => tp!.moves.map((m, i) => ({ m, i })).filter(({ m }) => m.kind === 'arc' && Math.abs(m.to.z - z) < 1e-6).map(({ i }) => i);
+    for (const z of [-15, -30]) {
+      const idx = loopsAt(z);
+      expect(tp!.moves.slice(idx[0], idx[idx.length - 1]).filter((m) => m.kind === 'rapid')).toEqual([]);
+    }
+  });
+
+  it('refuses a slot no wider than the tool', () => {
+    expect(drawingSlotJob([straight], { ...troch, width: 6 }).diagnostics.map((d) => d.message)).toContain('Trochoidal needs a slot wider than the tool');
+  });
+});
+
+describe('several slots in one operation', () => {
+  it('travels from one slot to the next at the retract height', () => {
+    const second = pathFromPoints([{ x: 0, y: 40 }, { x: 40, y: 40 }], false);
+    const heights = { bottom: { from: 'stockTop', offset: -3 }, feed: { from: 'stockTop', offset: 2 }, retract: { from: 'stockTop', offset: 10 }, clearance: { from: 'stockTop', offset: 15 } };
+    const job = drawingSlotJob([straight, second], { width: 6, stepdown: 1, heights });
+    const { tp } = job;
+    const y2 = pathStart(job.program(1)).y;
+    // the first rapid that moves sideways to the second slot (the second slot) starts and ends at or above retract height
+    const i = tp!.moves.findIndex((m, k) => m.kind === 'rapid' && k > 0 && Math.abs(m.to.y - y2) < 1e-6);
+    expect((tp!.moves[i - 1] as { to: { z: number } }).to.z).toBeGreaterThanOrEqual(10 - 1e-9);
+    expect((tp!.moves[i] as { to: { z: number } }).to.z).toBeGreaterThanOrEqual(10 - 1e-9);
+  });
+});
+
+describe('multi-ring wider slots', () => {
+  for (const [name, path] of [['straight', straight], ['arc', arc]] as const) {
+    it(`cuts a ${name} slot 20 mm wide exactly`, () => expectExactSlot(drawingSlotJob([path], { width: 20, ...bottom }), 20));
+  }
 });
 
 describe('slot errors', () => {

@@ -62,3 +62,47 @@ export function centreRegion(path: Path2D, cuts: SlotCuts, d: number, tol: numbe
   if (cuts.end !== null) region = differencePolys(region, [capBox(centre, 'end', d + 1)]);
   return region;
 }
+
+/**
+ * Dogbone moves (clarification 7) for every square end cut inside the wall: from each corner `q` of the tool-centre
+ * region at half-width `dn`, straight towards the wall corner (inset by the radial stock) until the tool's edge
+ * reaches it, at `tip`.
+ */
+export function dogboneCorners(slot: ResolvedSlot, r: number, stockRadial: number, dn: number, cuts: SlotCuts): { q: Vec2; tip: Vec2 }[] {
+  const out: { q: Vec2; tip: Vec2 }[] = [];
+  (['start', 'end'] as const).forEach((which) => {
+    const cut = which === 'start' ? cuts.start : cuts.end;
+    const kind = which === 'start' ? slot.startEnd : slot.endEnd;
+    if (kind !== 'square' || cut === null || cut >= 0) return;
+    const { p, t, n } = endFrame(slot.centreline, which);
+    for (const side of [-1, 1]) {
+      const q = { x: p.x + t.x * cut + n.x * side * dn, y: p.y + t.y * cut + n.y * side * dn };
+      const half = slot.width / 2 - stockRadial;
+      const c = { x: p.x - t.x * stockRadial + n.x * side * half, y: p.y - t.y * stockRadial + n.y * side * half };
+      const len = Math.hypot(c.x - q.x, c.y - q.y);
+      const go = len - r;
+      if (go <= 1e-6) continue;
+      out.push({ q, tip: { x: q.x + ((c.x - q.x) * go) / len, y: q.y + ((c.y - q.y) * go) / len } });
+    }
+  });
+  return out;
+}
+
+/** Tool-centre zones where a square end is cut past its wall by choice (clarification 8), one per end. */
+export function overcutZones(slot: ResolvedSlot, r: number, squareEnds: SquareEnds, tol: number): { zone: Poly[]; message: string }[] {
+  if (squareEnds === 'inside' || slot.centreline.closed) return [];
+  const out: { zone: Poly[]; message: string }[] = [];
+  const half = slot.width / 2;
+  (['start', 'end'] as const).forEach((which) => {
+    if ((which === 'start' ? slot.startEnd : slot.endEnd) !== 'square') return;
+    const { p, t, n } = endFrame(slot.centreline, which);
+    const at = (a: number, b: number) => ({ x: p.x + t.x * a + n.x * b, y: p.y + t.y * a + n.y * b });
+    if (squareEnds === 'endWall') {
+      out.push({ zone: [[at(-(r + tol), -half), at(tol, -half), at(tol, half), at(-(r + tol), half)]], message: `Square slot end cut past the model wall by up to ${r.toFixed(2)} mm, as chosen` });
+    } else {
+      const disc = (c: Vec2): Poly => Array.from({ length: 32 }, (_, i) => ({ x: c.x + (r + 2 * tol) * Math.cos((i * Math.PI) / 16), y: c.y + (r + 2 * tol) * Math.sin((i * Math.PI) / 16) }));
+      out.push({ zone: [disc(at(0, -half)), disc(at(0, half))], message: `Square slot end cut past the model wall by up to ${(r * (1 - Math.SQRT1_2)).toFixed(2)} mm, as chosen` });
+    }
+  });
+  return out;
+}

@@ -1,8 +1,8 @@
 import type { CamCode, SlotOp } from '../types';
 import { fitArcs } from '../../geometry/offset/arcFit';
 import type { Poly } from '../../geometry/offset/clipper';
-import { orientPath, pathLength, polyArea, reversePath } from '../../geometry/offset/pathOps';
-import type { Path2D } from '../../geometry/path2d';
+import { orientPath, pathLength, pointAt, polyArea, reversePath } from '../../geometry/offset/pathOps';
+import type { Path2D, Vec2 } from '../../geometry/path2d';
 import { emitLap, type MoveWriter } from './writer';
 
 
@@ -54,4 +54,14 @@ export function emitRampOpen(w: MoveWriter, path: Path2D, zFrom: number, zTo: nu
 /** Closed tool paths around a region: outer boundaries counter-clockwise for climb (an M3 spindle), holes the other way. */
 export function regionLoops(polys: readonly Poly[], climb: boolean, fitTol: number): Path2D[] {
   return polys.map((poly) => orientPath(fitArcs(poly, true, fitTol, fitTol), (polyArea(poly) > 0) === climb));
+}
+
+/** Loop centres along `path`, evenly spaced no more than `step` apart from start to end, each with the path's left normal there. */
+export function trochoidCentres(path: Path2D, step: number): { p: Vec2; n: Vec2 }[] {
+  const L = pathLength(path);
+  const N = Math.max(1, Math.ceil(L / step - 1e-9));
+  return Array.from({ length: N + 1 }, (_, k) => {
+    const a = pointAt(path, (L * k) / N);
+    return { p: a.point, n: { x: -a.tangent.y, y: a.tangent.x } };
+  });
 }

@@ -31,7 +31,9 @@ function arcPoints(from: Vec2, m: Arc): Vec2[] {
   let sweep = m.ccw ? a1 - a0 : a0 - a1;
   sweep = ((sweep % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
   if (sweep < 1e-9) sweep = 2 * Math.PI;
-  const n = Math.max(8, Math.ceil(sweep / 0.02));
+  // 0.02 rad, or coarser on small circles (chord error 0.002 mm): trochoidal slots have hundreds of tiny loops
+  const da = Math.max(0.02, 2 * Math.acos(Math.max(0, 1 - 0.002 / Math.max(r, 1e-6))));
+  const n = Math.max(8, Math.ceil(sweep / da));
   return Array.from({ length: n + 1 }, (_, i) => {
     const a = a0 + ((m.ccw ? 1 : -1) * sweep * i) / n;
     return { x: m.center.x + r * Math.cos(a), y: m.center.y + r * Math.sin(a) };
