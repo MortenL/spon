@@ -34,6 +34,7 @@ Before claiming a change works: run the focused tests for the files you touched,
 
 ## Rules that are easy to break
 
+- The root `README.md` is kept current: a change that adds, removes or changes a user-visible feature, a command, a package or a milestone's status updates the README in the same branch (Features, Getting started, Development or Status and roadmap).
 - `@sponcam/core` must not import React, three.js or DOM-only APIs (its tsconfig lib is `ES2022` + `WebWorker`).
 - Stored lengths are mm, stored angles degrees; convert only at the UI boundary (`formatLength` / `parseLength`).
 - Job changes go through pure functions in `core/src/job/update.ts` and the store's `commit()` so undo works.
