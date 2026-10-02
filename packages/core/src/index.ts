@@ -60,6 +60,8 @@ export * from './cam/ops/output';
 export * from './cam/ops/profile';
 export * from './cam/ops/pocket';
 export * from './cam/ops/drill';
+export * from './cam/ops/face';
+export * from './geometry/offset/scanline';
 export * from './cam/generate';
 export * from './post/format';
 export * from './post/dialects';

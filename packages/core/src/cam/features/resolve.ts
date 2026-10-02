@@ -62,12 +62,14 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
     const f = r.face;
     if (g.kind === 'meshFace') {
       if (op.type === 'profile') out.contours.push({ path: f.loops[0], z: f.z, ref: i });
+      else if (op.type === 'face') out.shapes.push({ shape: { outer: f.loops[0], islands: [] }, z: f.z, ref: i });
       else if (op.type === 'pocket') out.shapes.push({ shape: { outer: f.loops[0], islands: f.loops.slice(1) }, z: f.z, ref: i });
       else for (let k = 1; k < f.loops.length; k++) holeFromLoop(f, k, i);
       return;
     }
     const path = f.loops[g.loop];
     if (!path) return fail(i, 'ref-missing', 'The picked edge loop no longer exists');
+    if (g.kind === 'meshHole' && op.type === 'face') return fail(i, 'open-contour', 'Facing needs closed areas');
     if (g.kind === 'meshHole' || op.type === 'drill') {
       if (!holeFromLoop(f, g.loop, i)) fail(i, 'ref-changed', 'The picked loop is not a round hole');
       return;
@@ -99,7 +101,7 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
         });
       } else {
         for (const shape of nestLoops(closed, ctx.tolerance)) out.shapes.push({ shape, z: drawingZ, ref: firstRef });
-        if (open.length) fail(firstRef, 'open-contour', 'Pockets need closed contours; open chains are skipped');
+        if (open.length) fail(firstRef, 'open-contour', op.type === 'face' ? 'Facing needs closed areas' : 'Pockets need closed contours; open chains are skipped');
       }
     }
   }

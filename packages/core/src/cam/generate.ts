@@ -2,6 +2,7 @@ import type { Job } from '../job/types';
 import { camContext, type CamContext, type CamGeometry } from './context';
 import { resolveGeometry } from './features/resolve';
 import { drillToolpath } from './ops/drill';
+import { faceToolpath } from './ops/face';
 import { emptyOverlays, type OpOutput } from './ops/output';
 import { pocketToolpath } from './ops/pocket';
 import { profileToolpath } from './ops/profile';
@@ -51,12 +52,14 @@ export function generateOperation(op: Operation, ctx: CamContext): OperationResu
     base.key = operationKey(op, ctx.job);
     const tool = ctx.job.tools.find((t) => t.id === op.toolId);
     if (!tool) return err('no-tool', 'Choose a tool for this operation');
-    if (!op.geometry.length) return err('no-geometry', 'Pick geometry for this operation');
-    const geo = resolveGeometry(op, ctx);
+    if (!op.geometry.length && !(op.type === 'face' && op.area === 'stock')) return err('no-geometry', 'Pick geometry for this operation');
+    // facing the whole stock top needs no geometry; stale references are ignored
+    const geo = resolveGeometry(op.type === 'face' && op.area === 'stock' ? { ...op, geometry: [] } : op, ctx);
     const res =
       op.type === 'profile' ? profileToolpath(op, tool, ctx, geo)
       : op.type === 'pocket' ? pocketToolpath(op, tool, ctx, geo)
       : op.type === 'drill' ? drillToolpath(op, tool, ctx, geo)
+      : op.type === 'face' ? faceToolpath(op, tool, ctx, geo)
       : notImplemented(op);
     const diagnostics: CamDiagnostic[] = [...geo.diagnostics, ...res.diagnostics];
     const warn = (code: CamDiagnostic['code'], message: string) => diagnostics.push({ operationId: op.id, severity: 'warning', code, message });
