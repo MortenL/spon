@@ -365,5 +365,6 @@ export function PassesTab({ op }: { op: Operation }) {
   if (op.type === 'pocket') return <PocketPasses op={op} />;
   if (op.type === 'drill') return <DrillPasses op={op} />;
   if (op.type === 'face') return <FacePasses op={op} />;
+  if (op.type === 'slot') return null;
   return <ChamferPasses op={op} />;
 }

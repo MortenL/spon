@@ -127,6 +127,7 @@ function refLoops(ctx: CamContext, ref: GeometryRef): Point3[][] {
   if (!res.ok) return [];
   const { face } = res;
   if (ref.kind === 'meshFace') return face.loops.map((loop) => closedLoopPoints(loop, face.z));
+  if (ref.kind === 'meshSlot') return []; // drawn by a later task
   const loop = face.loops[ref.loop];
   if (!loop) return [];
   if (ref.kind === 'meshHole') {

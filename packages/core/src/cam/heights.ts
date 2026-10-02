@@ -6,6 +6,8 @@ export interface HeightInputs {
   /** Z of the contour, hole top or face being machined. */
   contourZ: number | null;
   holeBottom: number | null;
+  /** Bottom of the recognised slot being cut (null for drawn centrelines). */
+  slotBottom?: number | null;
   faceZ?: (ref: MeshFaceRef) => number | null;
   /** Facing: an empty depth reads "Set the facing depth" rather than a generic order error. */
   facing?: boolean;
@@ -39,6 +41,7 @@ export function resolveHeights(h: Heights, ctx: CamContext, inputs: HeightInputs
       }
       case 'origin': return 0;
       case 'holeBottom': return inputs.holeBottom ?? need(name, 'a hole');
+      case 'slotBottom': return inputs.slotBottom ?? need(name, 'a recognised slot');
       case 'top': return v.top ?? null;
       case 'feed': return v.feed ?? null;
       case 'retract': return v.retract ?? null;

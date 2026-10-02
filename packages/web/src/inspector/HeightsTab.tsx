@@ -10,7 +10,7 @@ const COLOR: Record<HeightName, string> = { clearance: '#f97316', retract: '#84c
 const NAME_LABEL: Record<HeightName, string> = { clearance: 'Clearance', retract: 'Retract', feed: 'Feed', top: 'Top', bottom: 'Bottom' };
 const FROM_LABEL: Record<HeightFrom, string> = {
   stockTop: 'Stock top', stockBottom: 'Stock bottom', modelTop: 'Model top', modelBottom: 'Model bottom',
-  contour: 'Selected contour', face: 'Picked face', origin: 'WCS origin (absolute)', holeBottom: 'Hole bottom',
+  contour: 'Selected contour', face: 'Picked face', origin: 'WCS origin (absolute)', holeBottom: 'Hole bottom', slotBottom: 'Slot bottom',
   retract: 'Retract height', feed: 'Feed height', top: 'Top height',
 };
 

@@ -226,3 +226,27 @@ describe('operation patch validation', () => {
     expect(patch('f', { stepdown: Infinity })).toThrow('stepdown must be greater than 0');
   });
 });
+
+describe('slot operations', () => {
+  it('adds them with defaults and validates their fields', () => {
+    let job = applyCommand(withTool(), { type: 'addOperation', opType: 'slot', toolId: 't6', id: 's' });
+    expect(job.operations[0]).toMatchObject({
+      type: 'slot', name: 'Slot 1', strategy: 'auto', width: 6, direction: 'climb', stepoverPct: 45, stockRadial: 0, stockAxial: 0,
+      finishWalls: false, trochoidal: { stepPct: 10 }, squareEnds: null, entry: { mode: 'auto' },
+    });
+    job = applyCommand(job, { type: 'updateOperation', id: 's', patch: { squareEnds: 'dogbone', strategy: 'trochoidal', trochoidal: { stepPct: 15 } } });
+    expect(job.operations[0]).toMatchObject({ squareEnds: 'dogbone', strategy: 'trochoidal', trochoidal: { stepPct: 15 } });
+    job = applyCommand(job, { type: 'updateOperation', id: 's', patch: { squareEnds: null } });
+    expect((job.operations[0] as { squareEnds: unknown }).squareEnds).toBeNull();
+    expect(() => applyCommand(job, { type: 'updateOperation', id: 's', patch: { strategy: 'zigzag' } as never })).toThrow('strategy must be one of auto, toolWidth, wider, trochoidal');
+    expect(() => applyCommand(job, { type: 'updateOperation', id: 's', patch: { squareEnds: 'flat' } as never })).toThrow('squareEnds must be one of inside, endWall, dogbone');
+    expect(() => applyCommand(job, { type: 'updateOperation', id: 's', patch: { width: 0 } })).toThrow('width must be greater than 0');
+    expect(() => applyCommand(job, { type: 'updateOperation', id: 's', patch: { trochoidal: { stepPct: 0 } } })).toThrow('trochoidal.stepPct must be in (0, 100]');
+    expect(() => applyCommand(job, { type: 'updateOperation', id: 's', patch: { side: 'inside' } as never })).toThrow('"side" does not apply to a slot operation');
+  });
+
+  it('defaults the bottom to the slot bottom on models and 3 mm below the stock top on drawings', () => {
+    expect(defaultHeights('slot', 'mesh').bottom).toEqual({ from: 'slotBottom', offset: 0 });
+    expect(defaultHeights('slot', 'drawing').bottom).toEqual({ from: 'stockTop', offset: -3 });
+  });
+});

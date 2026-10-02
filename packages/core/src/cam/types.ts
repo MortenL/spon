@@ -2,7 +2,7 @@ import type { Vec2 } from '../geometry/path2d';
 import type { Vec3 } from '../geometry/vec3';
 
 export type Coolant = 'off' | 'flood' | 'mist';
-export type OperationType = 'profile' | 'pocket' | 'drill' | 'face' | 'chamfer';
+export type OperationType = 'profile' | 'pocket' | 'drill' | 'face' | 'chamfer' | 'slot';
 
 /** A planar face of the mesh, in model-local (raw, pre-orientation) coordinates. */
 export interface MeshFaceRef { kind: 'meshFace'; blobId: string; seed: number; normal: Vec3; point: Vec3 }
@@ -12,10 +12,13 @@ export interface DxfPathRef { kind: 'dxfPath'; blobId: string; layer: number; pa
 export interface MeshLoopRef { kind: 'meshLoop'; face: MeshFaceRef; loop: number }
 /** An inner loop of a face that fits a circle. */
 export interface MeshHoleRef { kind: 'meshHole'; face: MeshFaceRef; loop: number }
-export type GeometryRef = DxfPathRef | MeshFaceRef | MeshLoopRef | MeshHoleRef;
+export type SlotEnd = 'round' | 'square' | 'open';
+/** A recognised slot: with `loop`, inner loop `loop` of the up-facing face around it (a closed slot); without, `face` is its floor (an open slot). */
+export interface MeshSlotRef { kind: 'meshSlot'; face: MeshFaceRef; loop?: number }
+export type GeometryRef = DxfPathRef | MeshFaceRef | MeshLoopRef | MeshHoleRef | MeshSlotRef;
 
 export type HeightFrom =
-  | 'stockTop' | 'stockBottom' | 'modelTop' | 'modelBottom' | 'contour' | 'face' | 'origin' | 'holeBottom'
+  | 'stockTop' | 'stockBottom' | 'modelTop' | 'modelBottom' | 'contour' | 'face' | 'origin' | 'holeBottom' | 'slotBottom'
   | 'retract' | 'feed' | 'top';
 export interface HeightSpec { from: HeightFrom; offset: number; face?: MeshFaceRef }
 export interface Heights { clearance: HeightSpec; retract: HeightSpec; feed: HeightSpec; top: HeightSpec; bottom: HeightSpec }
@@ -27,7 +30,7 @@ export const HEIGHT_FROM: Readonly<Record<HeightName, readonly HeightFrom[]>> = 
   retract: ['stockTop', 'modelTop', 'origin', 'feed'],
   feed: ['stockTop', 'modelTop', 'origin', 'top'],
   top: ['stockTop', 'modelTop', 'contour', 'face', 'origin'],
-  bottom: ['stockTop', 'stockBottom', 'modelTop', 'modelBottom', 'contour', 'face', 'origin', 'holeBottom'],
+  bottom: ['stockTop', 'stockBottom', 'modelTop', 'modelBottom', 'contour', 'face', 'origin', 'holeBottom', 'slotBottom'],
 };
 
 export interface Feeds { presetName: string | null; rpm: number; feed: number; plungeFeed: number; coolant: Coolant }
@@ -116,15 +119,34 @@ export interface ChamferOp extends OperationBase {
   /** 0 = one pass. */
   stepdown: number;
 }
-export type Operation = ProfileOp | PocketOp | DrillOp | FaceOp | ChamferOp;
+export interface SlotOp extends OperationBase {
+  type: 'slot';
+  strategy: 'auto' | 'toolWidth' | 'wider' | 'trochoidal';
+  /** Width of slots cut along drawn centrelines; recognised slots bring their own. */
+  width: number;
+  /** Wider and trochoidal passes only. */
+  direction: 'climb' | 'conventional';
+  stepdown: number;
+  /** Wider: % of the tool diameter between racetrack loops. */
+  stepoverPct: number;
+  stockRadial: number;
+  stockAxial: number;
+  finishWalls: boolean;
+  entry: EntrySettings;
+  /** Trochoidal: % of the tool diameter the loop centre moves per loop. */
+  trochoidal: { stepPct: number };
+  /** How square ends of recognised slots are cut; null = not chosen yet (an error when a picked slot has one). */
+  squareEnds: 'inside' | 'endWall' | 'dogbone' | null;
+}
+export type Operation = ProfileOp | PocketOp | DrillOp | FaceOp | ChamferOp | SlotOp;
 
 type FieldsOf<T> = T extends unknown ? Omit<T, 'id' | 'type'> : never;
 /** The type of field K over every operation type that has it (a union where the types differ). */
 type FieldValue<K extends PropertyKey> = FieldsOf<Operation> extends infer F ? (F extends unknown ? (K extends keyof F ? F[K] : never) : never) : never;
-type AllKeys = keyof (FieldsOf<ProfileOp> & FieldsOf<PocketOp> & FieldsOf<DrillOp> & FieldsOf<FaceOp> & FieldsOf<ChamferOp>);
+type AllKeys = keyof (FieldsOf<ProfileOp> & FieldsOf<PocketOp> & FieldsOf<DrillOp> & FieldsOf<FaceOp> & FieldsOf<ChamferOp> & FieldsOf<SlotOp>);
 /** Any operation field; object-valued fields are merged one level deep. */
 export type OperationPatch = {
-  [K in AllKeys]?: K extends 'heights' ? Partial<Heights> : K extends 'feeds' | 'entry' | 'leads' | 'tabs' ? Partial<FieldValue<K>> : FieldValue<K>;
+  [K in AllKeys]?: K extends 'heights' ? Partial<Heights> : K extends 'feeds' | 'entry' | 'leads' | 'tabs' | 'trochoidal' ? Partial<FieldValue<K>> : FieldValue<K>;
 };
 
 // ── toolpaths ────────────────────────────────────────────────────────────
@@ -154,7 +176,8 @@ export type CamSeverity = 'error' | 'warning';
 export type CamCode =
   | 'no-tool' | 'no-geometry' | 'ref-missing' | 'ref-changed' | 'face-not-horizontal' | 'open-contour' | 'no-stock'
   | 'heights-invalid' | 'offset-collapsed' | 'tool-too-large' | 'tool-undersize' | 'entry-plunge' | 'unmachined-area'
-  | 'tab-skipped' | 'stepdown-exceeds-flute' | 'feed-exceeds-machine' | 'tool-number-duplicate' | 'bend-rounded' | 'gouge' | 'facing-depth' | 'wrong-tool' | 'internal';
+  | 'tab-skipped' | 'stepdown-exceeds-flute' | 'feed-exceeds-machine' | 'tool-number-duplicate' | 'bend-rounded' | 'gouge' | 'facing-depth' | 'wrong-tool'
+  | 'slot-width-mismatch' | 'slot-too-narrow' | 'slot-ends-unset' | 'slot-overcut' | 'wrong-geometry' | 'internal';
 export interface CamDiagnostic {
   operationId: string;
   severity: CamSeverity;

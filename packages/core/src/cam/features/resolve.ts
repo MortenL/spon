@@ -1,7 +1,7 @@
 import { orientPath, reversePath } from '../../geometry/offset/pathOps';
 import type { Path2D, Vec2 } from '../../geometry/path2d';
 import { type CamContext, drawingPathToProgram } from '../context';
-import type { CamCode, CamDiagnostic, MeshFaceRef, Operation } from '../types';
+import type { CamCode, CamDiagnostic, MeshFaceRef, Operation, SlotEnd } from '../types';
 import { chainPaths, nestLoops, type Shape } from './chain';
 import { circleOf, drawingPath } from './dxf';
 import { type FaceGeometry, holeBottom, resolveFaceRef } from './mesh';
@@ -14,10 +14,14 @@ export interface ResolvedContour {
 }
 export interface ResolvedShape { shape: Shape; z: number; ref: number }
 export interface ResolvedHole { center: Vec2; diameter: number; top: number; bottom: number; through: boolean; ref: number }
+export interface ResolvedSlot {
+  centreline: Path2D; width: number; startEnd: SlotEnd; endEnd: SlotEnd; top: number; bottom: number | null; through: boolean; ref: number;
+}
 export interface ResolvedGeometry {
   contours: ResolvedContour[];
   shapes: ResolvedShape[];
   holes: ResolvedHole[];
+  slots: ResolvedSlot[];
   diagnostics: CamDiagnostic[];
   /** Largest chord sagitta (mm) of the arcs fitted to the mesh loops this operation uses; 0 without any. */
   sagitta: number;
@@ -27,7 +31,7 @@ export interface ResolvedGeometry {
 
 export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometry {
   const out: ResolvedGeometry = {
-    contours: [], shapes: [], holes: [], diagnostics: [], sagitta: 0,
+    contours: [], shapes: [], holes: [], slots: [], diagnostics: [], sagitta: 0,
     faceZ: (ref) => {
       const r = resolveFaceRef(ctx, ref);
       return r.ok ? r.face.z : null;
@@ -68,9 +72,11 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
       return;
     }
     const faceRef = g.kind === 'meshFace' ? g : g.face;
+    const slotOnly = () => fail(i, 'wrong-geometry', 'Slots need a centreline or a recognised slot');
     const r = face(faceRef);
     if (!r.ok) return fail(i, r.code, r.message);
     const f = r.face;
+    if (g.kind === 'meshSlot' || op.type === 'slot') return slotOnly();
     if (g.kind === 'meshFace') {
       if (op.type !== 'drill' && op.type !== 'pocket') usesLoops(f, [0]);
       if (op.type === 'pocket') usesLoops(f, f.loops.keys());

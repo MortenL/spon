@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const vec3Schema = z.strictObject({ x: z.number(), y: z.number(), z: z.number() });
 const vec3Partial = vec3Schema.partial();
 export const lengthUnitSchema = z.enum(['mm', 'in']);
-export const operationTypeSchema = z.enum(['profile', 'pocket', 'drill', 'face', 'chamfer']);
+export const operationTypeSchema = z.enum(['profile', 'pocket', 'drill', 'face', 'chamfer', 'slot']);
 export const dialectSchema = z.enum(['grbl', 'linuxcnc', 'fanuc']);
 export const machinePresetSchema = z.enum(['Hobby GRBL router', 'Generic VMC']);
 const delta = z.union([z.literal(-1), z.literal(1)]);
@@ -14,9 +14,10 @@ export const geometryRefSchema = z.discriminatedUnion('kind', [
   meshFaceRef,
   z.strictObject({ kind: z.literal('meshLoop'), face: meshFaceRef, loop: z.number().int() }),
   z.strictObject({ kind: z.literal('meshHole'), face: meshFaceRef, loop: z.number().int() }),
+  z.strictObject({ kind: z.literal('meshSlot'), face: meshFaceRef, loop: z.number().int().optional() }),
 ]);
 
-const heightFrom = z.enum(['stockTop', 'stockBottom', 'modelTop', 'modelBottom', 'contour', 'face', 'origin', 'holeBottom', 'retract', 'feed', 'top']);
+const heightFrom = z.enum(['stockTop', 'stockBottom', 'modelTop', 'modelBottom', 'contour', 'face', 'origin', 'holeBottom', 'slotBottom', 'retract', 'feed', 'top']);
 const heightSpec = z.strictObject({ from: heightFrom, offset: z.number(), face: meshFaceRef.optional() });
 const coolant = z.enum(['off', 'flood', 'mist']);
 const lapPosition = z.strictObject({ refIndex: z.number().int(), t: z.number() });
@@ -56,6 +57,9 @@ export const operationPatchSchema = z.strictObject({
   peck: z.number(),
   dwellSeconds: z.number(),
   diameterFilter: z.strictObject({ min: z.number(), max: z.number() }).nullable(),
+  strategy: z.enum(['auto', 'toolWidth', 'wider', 'trochoidal']),
+  trochoidal: z.strictObject({ stepPct: z.number() }).partial(),
+  squareEnds: z.enum(['inside', 'endWall', 'dogbone']).nullable(),
 }).partial();
 
 const presetSchema = z.strictObject({

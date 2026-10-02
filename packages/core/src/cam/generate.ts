@@ -54,6 +54,7 @@ export function generateOperation(op: Operation, ctx: CamContext): OperationResu
       : op.type === 'pocket' ? pocketToolpath(op, tool, ctx, geo)
       : op.type === 'drill' ? drillToolpath(op, tool, ctx, geo)
       : op.type === 'face' ? faceToolpath(op, tool, ctx, geo)
+      : op.type === 'slot' ? { toolpath: null, diagnostics: [{ operationId: op.id, severity: 'error' as const, code: 'internal' as const, message: 'Not implemented yet' }], heights: null, overlays: emptyOverlays() }
       : chamferToolpath(op, tool, ctx, geo);
     const diagnostics: CamDiagnostic[] = [...geo.diagnostics, ...res.diagnostics];
     const warn = (code: CamDiagnostic['code'], message: string) => diagnostics.push({ operationId: op.id, severity: 'warning', code, message });
