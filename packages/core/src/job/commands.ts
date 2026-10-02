@@ -45,10 +45,12 @@ const OP_KEYS: Readonly<Record<OperationType, readonly string[]>> = {
   profile: [...COMMON_KEYS, 'side', 'openSide', 'direction', 'stepdown', 'stockRadial', 'stockAxial', 'finishPass', 'entry', 'leads', 'tabs'],
   pocket: [...COMMON_KEYS, 'direction', 'stepdown', 'stepoverPct', 'stockRadial', 'stockAxial', 'finishWalls', 'finishFloor', 'entry'],
   drill: [...COMMON_KEYS, 'cycle', 'peck', 'dwellSeconds', 'diameterFilter'],
+  face: [...COMMON_KEYS, 'area', 'overlap', 'pattern', 'angleDeg', 'stepoverPct', 'oneWay', 'direction', 'stepdown', 'finishPass', 'finishStepoverPct'],
+  chamfer: [...COMMON_KEYS, 'side', 'openSide', 'direction', 'width', 'tipOffset', 'stepdown'],
 };
 const NESTED = new Set(['heights', 'feeds', 'entry', 'leads', 'tabs']);
-const POSITIVE = ['stepdown', 'peck'];
-const NON_NEGATIVE = ['stockRadial', 'stockAxial', 'dwellSeconds'];
+const POSITIVE = ['stepdown', 'peck', 'width'];
+const NON_NEGATIVE = ['stockRadial', 'stockAxial', 'dwellSeconds', 'overlap', 'tipOffset'];
 
 function findOp(job: Job, id: string): Operation {
   const op = job.operations.find((o) => o.id === id);
@@ -80,9 +82,13 @@ function patchOperation(job: Job, op: Operation, patch: OperationPatch): Operati
   const next: Record<string, unknown> = { ...op };
   for (const [key, value] of Object.entries(patch)) {
     if (!allowed.includes(key)) throw new CommandError(`"${key}" does not apply to a ${op.type} operation`);
-    if (POSITIVE.includes(key) && !((value as number) > 0)) throw new CommandError(`${key} must be greater than 0`);
+    // a chamfer's stepdown may be 0 (one pass)
+    if (key === 'stepdown' && op.type === 'chamfer') {
+      if (!((value as number) >= 0 && Number.isFinite(value))) throw new CommandError('stepdown must not be negative');
+    } else if (POSITIVE.includes(key) && !((value as number) > 0)) throw new CommandError(`${key} must be greater than 0`);
     if (NON_NEGATIVE.includes(key) && !((value as number) >= 0)) throw new CommandError(`${key} must not be negative`);
-    if (key === 'stepoverPct' && !((value as number) > 0 && (value as number) <= 100)) throw new CommandError('stepoverPct must be in (0, 100]');
+    if ((key === 'stepoverPct' || key === 'finishStepoverPct') && !((value as number) > 0 && (value as number) <= 100)) throw new CommandError(`${key} must be in (0, 100]`);
+    if (key === 'angleDeg' && !Number.isFinite(value)) throw new CommandError('angleDeg must be a finite number');
     if (key === 'toolId') checkTool(job, value as string | null);
     if (key === 'tabs') checkTabs(value as Partial<TabSettings>);
     next[key] = NESTED.has(key) ? { ...(op as unknown as Record<string, object>)[key], ...(value as object) } : value;

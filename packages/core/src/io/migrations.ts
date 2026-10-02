@@ -3,7 +3,7 @@ import type { Job } from '../job/types';
 import { defaultPostSettings } from '../post/types';
 import { SponFileError } from './errors';
 
-export const CURRENT_SCHEMA_VERSION = 4;
+export const CURRENT_SCHEMA_VERSION = 5;
 
 export type Migration = (job: Record<string, unknown>) => Record<string, unknown>;
 
@@ -26,6 +26,8 @@ export const MIGRATIONS: Readonly<Record<number, Migration>> = {
     operations: (Array.isArray(job.operations) ? job.operations : []).map((op) =>
       (op as { type?: unknown }).type === 'profile' ? { openSide: 'on', ...(op as object) } : op),
   }),
+  // v4 → v5 (Milestone 4.2): facing and chamfer operations exist; nothing to change in older jobs
+  4: (job) => job,
 };
 
 export function migrateJob(raw: unknown, migrations: Readonly<Record<number, Migration>> = MIGRATIONS, current = CURRENT_SCHEMA_VERSION): Job {

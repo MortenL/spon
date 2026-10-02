@@ -28,7 +28,7 @@ describe('camView', () => {
     appStore.setState({ job });
     const op = job.operations[0];
     expect(operationStatus(op, appStore.getState())).toBe('ok');
-    appStore.setState({ camResults: { d: { operationId: 'd', diagnostics: [{ operationId: 'd', severity: 'warning', code: 'tool-undersize', message: '' }], heights: null, overlays: { tabs: [], laps: [], unmachined: [] }, hasToolpath: true } } });
+    appStore.setState({ camResults: { d: { operationId: 'd', diagnostics: [{ operationId: 'd', severity: 'warning', code: 'tool-undersize', message: '' }], heights: null, overlays: { tabs: [], laps: [], unmachined: [], gouges: [] }, hasToolpath: true } } });
     expect(operationStatus(op, appStore.getState())).toBe('warning');
     appStore.setState({ camStatus: 'generating' });
     expect(operationStatus(op, appStore.getState())).toBe('generating');

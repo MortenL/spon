@@ -1,4 +1,5 @@
 import type { Vec2 } from '../../geometry/path2d';
+import type { Vec3 } from '../../geometry/vec3';
 import type { ResolvedHeights } from '../heights';
 import type { CamDiagnostic, Toolpath } from '../types';
 
@@ -9,6 +10,8 @@ export interface OpOverlays {
   laps: { refIndex: number; points: Vec2[]; z: number }[];
   /** Pocket material the tool cannot reach, at the pocket floor: separate regions, each an outer boundary with holes. */
   unmachined: { regions: { outer: Vec2[]; holes: Vec2[][] }[]; z: number }[];
+  /** Places where the tool cuts into the model: the tool-tip point and how deep. */
+  gouges: { point: Vec3; depth: number }[];
 }
 
 export interface OpOutput {
@@ -19,4 +22,4 @@ export interface OpOutput {
   overlays: OpOverlays;
 }
 
-export const emptyOverlays = (): OpOverlays => ({ tabs: [], laps: [], unmachined: [] });
+export const emptyOverlays = (): OpOverlays => ({ tabs: [], laps: [], unmachined: [], gouges: [] });

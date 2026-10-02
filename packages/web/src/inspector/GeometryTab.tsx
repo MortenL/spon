@@ -15,6 +15,8 @@ const PICK_HINT: Record<OperationType, string> = {
   profile: 'Click paths or faces; Alt-click an edge loop',
   pocket: 'Click closed paths or pocket-floor faces',
   drill: 'Click circles, or a face to add all its holes; Alt-click one hole',
+  face: 'Facing the stock needs no geometry; for a picked area, click faces or closed paths',
+  chamfer: 'Click edges: paths, faces, edge loops or holes',
 };
 
 export function GeometryTab({ op }: { op: Operation }) {

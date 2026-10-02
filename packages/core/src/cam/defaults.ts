@@ -2,11 +2,21 @@ import type { ModelKind } from '../import/importFile';
 import type { Tool } from '../tools/types';
 import type { Feeds, Heights, Operation, OperationType } from './types';
 
-export const OPERATION_LABELS: Readonly<Record<OperationType, string>> = { profile: 'Profile', pocket: 'Pocket', drill: 'Drill' };
+export const OPERATION_LABELS: Readonly<Record<OperationType, string>> = { profile: 'Profile', pocket: 'Pocket', drill: 'Drill', face: 'Face', chamfer: 'Chamfer' };
 
 export function defaultHeights(type: OperationType, modelKind: ModelKind | null): Heights {
+  if (type === 'chamfer') {
+    return {
+      clearance: { from: 'retract', offset: 10 },
+      retract: { from: 'stockTop', offset: 5 },
+      feed: { from: 'top', offset: 2 },
+      top: { from: 'contour', offset: 0 },
+      bottom: { from: 'contour', offset: 0 }, // unused: the depth is computed
+    };
+  }
   const bottom =
-    type === 'profile' ? { from: 'stockBottom' as const, offset: -0.2 }
+    type === 'face' ? (modelKind === 'mesh' ? { from: 'modelTop' as const, offset: 0 } : { from: 'stockTop' as const, offset: 0 })
+    : type === 'profile' ? { from: 'stockBottom' as const, offset: -0.2 }
     : type === 'drill' ? { from: 'holeBottom' as const, offset: 0 }
     : modelKind === 'drawing' ? { from: 'stockTop' as const, offset: -3 } // a drawing's contours lie at the stock top
     : { from: 'contour' as const, offset: 0 };
@@ -45,6 +55,15 @@ export function newOperation(type: OperationType, opts: { id: string; name: stri
       ...base, type, direction: 'climb', stepdown, stepoverPct: preset?.stepoverPct ?? 40, stockRadial: 0, stockAxial: 0,
       finishWalls: false, finishFloor: false, entry,
     };
+  }
+  if (type === 'face') {
+    return {
+      ...base, type, area: 'stock', overlap: d / 2, pattern: 'zigzag', angleDeg: 0, stepoverPct: 70, oneWay: true, direction: 'climb',
+      stepdown: preset?.stepdown ?? 1, finishPass: false, finishStepoverPct: 40,
+    };
+  }
+  if (type === 'chamfer') {
+    return { ...base, type, side: 'auto', openSide: 'left', direction: 'climb', width: 1, tipOffset: 0.2, stepdown: 0 };
   }
   return { ...base, type, cycle: 'drill', peck: tool ? Math.max(0.5, Math.round(tool.diameter * 10) / 20) : 1, dwellSeconds: 0.5, diameterFilter: null };
 }

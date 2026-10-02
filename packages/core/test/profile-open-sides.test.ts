@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  applyCommand, applyCommands, chainPaths, createJob, describeGeometry, type JobCommand, migrateJob, pathFromPoints, PipelineCache, programContext, runPipeline,
+  applyCommand, applyCommands, chainPaths, createJob, CURRENT_SCHEMA_VERSION, describeGeometry, type JobCommand, migrateJob, pathFromPoints, PipelineCache, programContext, runPipeline,
   setModel, setStock, type Toolpath,
 } from '../src';
 import type { CamGeometry } from '../src';
@@ -165,6 +165,6 @@ describe('open-line sides', () => {
     delete (v3.operations[0] as Record<string, unknown>).openSide;
     const job = migrateJob(v3);
     expect(job.operations[0]).toMatchObject({ openSide: 'on' });
-    expect(job.schemaVersion).toBe(4);
+    expect(job.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
   });
 });

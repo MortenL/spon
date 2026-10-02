@@ -186,3 +186,16 @@ describe('applyCommand', () => {
     expect({ ...viaJson, id: direct.id }).toEqual(direct);
   });
 });
+
+describe('facing and chamfer operations', () => {
+  it('adds them with defaults and validates their fields', () => {
+    let job = applyCommand(withTool(), { type: 'addOperation', opType: 'face', toolId: 't6', id: 'f' });
+    expect(job.operations[0]).toMatchObject({ type: 'face', name: 'Face 1', area: 'stock', pattern: 'zigzag', angleDeg: 0, stepoverPct: 70, oneWay: true, overlap: 3, finishPass: false });
+    job = applyCommand(job, { type: 'addOperation', opType: 'chamfer', toolId: 't6', id: 'c' });
+    expect(job.operations[1]).toMatchObject({ type: 'chamfer', side: 'auto', openSide: 'left', width: 1, tipOffset: 0.2, stepdown: 0 });
+    expect(() => applyCommand(job, { type: 'updateOperation', id: 'f', patch: { stepoverPct: 0 } })).toThrow('stepoverPct must be in (0, 100]');
+    expect(() => applyCommand(job, { type: 'updateOperation', id: 'c', patch: { width: 0 } })).toThrow('width must be greater than 0');
+    expect(() => applyCommand(job, { type: 'updateOperation', id: 'c', patch: { tipOffset: -1 } })).toThrow('tipOffset must not be negative');
+    expect(() => applyCommand(job, { type: 'updateOperation', id: 'f', patch: { side: 'inside' } as never })).toThrow('"side" does not apply to a face operation');
+  });
+});

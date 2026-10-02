@@ -1,5 +1,5 @@
 import type { OperationType } from '@sponcam/core';
-import { Circle, CircleX, Scissors, SquareDashed, TriangleAlert, X } from 'lucide-react';
+import { Circle, CircleX, Layers, Scissors, SquareDashed, Triangle, TriangleAlert, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,7 +13,7 @@ import { HeightsTab } from './HeightsTab';
 import { PassesTab } from './PassesTab';
 import { ToolTab } from './ToolTab';
 
-const TYPE_ICON: Record<OperationType, typeof Scissors> = { profile: Scissors, pocket: SquareDashed, drill: Circle };
+const TYPE_ICON: Record<OperationType, typeof Scissors> = { profile: Scissors, pocket: SquareDashed, drill: Circle, face: Layers, chamfer: Triangle };
 
 export function Inspector() {
   const selectedOperationId = useApp((s) => s.selectedOperationId);

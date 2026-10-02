@@ -2,7 +2,7 @@ import type { Vec2 } from '../geometry/path2d';
 import type { Vec3 } from '../geometry/vec3';
 
 export type Coolant = 'off' | 'flood' | 'mist';
-export type OperationType = 'profile' | 'pocket' | 'drill';
+export type OperationType = 'profile' | 'pocket' | 'drill' | 'face' | 'chamfer';
 
 /** A planar face of the mesh, in model-local (raw, pre-orientation) coordinates. */
 export interface MeshFaceRef { kind: 'meshFace'; blobId: string; seed: number; normal: Vec3; point: Vec3 }
@@ -89,12 +89,42 @@ export interface DrillOp extends OperationBase {
   dwellSeconds: number;
   diameterFilter: { min: number; max: number } | null;
 }
-export type Operation = ProfileOp | PocketOp | DrillOp;
+export interface FaceOp extends OperationBase {
+  type: 'face';
+  /** `stock`: the whole stock top (no geometry needed); `picked`: the closed areas in `geometry`. */
+  area: 'stock' | 'picked';
+  /** How far the tool centre runs past the area's edge. */
+  overlap: number;
+  pattern: 'zigzag' | 'spiral';
+  angleDeg: number;
+  stepoverPct: number;
+  oneWay: boolean;
+  direction: 'climb' | 'conventional';
+  stepdown: number;
+  finishPass: boolean;
+  finishStepoverPct: number;
+}
+export interface ChamferOp extends OperationBase {
+  type: 'chamfer';
+  /** `auto` decides per reference: outlines outside, inner loops and holes inside. */
+  side: 'auto' | 'outside' | 'inside';
+  /** Open chains: which side of the line (seen along its direction) the tool runs on. */
+  openSide: 'left' | 'right';
+  direction: 'climb' | 'conventional';
+  width: number;
+  tipOffset: number;
+  /** 0 = one pass. */
+  stepdown: number;
+}
+export type Operation = ProfileOp | PocketOp | DrillOp | FaceOp | ChamferOp;
 
-type AllFields = Omit<ProfileOp, 'id' | 'type'> & Omit<PocketOp, 'id' | 'type'> & Omit<DrillOp, 'id' | 'type'>;
+type FieldsOf<T> = T extends unknown ? Omit<T, 'id' | 'type'> : never;
+/** The type of field K over every operation type that has it (a union where the types differ). */
+type FieldValue<K extends PropertyKey> = FieldsOf<Operation> extends infer F ? (F extends unknown ? (K extends keyof F ? F[K] : never) : never) : never;
+type AllKeys = keyof (FieldsOf<ProfileOp> & FieldsOf<PocketOp> & FieldsOf<DrillOp> & FieldsOf<FaceOp> & FieldsOf<ChamferOp>);
 /** Any operation field; object-valued fields are merged one level deep. */
 export type OperationPatch = {
-  [K in keyof AllFields]?: K extends 'heights' ? Partial<Heights> : K extends 'feeds' | 'entry' | 'leads' | 'tabs' ? Partial<AllFields[K]> : AllFields[K];
+  [K in AllKeys]?: K extends 'heights' ? Partial<Heights> : K extends 'feeds' | 'entry' | 'leads' | 'tabs' ? Partial<FieldValue<K>> : FieldValue<K>;
 };
 
 // ── toolpaths ────────────────────────────────────────────────────────────
@@ -124,7 +154,7 @@ export type CamSeverity = 'error' | 'warning';
 export type CamCode =
   | 'no-tool' | 'no-geometry' | 'ref-missing' | 'ref-changed' | 'face-not-horizontal' | 'open-contour' | 'no-stock'
   | 'heights-invalid' | 'offset-collapsed' | 'tool-too-large' | 'tool-undersize' | 'entry-plunge' | 'unmachined-area'
-  | 'tab-skipped' | 'stepdown-exceeds-flute' | 'feed-exceeds-machine' | 'tool-number-duplicate' | 'bend-rounded' | 'internal';
+  | 'tab-skipped' | 'stepdown-exceeds-flute' | 'feed-exceeds-machine' | 'tool-number-duplicate' | 'bend-rounded' | 'gouge' | 'internal';
 export interface CamDiagnostic {
   operationId: string;
   severity: CamSeverity;

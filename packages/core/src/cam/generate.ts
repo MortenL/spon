@@ -33,6 +33,14 @@ export function operationKey(op: Operation, job: Job): string {
   return JSON.stringify([op, job.tools.find((t) => t.id === op.toolId) ?? null, job.tolerance, job.model, job.stock, job.wcs, job.machine.maxFeed]);
 }
 
+/** Placeholder until facing and chamfering generate toolpaths. */
+function notImplemented(op: Operation): OpOutput {
+  return {
+    toolpath: null, heights: null, overlays: emptyOverlays(),
+    diagnostics: [{ operationId: op.id, severity: 'error', code: 'internal', message: 'Not implemented yet' }],
+  };
+}
+
 export function generateOperation(op: Operation, ctx: CamContext): OperationResult {
   const base: OperationResult = { operationId: op.id, key: '', toolpath: null, diagnostics: [], heights: null, overlays: emptyOverlays() };
   if (!op.enabled) return base;
@@ -45,7 +53,11 @@ export function generateOperation(op: Operation, ctx: CamContext): OperationResu
     if (!tool) return err('no-tool', 'Choose a tool for this operation');
     if (!op.geometry.length) return err('no-geometry', 'Pick geometry for this operation');
     const geo = resolveGeometry(op, ctx);
-    const res = op.type === 'profile' ? profileToolpath(op, tool, ctx, geo) : op.type === 'pocket' ? pocketToolpath(op, tool, ctx, geo) : drillToolpath(op, tool, ctx, geo);
+    const res =
+      op.type === 'profile' ? profileToolpath(op, tool, ctx, geo)
+      : op.type === 'pocket' ? pocketToolpath(op, tool, ctx, geo)
+      : op.type === 'drill' ? drillToolpath(op, tool, ctx, geo)
+      : notImplemented(op);
     const diagnostics: CamDiagnostic[] = [...geo.diagnostics, ...res.diagnostics];
     const warn = (code: CamDiagnostic['code'], message: string) => diagnostics.push({ operationId: op.id, severity: 'warning', code, message });
     if (op.type !== 'drill' && op.stepdown > tool.fluteLength) warn('stepdown-exceeds-flute', `Stepdown ${op.stepdown} mm is deeper than the ${tool.fluteLength} mm flutes`);

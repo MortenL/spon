@@ -242,5 +242,6 @@ function DrillPasses({ op }: { op: DrillOp }) {
 export function PassesTab({ op }: { op: Operation }) {
   if (op.type === 'profile') return <ProfilePasses op={op} />;
   if (op.type === 'pocket') return <PocketPasses op={op} />;
-  return <DrillPasses op={op} />;
+  if (op.type === 'drill') return <DrillPasses op={op} />;
+  return null; // facing and chamfer controls arrive with Milestone 4.2 Task 7
 }

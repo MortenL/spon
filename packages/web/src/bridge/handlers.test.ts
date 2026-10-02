@@ -25,7 +25,7 @@ const { appStore } = await import('../state/store');
 
 const parsed = { table: { count: 0 }, analysis: { summary: { totalSeconds: 3, lineCount: 2, extents: null }, diagnostics: [] }, interpretDiagnostics: [] } as never;
 const run = (): CamRun => ({
-  results: [{ operationId: 'o1', diagnostics: [], heights: null, overlays: { tabs: [], laps: [], unmachined: [] }, hasToolpath: true }],
+  results: [{ operationId: 'o1', diagnostics: [], heights: null, overlays: { tabs: [], laps: [], unmachined: [], gouges: [] }, hasToolpath: true }],
   files: [{ name: 'job.nc', text: 'G0 X0\n', operationIds: ['o1'], tools: [1], sections: [], parsed, postErrors: [] }],
   catalog: null,
 });

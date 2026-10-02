@@ -34,10 +34,14 @@ export function applyPlacement(p: Placement, raw: Vec3): Vec3 {
 }
 
 export function stockBox(job: Job, placement: Placement | null): BBox | null {
-  if (!job.model || !placement) return null;
+  const stock = job.stock;
+  if (!job.model || !placement) {
+    // no model: only fixed stock exists — a spoilboard or blank, its top at Z 0 and its min corner at the origin
+    if (job.model || stock.mode !== 'fixed') return null;
+    return { min: vec3(0, 0, -stock.size.z), max: vec3(stock.size.x, stock.size.y, 0) };
+  }
   const drawing = job.model.kind === 'drawing';
   const { min, max } = placement.bbox;
-  const stock = job.stock;
   if (stock.mode === 'auto') {
     const m = stock.margin;
     return {
