@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  applyCommands, buildAdjacency, camContext, createJob, faceRefFromTriangle, gougeCheck, type JobCommand, type Mesh, type Move, PipelineCache, programContext,
+  applyCommands, buildAdjacency, camContext, createJob, toProgram, vec3, faceRefFromTriangle, gougeCheck, type JobCommand, type Mesh, type Move, PipelineCache, programContext,
   runPipeline, setModel, setStock, type Toolpath,
 } from '../src';
 import { faceAt, plateSetup, tool6 } from './fixtures/camSetup';
@@ -100,6 +100,53 @@ describe('gouge check', () => {
     for (const r of run.results) expect(r.diagnostics.filter((d) => d.code === 'gouge')).toEqual([]);
   });
 
+  it('counts two separate gouges as two places', () => {
+    const { geometry, job } = steppedSetup();
+    const ctx = camContext(job, geometry as never);
+    const msg = gougeCheck(handPath([
+      { kind: 'rapid', to: { x: 0, y: 20, z: 5 } },
+      { kind: 'line', to: { x: 0, y: 20, z: -5 }, feed: 500 },
+      { kind: 'line', to: { x: 60, y: 20, z: -5 }, feed: 500 }, // boss gouge, then clear beyond it
+      { kind: 'line', to: { x: 60, y: 20, z: 5 }, feed: 500 },
+      { kind: 'rapid', to: { x: 0, y: 20, z: 5 } },
+      { kind: 'line', to: { x: 0, y: 20, z: -5 }, feed: 500 },
+      { kind: 'line', to: { x: 60, y: 20, z: -5 }, feed: 500 },
+    ]), tool6, ctx).diagnostics[0].message;
+    expect(msg).toMatch(/\(2 places, first at/);
+  });
+
+  describe.each([64, 24])('drill cycles in a %i-gon hole', (sides) => {
+    // 40 x 40 x 10 block, blind hole of radius 3 down to z 4; program Z 0 is the top (model z 10)
+    function holeCtx() {
+      const R = 3, O = 20, tris: number[] = [];
+      const ring = (r: number, z: number, i: number) => [20 + r * Math.cos((2 * Math.PI * i) / sides), 20 + r * Math.sin((2 * Math.PI * i) / sides), z];
+      for (let i = 0; i < sides; i++) {
+        const [a, b] = [i, i + 1];
+        tris.push(...ring(R, 10, a), ...ring(O, 10, a), ...ring(O, 10, b), ...ring(R, 10, a), ...ring(O, 10, b), ...ring(R, 10, b)); // top
+        tris.push(...ring(R, 10, a), ...ring(R, 4, a), ...ring(R, 4, b), ...ring(R, 10, a), ...ring(R, 4, b), ...ring(R, 10, b)); // wall
+        tris.push(20, 20, 4, ...ring(R, 4, a), ...ring(R, 4, b)); // floor
+      }
+      const n = tris.length / 9, indices = new Uint32Array(n * 3).map((_, i) => i);
+      const mesh: Mesh = { positions: Float32Array.from(tris), indices, normals: new Float32Array(n * 3) };
+      const geometry = { kind: 'mesh' as const, mesh, adjacency: buildAdjacency(mesh), rawPoints: mesh.positions };
+      const job = setStock(setModel(createJob(), { sourceName: 'hole.stl', blobId: 'm1', kind: 'mesh', importUnits: 'mm' }), { mode: 'auto', margin: { xy: 0, zTop: 0, zBottom: 0 } });
+      return camContext(job, geometry as never);
+    }
+    const drill = { ...tool6, id: 'd', type: 'drill' as const, tipAngleDeg: 118 };
+    const cycle = (ctx: ReturnType<typeof holeCtx>, bottom: number, tool = drill) => gougeCheck(handPath([
+      { kind: 'rapid', to: { ...toProgram(ctx, vec3(20, 20, 15)) } },
+      { kind: 'cycle', cycle: 'drill', at: { x: toProgram(ctx, vec3(20, 20, 0)).x, y: toProgram(ctx, vec3(20, 20, 0)).y }, top: 0, bottom, r: 2, retract: 5, peck: 0, dwell: 0, feed: 300 },
+    ]), tool, ctx);
+    it('a full-size drill to just above the floor is clean', () => {
+      const ctx = holeCtx();
+      expect(cycle(holeCtx(), -5.9).diagnostics).toEqual([]);
+      expect(cycle(ctx, -5.9, { ...drill, tipAngleDeg: 0 }).diagnostics).toEqual([]);
+    });
+    it('a drill 1 mm past the blind floor is flagged', () => {
+      expect(cycle(holeCtx(), -7).diagnostics[0]?.message).toMatch(/^Cuts into the model by up to/);
+    });
+  });
+
   it('checks a 200,000-triangle mesh with 100,000 moves in under 2 s (review focus 5)', () => {
     const n = 316, size = 79;
     const positions = new Float32Array(n * n * 3);
@@ -121,18 +168,19 @@ describe('gouge check', () => {
     const geometry = { kind: 'mesh' as const, mesh, adjacency: buildAdjacency(mesh), rawPoints: positions };
     const job = setStock(setModel(createJob(), { sourceName: 'wave.stl', blobId: 'm1', kind: 'mesh', importUnits: 'mm' }), { mode: 'auto', margin: { xy: 0, zTop: 0, zBottom: 0 } });
     const ctx = camContext(job, geometry as never);
-    // a finishing-style raster of ~1 mm moves that follows the terrain a little above it (program = model - origin)
-    const moves: Move[] = [{ kind: 'rapid', to: { x: 4 - ctx.origin.x, y: 4 - ctx.origin.y, z: 10 - ctx.origin.z } }];
-    const rowSteps = 70;
+    // a finishing-style raster of ~1 mm moves that follows the terrain a little above it (mapped to program coordinates)
+    const moves: Move[] = [{ kind: 'rapid', to: toProgram(ctx, vec3(4, 4, 10)) }];
+    const rowSteps = 115; // 0.6 mm in XY: about 1 mm moves once the terrain slope is added
     for (let m = 0; m < 100_000; m++) {
       const row = Math.floor(m / rowSteps), col = m % rowSteps;
-      const x = 4 + (row % 2 ? rowSteps - col : col), y = 4 + ((row * 0.05) % 70);
-      moves.push({ kind: 'line', to: { x: x - ctx.origin.x, y: y - ctx.origin.y, z: surf(x, y) + 0.5 - ctx.origin.z }, feed: 1000 });
+      const x = 4 + (row % 2 ? rowSteps - col : col) * 0.6, y = 4 + ((row * 0.05) % 70);
+      moves.push({ kind: 'line', to: toProgram(ctx, vec3(x, y, surf(x, y) + 0.5)), feed: 1000 });
     }
     const t0 = performance.now();
     const r = gougeCheck(handPath(moves), tool6, ctx);
     const ms = performance.now() - t0;
-    console.log(`gougeCheck ${moves.length} moves: ${ms.toFixed(0)} ms (incl. index build), ${r.gouges.length} gouges`);
+`);
+    expect(r.gouges.length).toBeLessThanOrEqual(200);
     expect(ms).toBeLessThan(2000);
   }, 60_000);
 });

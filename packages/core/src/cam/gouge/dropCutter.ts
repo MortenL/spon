@@ -110,10 +110,13 @@ function edgeBest(c: Cut, ax: number, ay: number, az: number, bx: number, by: nu
  * function along an edge is concave. `tol` is accepted for API symmetry; the edge search converges far below any
  * gouge tolerance on its own.
  *
+ * `floor` (optional) is a height the caller does not care to distinguish below: it seeds the search, so candidates that
+ * cannot beat it are pruned and `floor` itself is returned when nothing does.
+ *
  * Candidates are pruned with upper bounds (top Z minus the profile at the nearest XY distance), cells are visited
  * by upper bound, and cheap vertex and facet tests run for every triangle before any edge search.
  */
-export function dropCutter(index: MeshIndex, shape: ToolShape, x: number, y: number, _tol: number): number {
+export function dropCutter(index: MeshIndex, shape: ToolShape, x: number, y: number, _tol: number, floor = -Infinity): number {
   const R = shape.radius;
   const cone = shape.kind === 'cone';
   const c: Cut = {
@@ -123,7 +126,7 @@ export function dropCutter(index: MeshIndex, shape: ToolShape, x: number, y: num
   };
   const tris = index.tris, normals = index.normals, box = index.triBox;
   const { cellMaxZ, cellStart, cellTris, nx, cell } = index;
-  let best = -Infinity;
+  let best = floor;
 
   // cells under the disc, best upper bound first
   const i0 = index.ix(x - R), i1 = index.ix(x + R), j0 = index.iy(y - R), j1 = index.iy(y + R);
@@ -134,7 +137,7 @@ export function dropCutter(index: MeshIndex, shape: ToolShape, x: number, y: num
   for (let j = j0; j <= j1; j++) {
     for (let i = i0; i <= i1; i++) {
       const ci = j * nx + i;
-      if (cellMaxZ[ci] === -Infinity) continue;
+      if (cellMaxZ[ci] <= best) continue; // also skips empty cells (-Infinity); the profile is never negative
       const cx0 = index.minX + i * cell, cy0 = index.minY + j * cell;
       const cd = boxDist(x, y, cx0 - 1e-9, cy0 - 1e-9, cx0 + cell + 1e-9, cy0 + cell + 1e-9);
       if (cd > R) continue;
@@ -159,9 +162,10 @@ export function dropCutter(index: MeshIndex, shape: ToolShape, x: number, y: num
     if (keys[q] <= best) { if (nc <= SORT_LIMIT) break; continue; } // sorted: nothing later can win
     for (let p = cellStart[ci]; p < cellStart[ci + 1]; p++) {
       const tri = cellTris[p];
+      const b = tri * 5;
+      if (box[b + 4] <= best) continue; // the profile is never negative: a triangle whose top is not above the best cannot win
       if (stamps[tri] === stamp) continue;
       stamps[tri] = stamp;
-      const b = tri * 5;
       const dmin = boxDist(x, y, box[b], box[b + 1], box[b + 2], box[b + 3]);
       if (dmin > R || box[b + 4] - h(c, dmin) <= best) continue;
       const o = tri * 9;

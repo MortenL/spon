@@ -22,34 +22,43 @@ export function gougeCheck(toolpath: Toolpath, tool: Tool, ctx: CamContext): Gou
   const none: GougeResult = { diagnostics: [], gouges: [] };
   if (ctx.geometry?.kind !== 'mesh') return none;
   const shape = toolShape(tool);
-  const index = meshIndex(ctx, Math.min(3, Math.max(0.5, shape.radius / 2)));
+  const index = meshIndex(ctx, Math.min(3, Math.max(0.5, shape.radius / 3)));
   if (!index || index.triangleCount === 0) return none;
   let maxZ = -Infinity;
   for (let t = 0; t < index.triangleCount; t++) if (index.triBox[t * 5 + 4] > maxZ) maxZ = index.triBox[t * 5 + 4];
 
   const step = Math.min(shape.radius / 4, 0.5);
   const gTol = Math.max(ctx.tolerance, 0.01);
-  const feed = { max: 0, runs: 0, first: null as Vec3 | null, inRun: false };
-  const rapid = { found: false, inRun: false };
-  const found: { point: Vec3; depth: number }[] = [];
+  const feed = { max: 0, runs: 0, first: null as Vec3 | null };
+  let rapidFound = false;
+  /** Which kind of move the previous sample gouged in; a clean sample or a change of kind ends a run. */
+  let prev: 'feed' | 'rapid' | null = null;
+  let found: { point: Vec3; depth: number }[] = [];
+  const compact = () => { found.sort((p, q) => q.depth - p.depth); found = found.slice(0, MAX_GOUGES); };
+  // Hole walls in a mesh are inscribed polygons, so a drill column is checked with a slightly smaller tool.
+  const cycleRadius = Math.max(0, shape.radius - (gTol + ctx.tolerance + 0.02 * shape.radius));
+  const cycleShape = { ...shape, radius: cycleRadius, cornerRadius: Math.min(shape.cornerRadius, cycleRadius) };
+  let active = shape;
 
   const sample = (x: number, y: number, z: number, isRapid: boolean) => {
-    const st = isRapid ? rapid : feed;
     let depth = 0;
     if (z <= maxZ) {
-      const d = dropCutter(index, shape, x, y, ctx.tolerance);
-      if (d !== -Infinity) depth = d - z;
+      const lim = z + gTol;
+      const d = dropCutter(index, active, x, y, ctx.tolerance, lim); // only depths beyond gTol matter
+      if (d > lim) depth = d - z;
     }
-    if (depth > gTol) {
+    if (depth > 0) {
       const p = vec3(x, y, z);
-      if (isRapid) rapid.found = true;
+      const kind = isRapid ? 'rapid' : 'feed';
+      if (isRapid) rapidFound = true;
       else {
-        if (!feed.inRun) { feed.runs++; feed.first ??= p; }
+        if (prev !== 'feed') { feed.runs++; feed.first ??= p; }
         if (depth > feed.max) feed.max = depth;
       }
-      st.inRun = true;
+      prev = kind;
       found.push({ point: p, depth });
-    } else st.inRun = false;
+      if (found.length >= 4 * MAX_GOUGES) compact();
+    } else prev = null;
   };
   const segment = (a: Vec3, b: Vec3, isRapid: boolean) => {
     const len = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
@@ -65,7 +74,9 @@ export function gougeCheck(toolpath: Toolpath, tool: Tool, ctx: CamContext): Gou
     if (m.kind === 'cycle') {
       const top = vec3(m.at.x, m.at.y, m.retract);
       if (pos) segment(pos, top, true); else sample(top.x, top.y, top.z, true);
+      active = cycleShape;
       segment(top, vec3(m.at.x, m.at.y, m.bottom), false);
+      active = shape;
       pos = top;
       continue;
     }
@@ -99,7 +110,7 @@ export function gougeCheck(toolpath: Toolpath, tool: Tool, ctx: CamContext): Gou
       message: `Cuts into the model by up to ${feed.max.toFixed(2)} mm (${feed.runs} ${feed.runs === 1 ? 'place' : 'places'}, first at X ${f.x.toFixed(2)} Y ${f.y.toFixed(2)} Z ${f.z.toFixed(2)})`,
     });
   }
-  if (rapid.found) diagnostics.push({ operationId: toolpath.operationId, severity: 'error', code: 'gouge', message: 'A rapid move passes through the model' });
-  found.sort((p, q) => q.depth - p.depth);
-  return { diagnostics, gouges: found.slice(0, MAX_GOUGES) };
+  if (rapidFound) diagnostics.push({ operationId: toolpath.operationId, severity: 'error', code: 'gouge', message: 'A rapid move passes through the model' });
+  compact();
+  return { diagnostics, gouges: found };
 }
