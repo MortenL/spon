@@ -6,6 +6,7 @@ import { appStore, useApp } from '@/state/store';
 import { type RailPanel, RAIL_PANELS } from './railPanels';
 import { autoPanel, railStore, useRail, WIDTH } from './railStore';
 import { type StepId, setupStatus } from './setupStatus';
+import { SetupSummary } from './SetupSummary';
 
 appStore.subscribe((s, prev) => {
   if (s.job === prev.job) return;
@@ -77,6 +78,7 @@ function PanelHost(): JSX.Element {
       <div className="flex-1 overflow-y-auto">
         <Body />
       </div>
+      {panel.group === 'cam' && <SetupSummary />}
     </section>
   );
 }
