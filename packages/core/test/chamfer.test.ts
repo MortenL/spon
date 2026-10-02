@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  applyCommands, camContext, chamferGeometry, circleOf, createJob, drawingPathToProgram, flattenPath, type JobCommand, type Move, nearestS, type Path2D, pathFromPoints,
+  applyCommands, camContext, chamferGeometry, resolveGeometry, circleOf, createJob, drawingPathToProgram, flattenPath, type JobCommand, type Move, nearestS, type Path2D, pathFromPoints,
   PipelineCache, programContext, runPipeline, setModel, setStock, type Tool, type Toolpath,
 } from '../src';
 import type { CamGeometry } from '../src';
@@ -31,14 +31,14 @@ const rect: CamGeometry = {
   rawPoints: new Float32Array([0, -10, 0, 40, 30, 0]),
 };
 
-function cut(patch: Record<string, unknown>, tool: Tool = v90, path = 0, opType: 'chamfer' | 'profile' = 'chamfer') {
+function cut(patch: Record<string, unknown>, tool: Tool = v90, path = 0, opType: 'chamfer' | 'profile' = 'chamfer', tolerance?: number) {
   let job = setStock(setModel(createJob(), { sourceName: 'r.dxf', blobId: 'd1', kind: 'drawing', importUnits: 'mm' }), { mode: 'auto', margin: { xy: 10, zTop: 0, zBottom: 6 } });
   const cmds: JobCommand[] = [
     { type: 'addTool', tool },
     { type: 'addOperation', opType, toolId: tool.id, id: 'c' },
     { type: 'updateOperation', id: 'c', patch: { geometry: [{ kind: 'dxfPath', blobId: 'd1', layer: 0, path }], ...patch } },
   ];
-  job = applyCommands(job, cmds);
+  job = applyCommands(job, tolerance ? [...cmds, { type: 'setTolerance', tolerance }] : cmds);
   const pctx = programContext(job, rect as never);
   const ctx = camContext(job, rect);
   const { run, toolpaths } = runPipeline(job, rect as never, pctx, new PipelineCache(), { date: '2026-01-01' });
@@ -127,5 +127,105 @@ describe('chamfer', () => {
       expect(Math.sign(a)).toBe(Math.sign(b));
       expect(Math.sign(a)).toBe(direction === 'climb' ? -1 : 1);
     }
+  });
+});
+
+describe('chamfer: stepdown levels, sides and directions', () => {
+  const rectBox = (ctx: ReturnType<typeof camContext>) => {
+    const pts = flattenPath(drawingPathToProgram(ctx, rectPath), 1e-3);
+    const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+    return (p: { x: number; y: number }) => p.x > Math.min(...xs) && p.x < Math.max(...xs) && p.y > Math.min(...ys) && p.y < Math.max(...ys);
+  };
+  /** Signed distance of a point from the edge: positive on the air side (outside the part, or inside a hole). */
+  const signed = (kind: 'outside' | 'inside' | 'hole', ctx: ReturnType<typeof camContext>) => {
+    const edge = drawingPathToProgram(ctx, rectPath);
+    const within = rectBox(ctx);
+    const c = circleOf(drawingPathToProgram(ctx, circlePath))!;
+    return (p: { x: number; y: number }) => {
+      if (kind === 'hole') return c.diameter / 2 - Math.hypot(p.x - c.center.x, p.y - c.center.y);
+      const d = nearestS(edge, p).distance;
+      return (kind === 'outside') === within(p) ? -d : d;
+    };
+  };
+
+  const cases: { name: string; kind: 'outside' | 'inside' | 'hole'; patch: Record<string, unknown>; path: number }[] = [
+    { name: 'an outside contour', kind: 'outside', patch: {}, path: 0 },
+    { name: 'an inside contour', kind: 'inside', patch: { side: 'inside' }, path: 0 },
+    { name: 'a hole', kind: 'hole', patch: {}, path: 1 },
+  ];
+  for (const tool of [v90, v60]) {
+    for (const tolerance of [undefined, 0.1]) {
+      for (const k of cases) {
+        it(`no level crosses the final chamfer surface: ${k.name}, ${tool.tipAngleDeg} deg, tolerance ${tolerance ?? 'default'}`, () => {
+          const { run, tp, ctx } = cut({ width: k.kind === 'hole' ? 1 : 2, tipOffset: 0.2, stepdown: k.kind === 'hole' ? 0.4 : 0.7, ...k.patch }, tool, k.path, 'chamfer', tolerance);
+          expect(run.results[0].diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+          const geo = chamferGeometry(tool, k.kind === 'hole' ? 1 : 2, 0.2);
+          const tanA = Math.tan(geo.halfAngle);
+          const sd = signed(k.kind, ctx);
+          const moves = cutting(tp!, -0.01);
+          const levels = new Set(moves.map((m) => m.to.z.toFixed(6)));
+          expect(levels.size).toBeGreaterThanOrEqual(3);
+          expect(Math.min(...moves.map((m) => m.to.z))).toBeCloseTo(-geo.depth, 6);
+          let swapped = 0;
+          for (const m of moves) {
+            const nominal = geo.offset - (geo.depth + m.to.z) * tanA; // tip depth d = -z
+            if (nominal < 0) swapped++;
+            const s = sd(m.to);
+            expect(s).toBeGreaterThanOrEqual(nominal - 1e-6);
+            if (tolerance === undefined) expect(s).toBeLessThan(nominal + 0.03);
+          }
+          expect(swapped).toBeGreaterThan(0);
+        });
+      }
+    }
+  }
+
+  it('keeps the travel direction on swapped levels of a hole', () => {
+    for (const direction of ['climb', 'conventional']) {
+      const { tp } = cut({ width: 2, tipOffset: 0.2, stepdown: 1, direction }, v90, 1);
+      const arcs = cutting(tp!, -0.01).filter((m) => m.kind === 'arc');
+      expect(new Set(arcs.map((m) => m.to.z.toFixed(3))).size).toBeGreaterThanOrEqual(3);
+      expect(arcs.every((m) => m.kind === 'arc' && m.ccw === (direction === 'climb'))).toBe(true);
+    }
+  });
+
+  it('keeps the travel direction on swapped levels of an open line', () => {
+    const dxByLevel = (tp: Toolpath) => {
+      const dx = new Map<string, number>();
+      let prev = { x: 0, y: 0 };
+      for (const m of tp.moves) {
+        if (m.kind === 'cycle') continue;
+        if (m.kind === 'line' && m.to.z < -0.01) dx.set(m.to.z.toFixed(3), (dx.get(m.to.z.toFixed(3)) ?? 0) + m.to.x - prev.x);
+        prev = m.to;
+      }
+      return [...dx.values()];
+    };
+    for (const [openSide, direction, sign] of [['left', 'climb', 1], ['right', 'climb', -1], ['left', 'conventional', -1], ['right', 'conventional', 1]] as const) {
+      const { tp } = cut({ width: 2, tipOffset: 0.2, stepdown: 1, openSide, direction }, v90, 2);
+      const d = dxByLevel(tp!);
+      expect(d.length).toBeGreaterThanOrEqual(3);
+      for (const x of d) expect(Math.sign(x)).toBe(sign);
+    }
+  });
+
+  it('cuts a closed contour on the inside, running counter-clockwise for climb', () => {
+    const { tp, ctx } = cut({ width: 1, side: 'inside' }, v90, 0);
+    const within = rectBox(ctx);
+    const deep = cutting(tp!, -0.5);
+    expect(deep.length).toBeGreaterThan(0);
+    const edge = drawingPathToProgram(ctx, rectPath);
+    for (const m of deep) {
+      expect(within(m.to)).toBe(true);
+      expect(nearestS(edge, m.to).distance).toBeGreaterThanOrEqual(0.2 - 1e-6);
+    }
+    expect(signedArea(deep.map((m) => m.to))).toBeGreaterThan(100);
+  });
+
+  it('resolves a drawing circle as a hole, not a contour', () => {
+    const { job, ctx } = cut({ width: 1 }, v90, 1);
+    const geo = resolveGeometry(job.operations[0], ctx);
+    expect(geo.holes).toHaveLength(1);
+    expect(geo.contours).toHaveLength(0);
+    expect(geo.holes[0].diameter).toBeCloseTo(6, 9);
   });
 });

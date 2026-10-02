@@ -72,7 +72,12 @@ export function chamferToolpath(op: ChamferOp, tool: Tool, ctx: CamContext, geo:
     const forward = (openSide === 'left') === (op.direction === 'climb');
     for (const lv of levels) {
       const neg = lv.offset < -1e-9;
-      const off = Math.abs(lv.offset) < 1e-9 ? 0 : Math.abs(lv.offset);
+      // contourLaps biases a lap away from the edge by up to 7/8 tol and its approximations err by up to 7/8 tol either
+      // way. That is right for a positive offset (the cone stays clear of the final surface), but a swapped level
+      // sits inside the part edge, where the bias would cut past the final surface. Take 7/4 tol off the distance so
+      // the lap is never deeper than nominal (a clamped level runs on the edge itself).
+      const abs = Math.abs(lv.offset);
+      const off = abs < 1e-9 ? 0 : neg ? Math.max(0, abs - 1.75 * tol) : abs;
       const cSide = neg ? (side === 'outside' ? 'inside' : 'outside') : side;
       const cOpen = neg ? (openSide === 'left' ? 'right' : 'left') : openSide;
       // contourLaps decides the open travel direction from its side; hand it the direction that keeps the unswapped rule
