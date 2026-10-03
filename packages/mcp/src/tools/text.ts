@@ -56,7 +56,13 @@ export function registerTextTools(server: McpServer, ctx: ToolContext): void {
   }, guarded('add_text', async (a: Args<typeof addTextShape>) => {
     const { id: given, ...patch } = a;
     const id = given ?? crypto.randomUUID();
-    await state.requireSession().apply([{ type: 'addText', id, patch }], 'Add text');
+    const session = state.requireSession();
+    if (!patch.position) {
+      // like the web app: centre on the stock (its size / 2 in stock coordinates, whatever the work origin)
+      const { stock } = await session.boxes();
+      if (stock) patch.position = { x: (stock.max.x - stock.min.x) / 2, y: (stock.max.y - stock.min.y) / 2 };
+    }
+    await session.apply([{ type: 'addText', id, patch }], 'Add text');
     return ok(`Added the text ${id}. Next: add_operation with geometry [{ "kind": "text", "textId": "${id}" }].`, { id });
   }));
 
@@ -71,7 +77,7 @@ export function registerTextTools(server: McpServer, ctx: ToolContext): void {
 
   server.registerTool('remove_text', {
     title: 'Remove text',
-    description: 'Remove a text. Operations that used it lose that geometry.',
+    description: 'Remove a text. Operations that picked it keep the reference and report ref-missing ("The picked text no longer exists") until you pick other geometry.',
     inputSchema: removeTextShape,
   }, guarded('remove_text', async (a: Args<typeof removeTextShape>) => {
     await state.requireSession().apply([{ type: 'removeText', id: a.id }], 'Remove text');

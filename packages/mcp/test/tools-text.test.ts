@@ -35,6 +35,13 @@ describe('text and font tools', () => {
     expect((await t.call('render_preview')).isError).toBeFalsy();
   });
 
+  it('centres a text without a position on the stock', async () => {
+    const t = await signJob();
+    const id = data(await t.call('add_text', { text: 'A' })).id as string;
+    const texts = data(await t.call('get_job', { section: 'texts' })).texts as { id: string; position: { x: number; y: number } }[];
+    expect(texts.find((x) => x.id === id)!.position).toEqual({ x: 60, y: 25 });
+  });
+
   it('loads an uploaded font under a fresh blob id and uses it', async () => {
     const t = await signJob();
     writeFileSync(join(t.dir, 'Test.ttf'), testFontBytes());
