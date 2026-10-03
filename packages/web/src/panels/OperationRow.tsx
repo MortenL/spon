@@ -1,6 +1,6 @@
 import { type Operation, type OperationType } from '@sponcam/core';
 import {
-  Check, Circle, CircleX, Layers, Loader2, MoreHorizontal, Scissors, SquareDashed, Triangle, TriangleAlert, RectangleHorizontal,
+  Check, Circle, CircleX, Layers, Loader2, MoreHorizontal, Scissors, SquareDashed, Triangle, TriangleAlert, RectangleHorizontal, PenLine, ChevronsDown, Eraser,
 } from 'lucide-react';
 import type React from 'react';
 import type { ReactNode } from 'react';
@@ -14,8 +14,8 @@ import { appStore, useApp } from '@/state/store';
 import { formatDuration } from './format';
 import { duplicateShortcutLabel, firstProblem } from './listShortcuts';
 
-export const TYPE_ICON: Record<OperationType, typeof Scissors> = { profile: Scissors, pocket: SquareDashed, drill: Circle, face: Layers, chamfer: Triangle, slot: RectangleHorizontal };
-export const OP_TYPES: readonly OperationType[] = ['profile', 'pocket', 'drill', 'face', 'chamfer', 'slot'];
+export const TYPE_ICON: Record<OperationType, typeof Scissors> = { profile: Scissors, pocket: SquareDashed, drill: Circle, face: Layers, chamfer: Triangle, slot: RectangleHorizontal, engrave: PenLine, vcarve: ChevronsDown, vclear: Eraser };
+export const OP_TYPES: readonly OperationType[] = ['profile', 'pocket', 'drill', 'face', 'chamfer', 'slot', 'engrave', 'vcarve'];
 
 /** The list actions, shared by the ⋯ menu and the keyboard shortcuts. */
 export function duplicateOperation(id: string): void {

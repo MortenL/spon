@@ -9,6 +9,8 @@ type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 const same = <T extends true>(): T | undefined => undefined;
 same<Same<z.infer<typeof jobCommandSchema>, JobCommand>>();
 same<Same<z.infer<typeof operationPatchSchema>, OperationPatch>>();
+// an optional key missing from the schema passes the check above, so compare the key sets as well
+same<Same<keyof z.infer<typeof operationPatchSchema>, keyof OperationPatch>>();
 same<Same<z.infer<typeof toolSchema>, Tool>>();
 same<Same<z.infer<typeof geometryRefSchema>, GeometryRef>>();
 
@@ -38,6 +40,7 @@ const SAMPLES: JobCommand[] = [
     },
   },
   { type: 'updateOperation', id: 'o', patch: { geometry: [{ kind: 'meshSlot', face }, { kind: 'meshSlot', face, loop: 2 }], strategy: 'toolWidth', trochoidal: { stepPct: 12 }, squareEnds: 'dogbone', heights: { bottom: { from: 'slotBottom', offset: 0 } } } },
+  { type: 'updateOperation', id: 'o', patch: { maxDepth: null, depthMode: 'width', lineWidth: 0.4, sourceId: 'op1', stepdown: null } },
   { type: 'removeOperation', id: 'o' },
   { type: 'duplicateOperation', id: 'o', newId: 'o2' },
   { type: 'moveOperation', id: 'o', delta: -1 },

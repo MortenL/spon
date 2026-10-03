@@ -240,3 +240,36 @@ const stepped = steppedData();
 const steppedTris = [];
 for (let t = 0; t < stepped.idx.length; t += 3) steppedTris.push([0, 1, 2].flatMap((k) => stepped.pos.slice(stepped.idx[t + k] * 3, stepped.idx[t + k] * 3 + 3)));
 writeFileSync(join(here, 'stepped.stl'), binaryStl(steppedTris, 'Spon fixture: 60 x 40 slab with a 20 x 20 boss'));
+
+// vcarve-spon.svg and engrave-lines.dxf (Milestone 4.4). Letters S, P, O and N, each about 40 x 50 mm, as straight-segment polygons
+// in one layer; O and P have rectangular holes (evenodd). engrave-lines.dxf has two lines and a closed square on layer ENGRAVE.
+function vcarveSvg() {
+  const at = (ox, pts) => pts.map(([x, y], i) => `${i ? 'L' : 'M'} ${ox + x} ${5 + y}`).join(' ') + ' Z';
+  const rect = (ox, x0, y0, x1, y1) => at(ox, [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]);
+  const letters = [
+    at(5, [[0, 0], [40, 0], [40, 10], [10, 10], [10, 20], [40, 20], [40, 50], [0, 50], [0, 40], [30, 40], [30, 30], [0, 30]]),
+    `${at(55, [[0, 0], [40, 0], [40, 30], [10, 30], [10, 50], [0, 50]])} ${rect(55, 10, 10, 30, 20)}`,
+    `${rect(105, 0, 0, 40, 50)} ${rect(105, 10, 10, 30, 40)}`,
+    at(155, [[0, 0], [10, 0], [30, 30], [30, 0], [40, 0], [40, 50], [30, 50], [10, 20], [10, 50], [0, 50]]),
+  ];
+  const paths = letters.map((d) => `    <path d="${d}" fill="#000000" fill-rule="evenodd"/>`).join('\n');
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="200mm" height="60mm" viewBox="0 0 200 60">\n  <g id="LETTERS" inkscape:groupmode="layer" inkscape:label="LETTERS">\n${paths}\n  </g>\n</svg>\n`;
+}
+
+function engraveLinesDxf() {
+  const line = (x1, y1, x2, y2) => [[0, 'LINE'], [8, 'ENGRAVE'], [10, x1], [20, y1], [30, 0], [11, x2], [21, y2], [31, 0]];
+  const groups = [
+    [0, 'SECTION'], [2, 'HEADER'], [9, '$INSUNITS'], [70, 4], [0, 'ENDSEC'],
+    [0, 'SECTION'], [2, 'TABLES'], [0, 'TABLE'], [2, 'LAYER'], [70, 1],
+    [0, 'LAYER'], [2, 'ENGRAVE'], [70, 0], [62, 5], [6, 'CONTINUOUS'],
+    [0, 'ENDTAB'], [0, 'ENDSEC'],
+    [0, 'SECTION'], [2, 'ENTITIES'],
+    ...line(10, 10, 60, 10), ...line(10, 20, 60, 35),
+    [0, 'LWPOLYLINE'], [8, 'ENGRAVE'], [90, 4], [70, 1], [10, 70], [20, 10], [10, 90], [20, 10], [10, 90], [20, 30], [10, 70], [20, 30],
+    [0, 'ENDSEC'], [0, 'EOF'],
+  ];
+  return groups.map(([code, value]) => `${code}\n${value}`).join('\n') + '\n';
+}
+
+writeFileSync(join(here, 'vcarve-spon.svg'), vcarveSvg());
+writeFileSync(join(here, 'engrave-lines.dxf'), engraveLinesDxf());

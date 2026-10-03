@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const vec3Schema = z.strictObject({ x: z.number(), y: z.number(), z: z.number() });
 const vec3Partial = vec3Schema.partial();
 export const lengthUnitSchema = z.enum(['mm', 'in']);
-export const operationTypeSchema = z.enum(['profile', 'pocket', 'drill', 'face', 'chamfer', 'slot']);
+export const operationTypeSchema = z.enum(['profile', 'pocket', 'drill', 'face', 'chamfer', 'slot', 'engrave', 'vcarve', 'vclear']);
 export const dialectSchema = z.enum(['grbl', 'linuxcnc', 'fanuc']);
 export const machinePresetSchema = z.enum(['Hobby GRBL router', 'Generic VMC']);
 const delta = z.union([z.literal(-1), z.literal(1)]);
@@ -32,7 +32,7 @@ export const operationPatchSchema = z.strictObject({
   side: z.enum(['outside', 'inside', 'on', 'auto']),
   openSide: z.enum(['left', 'on', 'right']),
   direction: z.enum(['climb', 'conventional']),
-  stepdown: z.number(),
+  stepdown: z.number().nullable(),
   stockRadial: z.number(),
   stockAxial: z.number(),
   finishPass: z.boolean(),
@@ -60,6 +60,11 @@ export const operationPatchSchema = z.strictObject({
   strategy: z.enum(['auto', 'toolWidth', 'wider', 'trochoidal']),
   trochoidal: z.strictObject({ stepPct: z.number() }).partial(),
   squareEnds: z.enum(['inside', 'endWall', 'dogbone']).nullable(),
+  depth: z.number(),
+  depthMode: z.enum(['depth', 'width']),
+  lineWidth: z.number(),
+  maxDepth: z.number().nullable(),
+  sourceId: z.string(),
 }).partial();
 
 const presetSchema = z.strictObject({

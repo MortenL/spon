@@ -48,18 +48,22 @@ const OP_KEYS: Readonly<Record<OperationType, readonly string[]>> = {
   face: [...COMMON_KEYS, 'area', 'overlap', 'pattern', 'angleDeg', 'stepoverPct', 'oneWay', 'direction', 'stepdown', 'finishPass', 'finishStepoverPct'],
   chamfer: [...COMMON_KEYS, 'side', 'openSide', 'direction', 'width', 'tipOffset', 'stepdown'],
   slot: [...COMMON_KEYS, 'strategy', 'width', 'direction', 'stepdown', 'stepoverPct', 'stockRadial', 'stockAxial', 'finishWalls', 'entry', 'trochoidal', 'squareEnds'],
+  engrave: [...COMMON_KEYS, 'depthMode', 'depth', 'lineWidth', 'stepdown'],
+  vcarve: [...COMMON_KEYS, 'maxDepth', 'stepdown'],
+  vclear: [...COMMON_KEYS, 'sourceId', 'stepoverPct', 'stepdown', 'direction', 'entry'],
 };
 const ENUMS: Readonly<Record<string, Partial<Record<OperationType, readonly string[]>>>> = {
   side: { profile: ['outside', 'inside', 'on'], chamfer: ['auto', 'outside', 'inside'] },
   openSide: { profile: ['left', 'on', 'right'], chamfer: ['left', 'right'] },
-  direction: { profile: ['climb', 'conventional'], pocket: ['climb', 'conventional'], face: ['climb', 'conventional'], chamfer: ['climb', 'conventional'], slot: ['climb', 'conventional'] },
+  direction: { profile: ['climb', 'conventional'], pocket: ['climb', 'conventional'], face: ['climb', 'conventional'], chamfer: ['climb', 'conventional'], slot: ['climb', 'conventional'], vclear: ['climb', 'conventional'] },
+  depthMode: { engrave: ['depth', 'width'] },
   area: { face: ['stock', 'picked'] },
   pattern: { face: ['zigzag', 'spiral'] },
   strategy: { slot: ['auto', 'toolWidth', 'wider', 'trochoidal'] },
   squareEnds: { slot: ['inside', 'endWall', 'dogbone'] },
 };
 const NESTED = new Set(['heights', 'feeds', 'entry', 'leads', 'tabs', 'trochoidal']);
-const POSITIVE = ['stepdown', 'peck', 'width'];
+const POSITIVE = ['stepdown', 'peck', 'width', 'depth', 'lineWidth'];
 const NON_NEGATIVE = ['stockRadial', 'stockAxial', 'dwellSeconds', 'overlap', 'tipOffset'];
 
 function findOp(job: Job, id: string): Operation {
@@ -97,7 +101,11 @@ function patchOperation(job: Job, op: Operation, patch: OperationPatch): Operati
     // a chamfer's stepdown may be 0 (one pass)
     if (key === 'stepdown' && op.type === 'chamfer') {
       if (!((value as number) >= 0 && Number.isFinite(value))) throw new CommandError('stepdown must not be negative');
+    } else if (key === 'stepdown' && op.type === 'vcarve' && value === null) {
+      // null = one pass
     } else if (POSITIVE.includes(key) && !((value as number) > 0 && Number.isFinite(value))) throw new CommandError(`${key} must be greater than 0`);
+    if (key === 'maxDepth' && value !== null && !((value as number) > 0 && Number.isFinite(value))) throw new CommandError('maxDepth must be greater than 0');
+    if (key === 'sourceId' && typeof value !== 'string') throw new CommandError('sourceId must be a string');
     if (NON_NEGATIVE.includes(key) && !((value as number) >= 0 && Number.isFinite(value))) throw new CommandError(`${key} must not be negative`);
     if ((key === 'stepoverPct' || key === 'finishStepoverPct') && !((value as number) > 0 && (value as number) <= 100)) throw new CommandError(`${key} must be in (0, 100]`);
     if (key === 'angleDeg' && !Number.isFinite(value)) throw new CommandError('angleDeg must be a finite number');

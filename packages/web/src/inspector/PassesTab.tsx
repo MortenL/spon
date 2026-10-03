@@ -1,11 +1,14 @@
-import { camContext, type ChamferOp, type DrillCycle, type DrillOp, type EntrySettings, type FaceOp, formatLength, type Operation, type PocketOp, type ProfileOp, resolveGeometry, type SlotOp } from '@sponcam/core';
+import { camContext, type ChamferOp, type DrillCycle, type DrillOp, CommandError, type EngraveOp, type EntrySettings, type FaceOp, formatLength, type Operation, type PocketOp, type ProfileOp, resolveGeometry, type SlotOp, type VCarveOp, type VClearOp } from '@sponcam/core';
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { LengthField, NumericField } from '@/panels/NumericField';
+import { toast } from 'sonner';
 import { runCommand } from '@/state/camView';
-import { useApp } from '@/state/store';
+import { appStore, useApp } from '@/state/store';
+import { toolLibraryStore } from '@/state/toolLibrary';
+import { addClearingBatch, clearingFor, engraveModeUi } from './vcarveInfo';
 import { chamferInfo } from './chamferInfo';
 import { slotView } from './slotInfo';
 import { contourKinds } from './openChains';
@@ -421,11 +424,114 @@ function SlotPasses({ op }: { op: SlotOp }) {
   );
 }
 
+function EngravePasses({ op }: { op: EngraveOp }) {
+  const patch = (p: Partial<EngraveOp>) => runCommand({ type: 'updateOperation', id: op.id, patch: p });
+  const job = useApp((s) => s.job);
+  const tool = job.tools.find((t) => t.id === op.toolId) ?? null;
+  const { widthAllowed, showWidth } = engraveModeUi(op, tool);
+
+  return (
+    <div className="space-y-3">
+      {(
+        <label className="grid grid-cols-[1fr_10rem] items-center gap-2 text-sm">
+          <span className="text-muted-foreground">Depth by</span>
+          <select
+            data-testid="pass-engrave-mode" value={op.depthMode} className="h-8 rounded-md border bg-transparent px-2 text-sm"
+            onChange={(e) => patch({ depthMode: e.target.value as EngraveOp['depthMode'] })}
+          >
+            <option value="depth" className="bg-background">Depth</option>
+            <option value="width" disabled={!widthAllowed} className="bg-background">Line width</option>
+          </select>
+        </label>
+      )}
+      {showWidth
+        ? <LengthField label="Line width" valueMm={op.lineWidth} testId="pass-engrave-width" min={0.01} onCommit={(v) => patch({ lineWidth: v })} />
+        : <LengthField label="Depth" valueMm={op.depth} testId="pass-engrave-depth" min={0.01} onCommit={(v) => patch({ depth: v })} />}
+      <LengthField label="Stepdown" valueMm={op.stepdown} testId="pass-engrave-stepdown" min={0.01} onCommit={(v) => patch({ stepdown: v })} />
+    </div>
+  );
+}
+
+function VCarvePasses({ op }: { op: VCarveOp }) {
+  const patch = (p: Partial<VCarveOp>) => runCommand({ type: 'updateOperation', id: op.id, patch: p });
+  const job = useApp((s) => s.job);
+  const clearing = clearingFor(job, op.id);
+
+  const addClearing = () => {
+    const s = appStore.getState();
+    const newId = crypto.randomUUID();
+    const commands = addClearingBatch(s.job, toolLibraryStore.getState().tools, op.id, newId);
+    try {
+      s.dispatchBatch(commands);
+    } catch (err) {
+      if (err instanceof CommandError) { toast.error(err.message); return; }
+      throw err;
+    }
+    appStore.getState().selectOperation(newId);
+  };
+
+  return (
+    <div className="space-y-3">
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox" data-testid="pass-vcarve-max-depth-on" className="accent-primary" checked={op.maxDepth !== null}
+          onChange={(e) => patch({ maxDepth: e.target.checked ? 3 : null })}
+        />
+        Max depth
+      </label>
+      {op.maxDepth !== null && (
+        <LengthField label="Max depth" valueMm={op.maxDepth} testId="pass-vcarve-max-depth" min={0.01} onCommit={(v) => patch({ maxDepth: v })} />
+      )}
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox" data-testid="pass-vcarve-stepdown-on" className="accent-primary" checked={op.stepdown !== null}
+          onChange={(e) => patch({ stepdown: e.target.checked ? 1 : null })}
+        />
+        Stepdown (off = one pass)
+      </label>
+      {op.stepdown !== null && (
+        <LengthField label="Stepdown" valueMm={op.stepdown} testId="pass-vcarve-stepdown" min={0.01} onCommit={(v) => patch({ stepdown: v })} />
+      )}
+      {op.maxDepth !== null && clearing === null && (
+        <Button variant="outline" size="sm" data-testid="vcarve-add-clearing" onClick={addClearing}>
+          Add clearing operation
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function VClearPasses({ op }: { op: VClearOp }) {
+  const patch = (p: Partial<VClearOp>) => runCommand({ type: 'updateOperation', id: op.id, patch: p });
+  const job = useApp((s) => s.job);
+  const source = job.operations.find((o) => o.id === op.sourceId) ?? null;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 text-sm">
+        {source
+          ? <span data-testid="vclear-source" className="min-w-0 flex-1 truncate">Clears {source.name}</span>
+          : <span data-testid="vclear-source" className="min-w-0 flex-1 truncate text-destructive">Source deleted</span>}
+        {source && (
+          <Button variant="outline" size="sm" data-testid="vclear-select-source" onClick={() => appStore.getState().selectOperation(source.id)}>Select</Button>
+        )}
+      </div>
+      {pctField('Stepover', op.stepoverPct, 'pass-stepover', (v) => patch({ stepoverPct: v }))}
+      <LengthField label="Stepdown" valueMm={op.stepdown} testId="pass-stepdown" min={0.01} onCommit={(v) => patch({ stepdown: v })} />
+      {directionField(op.direction, (v) => patch({ direction: v }))}
+      <EntryFields entry={op.entry} showAngles onPatch={(p) => patch({ entry: { ...op.entry, ...p } })} />
+    </div>
+  );
+}
+
 export function PassesTab({ op }: { op: Operation }) {
   if (op.type === 'profile') return <ProfilePasses op={op} />;
   if (op.type === 'pocket') return <PocketPasses op={op} />;
   if (op.type === 'drill') return <DrillPasses op={op} />;
   if (op.type === 'face') return <FacePasses op={op} />;
   if (op.type === 'slot') return <SlotPasses op={op} />;
+  if (op.type === 'engrave') return <EngravePasses op={op} />;
+  if (op.type === 'vcarve') return <VCarvePasses op={op} />;
+  if (op.type === 'vclear') return <VClearPasses op={op} />;
   return <ChamferPasses op={op} />;
 }

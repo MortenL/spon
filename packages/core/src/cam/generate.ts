@@ -1,14 +1,17 @@
 import type { Job } from '../job/types';
 import { camContext, type CamContext, type CamGeometry } from './context';
-import { resolveGeometry } from './features/resolve';
+import { resolveGeometry, type ResolvedGeometry } from './features/resolve';
 import { gougeCheck } from './gouge/check';
 import { chamferGeometry, chamferToolpath } from './ops/chamfer';
 import { drillToolpath } from './ops/drill';
+import { engraveDepth, engraveToolpath } from './ops/engrave';
 import { faceToolpath } from './ops/face';
 import { emptyOverlays, type OpOutput } from './ops/output';
 import { pocketToolpath } from './ops/pocket';
 import { profileToolpath } from './ops/profile';
 import { slotToolpath } from './ops/slot';
+import { vcarveToolpath } from './ops/vcarve';
+import { vclearToolpath } from './ops/vclear';
 import type { CamDiagnostic, Operation } from './types';
 
 export interface OperationResult extends OpOutput {
@@ -34,8 +37,16 @@ export class GenerationCache {
 }
 
 export function operationKey(op: Operation, job: Job): string {
-  return JSON.stringify([op, job.tools.find((t) => t.id === op.toolId) ?? null, job.tolerance, job.model, job.stock, job.wcs, job.machine.maxFeed]);
+  // a clearing depends on its source operation and that operation's tool; a V-carve's warning on whether an enabled clearing exists
+  let extra: unknown = null;
+  if (op.type === 'vclear') {
+    const src = job.operations.find((o) => o.id === op.sourceId) ?? null;
+    extra = [src, src ? job.tools.find((t) => t.id === src.toolId) ?? null : null];
+  } else if (op.type === 'vcarve') extra = job.operations.some((o) => o.enabled && o.type === 'vclear' && o.sourceId === op.id);
+  return JSON.stringify([op, job.tools.find((t) => t.id === op.toolId) ?? null, job.tolerance, job.model, job.stock, job.wcs, job.machine.maxFeed, extra]);
 }
+
+const emptyGeometry = (): ResolvedGeometry => ({ contours: [], shapes: [], holes: [], slots: [], diagnostics: [], sagitta: 0, faceZ: () => null });
 
 export function generateOperation(op: Operation, ctx: CamContext): OperationResult {
   const base: OperationResult = { operationId: op.id, key: '', toolpath: null, diagnostics: [], heights: null, overlays: emptyOverlays() };
@@ -47,19 +58,23 @@ export function generateOperation(op: Operation, ctx: CamContext): OperationResu
     base.key = operationKey(op, ctx.job);
     const tool = ctx.job.tools.find((t) => t.id === op.toolId);
     if (!tool) return err('no-tool', 'Choose a tool for this operation');
-    if (!op.geometry.length && !(op.type === 'face' && op.area === 'stock')) return err('no-geometry', 'Pick geometry for this operation');
+    if (!op.geometry.length && op.type !== 'vclear' && !(op.type === 'face' && op.area === 'stock')) return err('no-geometry', 'Pick geometry for this operation');
     // facing the whole stock top needs no geometry; stale references are ignored
-    const geo = resolveGeometry(op.type === 'face' && op.area === 'stock' ? { ...op, geometry: [] } : op, ctx);
+    // a V-carve clearing builds its own geometry from its source operation
+    const geo = op.type === 'vclear' ? emptyGeometry() : resolveGeometry(op.type === 'face' && op.area === 'stock' ? { ...op, geometry: [] } : op, ctx);
     const res =
-      op.type === 'profile' ? profileToolpath(op, tool, ctx, geo)
+      op.type === 'vclear' ? vclearToolpath(op, tool, ctx)
+      : op.type === 'profile' ? profileToolpath(op, tool, ctx, geo)
       : op.type === 'pocket' ? pocketToolpath(op, tool, ctx, geo)
       : op.type === 'drill' ? drillToolpath(op, tool, ctx, geo)
       : op.type === 'face' ? faceToolpath(op, tool, ctx, geo)
       : op.type === 'slot' ? slotToolpath(op, tool, ctx, geo)
+      : op.type === 'engrave' ? engraveToolpath(op, tool, ctx, geo)
+      : op.type === 'vcarve' ? vcarveToolpath(op, tool, ctx, geo)
       : chamferToolpath(op, tool, ctx, geo);
     const diagnostics: CamDiagnostic[] = [...geo.diagnostics, ...res.diagnostics];
     const warn = (code: CamDiagnostic['code'], message: string) => diagnostics.push({ operationId: op.id, severity: 'warning', code, message });
-    if (op.type !== 'drill' && !(op.type === 'slot' && op.strategy === 'trochoidal') && op.stepdown > tool.fluteLength) warn('stepdown-exceeds-flute', `Stepdown ${op.stepdown} mm is deeper than the ${tool.fluteLength} mm flutes`);
+    if (op.type !== 'drill' && op.type !== 'engrave' && (op.type as string) !== 'vcarve' && (op.type as string) !== 'vclear' && typeof op.stepdown === 'number' && !(op.type === 'slot' && op.strategy === 'trochoidal') && op.stepdown > tool.fluteLength) warn('stepdown-exceeds-flute', `Stepdown ${op.stepdown} mm is deeper than the ${tool.fluteLength} mm flutes`);
     const maxFeed = op.type === 'drill' ? op.feeds.plungeFeed : op.feeds.feed;
     if (maxFeed > ctx.job.machine.maxFeed) warn('feed-exceeds-machine', `Feed ${maxFeed} mm/min is above the machine maximum of ${ctx.job.machine.maxFeed}`);
     // a gouge keeps its toolpath, so the user can see where it cuts into the model
@@ -70,7 +85,9 @@ export function generateOperation(op: Operation, ctx: CamContext): OperationResu
       // a chamfer cone sits width / tan(half-angle) below the edge by design, and a faceted wall sitting `sagitta`
       // inside its fitted circle lets the cone ride sagitta / tan(half-angle) deeper
       const tanHalf = op.type === 'chamfer' ? Math.tan(chamferGeometry(tool, op.width, op.tipOffset).halfAngle) : 0;
-      const allowance = op.type === 'chamfer' ? (op.width + geo.sagitta) / tanHalf : 0;
+      // engraving cuts into the surface by design, down to its depth
+      const engraved = op.type === 'engrave' ? engraveDepth(op, tool) : null;
+      const allowance = op.type === 'chamfer' ? (op.width + geo.sagitta) / tanHalf : engraved && 'depth' in engraved ? Math.max(0, engraved.depth) : 0;
       // slots: straight walls fit no arcs, but a tool exactly as wide as the slot sits tangent to both walls, so allow the tolerance
       const g = gougeCheck(toolpath, tool, ctx, { allowance, sagitta: op.type === 'slot' ? Math.max(geo.sagitta, ctx.tolerance) : geo.sagitta, intended: res.intended });
       diagnostics.push(...g.diagnostics);

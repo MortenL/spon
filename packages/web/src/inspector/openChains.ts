@@ -18,7 +18,7 @@ export function openChains(op: Operation, ctx: CamContext): { ref: number; membe
       .filter((s) => !s.centreline.closed && op.geometry[s.ref]?.kind === 'dxfPath')
       .map((s) => ({ ref: s.ref, members: s.members ?? [s.ref], z: s.top, path: s.centreline }));
   }
-  if (op.type !== 'profile' && op.type !== 'chamfer') return [];
+  if (op.type !== 'profile' && op.type !== 'chamfer' && op.type !== 'engrave') return [];
   return resolveGeometry(op, ctx).contours
     .filter((c) => !c.path.closed)
     .map((c) => ({ ref: c.ref, members: c.members ?? [c.ref], z: c.z, path: c.path }));
