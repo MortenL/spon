@@ -78,7 +78,8 @@ export function generateOperation(op: Operation, ctx: CamContext): OperationResu
     // a V-carve clearing builds its own geometry from its source operation
     const geo = op.type === 'vclear' ? emptyGeometry() : resolveGeometry(op.type === 'face' && op.area === 'stock' ? { ...op, geometry: [] } : op, ctx);
     const res =
-      op.type === 'vclear' ? vclearToolpath(op, tool, ctx)
+      op.type === 'vplug' ? { toolpath: null, diagnostics: [{ operationId: op.id, severity: 'error' as const, code: 'internal' as const, message: 'Not implemented yet' }], heights: null, overlays: emptyOverlays() } satisfies Omit<OperationResult, 'operationId' | 'key'>
+      : op.type === 'vclear' ? vclearToolpath(op, tool, ctx)
       : op.type === 'profile' ? profileToolpath(op, tool, ctx, geo)
       : op.type === 'pocket' ? pocketToolpath(op, tool, ctx, geo)
       : op.type === 'drill' ? drillToolpath(op, tool, ctx, geo)
@@ -89,7 +90,7 @@ export function generateOperation(op: Operation, ctx: CamContext): OperationResu
       : chamferToolpath(op, tool, ctx, geo);
     const diagnostics: CamDiagnostic[] = [...geo.diagnostics, ...res.diagnostics];
     const warn = (code: CamDiagnostic['code'], message: string) => diagnostics.push({ operationId: op.id, severity: 'warning', code, message });
-    if (op.type !== 'drill' && op.type !== 'engrave' && (op.type as string) !== 'vcarve' && (op.type as string) !== 'vclear' && typeof op.stepdown === 'number' && !(op.type === 'slot' && op.strategy === 'trochoidal') && op.stepdown > tool.fluteLength) warn('stepdown-exceeds-flute', `Stepdown ${op.stepdown} mm is deeper than the ${tool.fluteLength} mm flutes`);
+    if (op.type !== 'drill' && op.type !== 'engrave' && (op.type as string) !== 'vcarve' && (op.type as string) !== 'vclear' && op.type !== 'vplug' && typeof op.stepdown === 'number' && !(op.type === 'slot' && op.strategy === 'trochoidal') && op.stepdown > tool.fluteLength) warn('stepdown-exceeds-flute', `Stepdown ${op.stepdown} mm is deeper than the ${tool.fluteLength} mm flutes`);
     const maxFeed = op.type === 'drill' ? op.feeds.plungeFeed : op.feeds.feed;
     if (maxFeed > ctx.job.machine.maxFeed) warn('feed-exceeds-machine', `Feed ${maxFeed} mm/min is above the machine maximum of ${ctx.job.machine.maxFeed}`);
     // a gouge keeps its toolpath, so the user can see where it cuts into the model

@@ -533,5 +533,6 @@ export function PassesTab({ op }: { op: Operation }) {
   if (op.type === 'engrave') return <EngravePasses op={op} />;
   if (op.type === 'vcarve') return <VCarvePasses op={op} />;
   if (op.type === 'vclear') return <VClearPasses op={op} />;
+  if (op.type === 'vplug') return null; // Task 7
   return <ChamferPasses op={op} />;
 }

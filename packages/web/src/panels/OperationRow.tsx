@@ -14,7 +14,7 @@ import { appStore, useApp } from '@/state/store';
 import { formatDuration } from './format';
 import { duplicateShortcutLabel, firstProblem } from './listShortcuts';
 
-export const TYPE_ICON: Record<OperationType, typeof Scissors> = { profile: Scissors, pocket: SquareDashed, drill: Circle, face: Layers, chamfer: Triangle, slot: RectangleHorizontal, engrave: PenLine, vcarve: ChevronsDown, vclear: Eraser };
+export const TYPE_ICON: Record<OperationType, typeof Scissors> = { profile: Scissors, pocket: SquareDashed, drill: Circle, face: Layers, chamfer: Triangle, slot: RectangleHorizontal, engrave: PenLine, vcarve: ChevronsDown, vclear: Eraser, vplug: Layers };
 export const OP_TYPES: readonly OperationType[] = ['profile', 'pocket', 'drill', 'face', 'chamfer', 'slot', 'engrave', 'vcarve'];
 
 /** The list actions, shared by the ⋯ menu and the keyboard shortcuts. */
