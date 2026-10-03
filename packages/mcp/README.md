@@ -1,7 +1,7 @@
 # Spon MCP server
 
 Lets Claude (or any MCP client) create and edit Spon jobs on disk: import STL, STEP, IGES, DXF and SVG models, pick geometry,
-add profile, pocket, drill, face, chamfer and slot operations, generate, preview, export G-code and save `.spon` files that open in the web app.
+add profile, pocket, drill, face, chamfer, slot, engrave, V-carve and V-carve clearing operations, generate, preview, export G-code and save `.spon` files that open in the web app.
 
 ## Build and register
 
@@ -34,6 +34,8 @@ Facing and chamfers: `add_operation` with `type: "face"` takes an empty `geometr
 `type: "chamfer"` takes a contour and a `width` (for example 0.3 to deburr) with a V-bit or chamfer tool, plus `openSide` (`left` or `right`)
 for open lines, `stepdown` and `direction`; a hole handle is chamfered as a countersink. `generate` tests every toolpath against the model: a gouge is an error
 ("Cuts into the model by up to ...") and `export_gcode` refuses until you fix the heights or geometry.
+
+Engrave and V-carve: `engrave` cuts along lines and outlines (with a V-bit, `depthMode: "width"` plus `lineWidth` sets the width instead of a depth). `vcarve` needs closed outlines and a V-bit; `maxDepth` stops it and leaves the floor of wide areas. `vclear` clears that floor: `add_operation` with `type: "vclear"`, a flat end mill, empty `geometry` and `params: { sourceId: <the V-carve's id> }`; it fails while the V-carve has no `maxDepth`.
 
 Slots: `describe_geometry` lists recognised slots as `S1…` (`filter: "slots"`). `add_operation` with `type: "slot"` cuts an `S` handle or drawn
 centrelines (each line end is the centre of a round end; set `width`). `strategy` is `auto`, `toolWidth`, `wider` or `trochoidal`. A square-ended slot needs

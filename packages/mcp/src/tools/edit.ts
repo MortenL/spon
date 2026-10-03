@@ -45,7 +45,7 @@ const applyShape = {
 const addOperationShape = {
   type: operationTypeSchema,
   tool: z.union([z.string(), z.number().int()]).describe('A job tool id, a T number, or a library tool id (see list_tools). Library tools are copied into the job.'),
-  geometry: z.array(z.union([z.string(), geometryRefSchema])).describe('Handles from describe_geometry (F1, F1.L0, H2, C3, S1) or full geometry refs. Required for every type except face, where an empty list faces the whole stock'),
+  geometry: z.array(z.union([z.string(), geometryRefSchema])).describe('Handles from describe_geometry (F1, F1.L0, H2, C3, S1) or full geometry refs. Required for every type except face (an empty list faces the whole stock) and vclear (leave it empty; it clears the V-carve in params.sourceId)'),
   params: operationPatchSchema.omit({ geometry: true, toolId: true }).optional().describe('Operation parameters, e.g. { "side": "outside", "tabs": { "enabled": true } }'),
   name: z.string().optional(),
 };
@@ -84,11 +84,11 @@ export function registerEditTools(server: McpServer, ctx: ToolContext): void {
 
   server.registerTool('add_operation', {
     title: 'Add operation',
-    description: 'Add a profile, pocket, drill, face, chamfer or slot operation with its tool, geometry and parameters in one step. Nothing changes if any part fails.',
+    description: 'Add a profile, pocket, drill, face, chamfer, slot, engrave, vcarve or vclear operation with its tool, geometry and parameters in one step. Nothing changes if any part fails.',
     inputSchema: addOperationShape,
   }, guarded('add_operation', async (a: Args<typeof addOperationShape>) => {
     const session = state.requireSession();
-    if (a.type !== 'face' && a.geometry.length === 0) throw new SessionError('Pick geometry for this operation');
+    if (a.type !== 'face' && a.type !== 'vclear' && a.geometry.length === 0) throw new SessionError('Pick geometry for this operation');
     const refs = a.geometry.map((g) => state.handles.resolve(g));
     const job = await session.job();
     const commands: JobCommand[] = [];

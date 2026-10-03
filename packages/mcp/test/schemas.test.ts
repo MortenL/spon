@@ -38,6 +38,7 @@ const SAMPLES: JobCommand[] = [
     },
   },
   { type: 'updateOperation', id: 'o', patch: { geometry: [{ kind: 'meshSlot', face }, { kind: 'meshSlot', face, loop: 2 }], strategy: 'toolWidth', trochoidal: { stepPct: 12 }, squareEnds: 'dogbone', heights: { bottom: { from: 'slotBottom', offset: 0 } } } },
+  { type: 'updateOperation', id: 'o', patch: { maxDepth: null, depthMode: 'width', lineWidth: 0.4, sourceId: 'op1', stepdown: null } },
   { type: 'removeOperation', id: 'o' },
   { type: 'duplicateOperation', id: 'o', newId: 'o2' },
   { type: 'moveOperation', id: 'o', delta: -1 },

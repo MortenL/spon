@@ -165,6 +165,38 @@ describe('editing tools', () => {
     expect(generated.export.errors).toEqual([]);
   });
 
+  describe('V-carve and clearing', () => {
+    async function carveJob(maxDepth: number | null) {
+      const t = await dxfJob();
+      const outline = handleOn(data(await t.call('describe_geometry')), 'OUTLINE');
+      const carve = await t.call('add_operation', { type: 'vcarve', tool: 'starter-vbit-90', geometry: [outline], params: { maxDepth } });
+      expect(carve.isError).toBeFalsy();
+      const carveId = data(carve).operation.id as string;
+      const clear = await t.call('add_operation', { type: 'vclear', tool: 'starter-flat-6', geometry: [], params: { sourceId: carveId } });
+      expect(clear.isError).toBeFalsy();
+      expect(data(clear).operation).toMatchObject({ type: 'vclear', sourceId: carveId });
+      return t;
+    }
+
+    it('generates and exports a V-carve with its clearing', async () => {
+      const { call } = await carveJob(1);
+      const generated = await call('generate');
+      expect(generated.isError).toBeFalsy();
+      expect(data(generated).export.errors).toEqual([]);
+      expect((data(generated).operations as { status: string }[]).map((o) => o.status)).not.toContain('error');
+      const exported = await call('export_gcode', { dir: 'out' });
+      expect(exported.isError).toBeFalsy();
+    });
+
+    it('refuses to export a clearing whose V-carve has no max depth', async () => {
+      const { call } = await carveJob(null);
+      await call('generate');
+      const exported = await call('export_gcode', { dir: 'out' });
+      expect(exported.isError).toBe(true);
+      expect(text(exported)).toContain('Set a max depth on');
+    });
+  });
+
   describe('slots', () => {
     async function slotPlate() {
       const t = await connect({}, ['slot-plate.stl']);
