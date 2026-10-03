@@ -41,11 +41,13 @@ Slots: `describe_geometry` lists recognised slots as `S1…` (`filter: "slots"`)
 centrelines (each line end is the centre of a round end; set `width`). `strategy` is `auto`, `toolWidth`, `wider` or `trochoidal`. A square-ended slot needs
 `squareEnds` (`inside`, `endWall` or `dogbone`); `export_gcode` refuses until it is set, and `endWall`/`dogbone` overcuts give a `slot-overcut` warning.
 
+Text: `add_text` puts a text in the job (stock coordinates, mm from the stock's min corner); give an operation `geometry: [{ "kind": "text", "textId": ... }]`. Outline fonts serve profile, pocket, engrave and V-carve; single-line Hershey fonts serve engrave only. `load_font { path }` checks a TTF, OTF or Hershey file and returns a font ref for `add_text` / `update_text` (it is refused while connected live: load fonts in the Spon window).
+
 ## Tools
 
 `status`, `new_job`, `open_job`, `use_live_tab`, `save_job`, `import_model`, `get_job`, `import_program`, `describe_geometry`,
 `apply_commands`, `add_operation`, `generate`, `render_preview`, `get_gcode`, `export_gcode`, `list_tools`,
-`add_library_tool`, `import_tool_library`. Resources: `spon://job`, `spon://catalog`, `spon://gcode/{file}`.
+`add_library_tool`, `import_tool_library`, and for text `list_fonts`, `load_font`, `add_text`, `update_text`, `remove_text`. Resources: `spon://job`, `spon://catalog`, `spon://gcode/{file}`.
 Prompt: `spon-cam-basics`.
 
 ## Live mode

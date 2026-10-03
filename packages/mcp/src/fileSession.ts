@@ -1,13 +1,13 @@
 import { readFile } from 'node:fs/promises';
 import {
-  addProgram, applyCommands, applyMachinePreset, EMPTY_FONTS, type BlobMap, type Boxes, camContext, createJob, decideImport, defaultPostSettings, type DialectId,
-  exportOutcome, type GeometryCatalog, importedOutcome, importModel, importStep, type Job, type JobCommand, type MachinePresetName, type ModelGeometry,
-  modelFilePath, modelSummary, newModelRef, type OcctLoader, operationsWithGeometry, PipelineCache, type PipelineResult, type PreviewOptions,
+  addProgram, applyCommands, applyMachinePreset, type BlobMap, type Boxes, camContext, createJob, decideImport, defaultPostSettings, type DialectId,
+  exportOutcome, FontFileError, FontStore, type GeometryCatalog, importedOutcome, importModel, importStep, type Job, type JobCommand, type MachinePresetName, type ModelGeometry,
+  modelFilePath, modelSummary, newModelRef, parseFontFile, type OcctLoader, operationsWithGeometry, PipelineCache, type PipelineResult, type PreviewOptions,
   previewInput, type ProgramRef, programContext, readSpon, renderPreviewSvg, type RunReport, runPipeline, runReport, setModel, toModelGeometry, writeSpon,
 } from '@sponcam/core';
 import { withSponExtension, writeFileAtomic } from './files';
 import {
-  type ExportOutcome, type ImportOutcome, type JobSession, type ModelInput, SessionError, type SessionInfo, type ToolLibraryAccess,
+  type ExportOutcome, type ImportOutcome, type JobSession, type ModelInput, SessionError, type SessionInfo, type ToolLibraryAccess, type UploadedFontRef,
 } from './session';
 
 export interface FileSessionOptions { library: ToolLibraryAccess; loadReader: OcctLoader; postDate?: string }
@@ -20,6 +20,7 @@ export class FileSession implements JobSession {
   readonly kind = 'file' as const;
   readonly tools: ToolLibraryAccess;
   private readonly cache = new PipelineCache();
+  private readonly fonts = new FontStore();
   private last: { job: Job; geometry: ModelGeometry | null; result: PipelineResult; report: RunReport } | null = null;
 
   private constructor(
@@ -97,16 +98,23 @@ export class FileSession implements JobSession {
     return importedOutcome(this.current, decision.geometry, decision.units, decision.warnings, affected);
   }
 
-  private pipeline(): { result: PipelineResult; report: RunReport } {
+  private async pipeline(): Promise<{ result: PipelineResult; report: RunReport }> {
+    if (this.last && this.last.job === this.current && this.last.geometry === this.geometry) return this.last;
+    try {
+      await this.fonts.ensure(this.current, this.blobs);
+    } catch (err) {
+      throw new SessionError(`Could not load a bundled font: ${message(err)}`);
+    }
+    // the job may have changed while the fonts loaded
     if (this.last && this.last.job === this.current && this.last.geometry === this.geometry) return this.last;
     const opts = this.options.postDate ? { date: this.options.postDate } : {};
-    const result = runPipeline(this.current, this.geometry, programContext(this.current, this.geometry), this.cache, opts, EMPTY_FONTS);
+    const result = runPipeline(this.current, this.geometry, programContext(this.current, this.geometry), this.cache, opts, this.fonts);
     this.last = { job: this.current, geometry: this.geometry, result, report: runReport(this.current, result.run) };
     return this.last;
   }
 
   async run(): Promise<RunReport> {
-    return this.pipeline().report;
+    return (await this.pipeline()).report;
   }
 
   async catalog(): Promise<GeometryCatalog | null> {
@@ -119,7 +127,7 @@ export class FileSession implements JobSession {
   }
 
   async previewSvg(options: PreviewOptions): Promise<string> {
-    return renderPreviewSvg(previewInput(this.current, this.geometry, this.pipeline().result), options);
+    return renderPreviewSvg(previewInput(this.current, this.geometry, (await this.pipeline()).result), options);
   }
 
   async save(path?: string): Promise<string> {
@@ -137,7 +145,7 @@ export class FileSession implements JobSession {
   }
 
   async exportGcode(): Promise<ExportOutcome> {
-    return exportOutcome(this.pipeline().report);
+    return exportOutcome((await this.pipeline()).report);
   }
 
   async importProgram(fileName: string, bytes: Uint8Array): Promise<ProgramRef> {
@@ -146,5 +154,18 @@ export class FileSession implements JobSession {
     this.current = addProgram(this.current, { name: fileName, blobId });
     this.dirty = true;
     return this.current.programs.at(-1)!;
+  }
+
+  async loadFont(fileName: string, bytes: Uint8Array): Promise<UploadedFontRef> {
+    try {
+      parseFontFile(bytes, fileName);
+    } catch (err) {
+      if (err instanceof FontFileError) throw new SessionError(err.message);
+      throw err;
+    }
+    // always a fresh id, so cached generation can never see replaced bytes under an old id
+    const blobId = `font-${crypto.randomUUID()}`;
+    this.blobs = { ...this.blobs, [blobId]: bytes };
+    return { kind: 'file', blobId, name: fileName };
   }
 }

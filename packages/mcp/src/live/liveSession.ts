@@ -86,4 +86,9 @@ export class LiveSession implements JobSession {
   importProgram(fileName: string, bytes: Uint8Array): Promise<ProgramRef> {
     return this.tab.request('importProgram', { fileName, bytes: toBase64(bytes) });
   }
+
+  /** The bridge has no font upload yet (the tab has no font blob store), so uploads happen in the Spon window. */
+  async loadFont(): Promise<never> {
+    throw new SessionError('Load fonts in the Spon window while connected live');
+  }
 }

@@ -44,6 +44,13 @@ Engrave and V-carve
 - vcarve needs closed outlines and a V-bit; the depth follows the shape's width. maxDepth stops it at a depth and leaves the floor of wide areas.
 - vclear clears that floor: add_operation type vclear with a flat end mill and params { sourceId: <the vcarve's operation id> }; it fails while its vcarve has no maxDepth.
 
+Text
+- A text is a job item (add_text; update_text, remove_text, list_fonts), not part of the model. Its position is in stock coordinates: mm from the stock's min corner. Surface is stockTop (default) or a picked face (surface { from: "face", face }).
+- A text needs a fixed stock when the job has no model: apply_commands setStock { mode: "fixed", ... } first.
+- Machine a text by giving an operation geometry [{ kind: "text", textId }] (add_operation geometry, or a full ref in updateOperation). Outline fonts (sans, sansBold, serif and uploaded TTF/OTF) work for profile, pocket, engrave and vcarve; single-line Hershey fonts (hersheySans, hersheyDuplex, hersheyScript) work for engrave only.
+- To use your own font, load_font { path } first, then set the returned ref as the text's font (add_text or update_text). Uploaded fonts are saved inside the .spon file. WOFF/WOFF2-compressed fonts other than WOFF are refused. While connected live, load_font is refused: the user loads fonts in the Spon window.
+- Defaults: font sans, size 10 mm, letterSpacing 0, lineSpacing 1.6, align center, anchor center, angle 0, no mirror, no arc, no fit; the position is the middle of a fixed stock, else the origin. fit { width, height } scales the text to a box (height null keeps the proportions); arc { radius, side } sets it on a circle.
+
 Gouges
 - generate tests every toolpath against the model with the real tool shape. A gouge is an error ("Cuts into the model by up to ..."): export_gcode refuses until you fix it with the operation's heights or geometry (for example a bottom height that is too deep, or a tool that is too large).
 

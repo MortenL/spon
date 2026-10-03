@@ -1,3 +1,4 @@
+import { BUNDLED_FONT_IDS, TEXT_ANCHORS } from '@sponcam/core';
 import { z } from 'zod';
 
 export const vec3Schema = z.strictObject({ x: z.number(), y: z.number(), z: z.number() });
@@ -23,9 +24,9 @@ const heightSpec = z.strictObject({ from: heightFrom, offset: z.number(), face: 
 const coolant = z.enum(['off', 'flood', 'mist']);
 const lapPosition = z.strictObject({ refIndex: z.number().int(), t: z.number() });
 
-const textAnchors = ['topLeft', 'top', 'topRight', 'left', 'center', 'right', 'bottomLeft', 'bottom', 'bottomRight'] as const;
-const fontRefSchema = z.discriminatedUnion('kind', [
-  z.strictObject({ kind: z.literal('bundled'), id: z.enum(['sans', 'sansBold', 'serif', 'hersheySans', 'hersheyDuplex', 'hersheyScript']) }),
+const nonEmpty = <T extends string>(list: readonly T[]) => list as unknown as [T, ...T[]];
+export const fontRefSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('bundled'), id: z.enum(nonEmpty(BUNDLED_FONT_IDS)) }),
   z.strictObject({ kind: z.literal('file'), blobId: z.string(), name: z.string() }),
 ]);
 export const textPatchSchema = z.strictObject({
@@ -38,7 +39,7 @@ export const textPatchSchema = z.strictObject({
   align: z.enum(['left', 'center', 'right']).optional(),
   fit: z.strictObject({ width: z.number(), height: z.number().nullable() }).nullable().optional(),
   position: z.strictObject({ x: z.number(), y: z.number() }).optional(),
-  anchor: z.enum(textAnchors).optional(),
+  anchor: z.enum(nonEmpty(TEXT_ANCHORS)).optional(),
   angle: z.number().optional(),
   mirror: z.boolean().optional(),
   arc: z.strictObject({ radius: z.number(), side: z.enum(['outside', 'inside']) }).nullable().optional(),
