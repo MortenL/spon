@@ -44,7 +44,7 @@ describe('app store', () => {
   it('loads a document with fresh history', () => {
     const store = createAppStore(createJob('A'));
     store.getState().commit(rename('B'));
-    store.getState().loadDocument({ job: createJob('Loaded'), geometry: drawing, modelBytes: null, warnings: ['w'], dirty: false, fileHandle: null, programBytes: {} });
+    store.getState().loadDocument({ job: createJob('Loaded'), geometry: drawing, modelBytes: null, warnings: ['w'], dirty: false, fileHandle: null, programBytes: {}, fontBytes: {} });
     const s = store.getState();
     expect(s.job.name).toBe('Loaded');
     expect(s.past).toEqual([]);
@@ -110,7 +110,7 @@ describe('program and playback state', () => {
     s().setPlaying(true);
     s().setSelectedLine(4);
     expect(s().programData.p1.status).toBe('parsing');
-    s().loadDocument({ job: createJob('B'), geometry: null, modelBytes: null, warnings: [], dirty: false, fileHandle: null, programBytes: { p2: new Uint8Array([2]) } });
+    s().loadDocument({ job: createJob('B'), geometry: null, modelBytes: null, warnings: [], dirty: false, fileHandle: null, programBytes: { p2: new Uint8Array([2]) }, fontBytes: {} });
     expect(s().programBytes).toEqual({ p2: new Uint8Array([2]) });
     expect(s().programData).toEqual({});
     expect([s().activeProgramId, s().playhead, s().playing, s().selectedLine]).toEqual([null, 0, false, null]);

@@ -27,7 +27,7 @@ describe('pruneBlobs', () => {
   });
 
   it('drops programBytes/programData for a removed program once it also leaves the undo/redo history, and deletes its stored blob', async () => {
-    appStore.getState().loadDocument({ job: createJob(), geometry: null, modelBytes: null, warnings: [], dirty: false, fileHandle: null, programBytes: {} });
+    appStore.getState().loadDocument({ job: createJob(), geometry: null, modelBytes: null, warnings: [], dirty: false, fileHandle: null, programBytes: {}, fontBytes: {} });
     appStore.getState().setProgramBytes('p1', new Uint8Array([1]));
     appStore.getState().setProgramData('p1', { status: 'ready', text: 'G0', parsed: null, error: null });
     appStore.getState().commit((job) => addProgram(job, { name: 'a.nc', blobId: 'p1' }));

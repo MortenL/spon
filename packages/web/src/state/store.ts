@@ -1,6 +1,6 @@
 import {
   applyCommand, applyCommands, type CadBodySummary, type CadFormat, createJob, type GeometryCatalog, type Job,
-  type JobCommand, type LengthUnit, type ModelGeometry, type NewModel, type ParsedProgram, type ProgramRef, setModel, type Vec2, type Vec3,
+  type JobCommand, type LengthUnit, type ModelGeometry, type NewModel, type ParsedProgram, type ProgramRef, setModel, type TextSummary, type Vec2, type Vec3,
 } from '@sponcam/core';
 import { useStore } from 'zustand';
 import { createStore, type StoreApi } from 'zustand/vanilla';
@@ -57,6 +57,7 @@ export interface LoadedDocument {
   dirty: boolean;
   fileHandle: FileSystemFileHandle | null;
   programBytes: Record<string, Uint8Array>;
+  fontBytes: Record<string, Uint8Array>;
 }
 
 export interface AppState {
@@ -82,6 +83,8 @@ export interface AppState {
   programBytes: Record<string, Uint8Array>;
   /** Parsed program data by blobId (view state, not undoable). */
   programData: Record<string, ProgramData>;
+  /** Original bytes of uploaded fonts by blobId (saved into .spon files). */
+  fontBytes: Record<string, Uint8Array>;
   activeProgramId: string | null;
   selectedLine: number | null;
   /** Global timeline position, seconds. */
@@ -95,8 +98,13 @@ export interface AppState {
   camFiles: CamFile[];
   camResults: Record<string, OperationSummary>;
   catalog: GeometryCatalog | null;
+  /** Laid-out texts from the last generation (program coordinates). */
+  camTexts: TextSummary[];
   camStatus: 'idle' | 'generating';
   selectedOperationId: string | null;
+  selectedTextId: string | null;
+  /** The text whose surface face is being picked in the viewport. */
+  textPick: string | null;
   camPick: { operationId: string; target: CamPickTarget } | null;
   inspectorTab: InspectorTab;
 
@@ -121,6 +129,7 @@ export interface AppState {
   setBusy(message: string | null): void;
   setProgramBytes(blobId: string, bytes: Uint8Array): void;
   setProgramData(blobId: string, data: ProgramData): void;
+  addFontBytes(blobId: string, bytes: Uint8Array): void;
   /** Drops programBytes/programData entries for blobs no longer referenced (see referencedBlobIds). */
   pruneProgramData(keepIds: readonly string[]): void;
   setActiveProgram(id: string | null): void;
@@ -133,6 +142,9 @@ export interface AppState {
   setCamOutput(output: CamOutput): void;
   setCamStatus(status: 'idle' | 'generating'): void;
   selectOperation(id: string | null): void;
+  /** Selecting a text clears the selected operation and the reverse. */
+  selectText(id: string | null): void;
+  setTextPick(textId: string | null): void;
   setCamPick(pick: { operationId: string; target: CamPickTarget } | null): void;
   setInspectorTab(tab: InspectorTab): void;
 }
@@ -164,6 +176,7 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
     busy: null,
     programBytes: {},
     programData: {},
+    fontBytes: {},
     activeProgramId: null,
     selectedLine: null,
     playhead: 0,
@@ -175,8 +188,11 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
     camFiles: [],
     camResults: {},
     catalog: null,
+    camTexts: [],
     camStatus: 'idle',
     selectedOperationId: null,
+    selectedTextId: null,
+    textPick: null,
     camPick: null,
     inspectorTab: 'geometry',
 
@@ -214,7 +230,7 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
       set({
         ...doc, past: [], future: [], pickMode: 'none', hiddenLayers: [], pendingImport: null, pendingBodies: null, pendingScale: null,
         programData: {}, activeProgramId: doc.job.programs[0]?.id ?? null, selectedLine: null, playhead: 0, playing: false,
-        generatedPrograms: [], camFiles: [], camResults: {}, catalog: null, selectedOperationId: null, camPick: null,
+        generatedPrograms: [], camFiles: [], camResults: {}, catalog: null, camTexts: [], selectedOperationId: null, selectedTextId: null, textPick: null, camPick: null,
       });
     },
     applyImportedModel(model, geometry, modelBytes, warnings) {
@@ -225,7 +241,7 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
       set({ dirty: false, fileHandle: handle });
     },
     setPickMode(pickMode) {
-      set({ pickMode, ...(pickMode !== 'none' ? { camPick: null } : {}) });
+      set({ pickMode, ...(pickMode !== 'none' ? { camPick: null, textPick: null } : {}) });
     },
     toggleEdges() {
       set({ showEdges: !get().showEdges });
@@ -255,13 +271,17 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
     setProgramBytes(blobId, bytes) {
       set({ programBytes: { ...get().programBytes, [blobId]: bytes } });
     },
+    addFontBytes(blobId, bytes) {
+      set({ fontBytes: { ...get().fontBytes, [blobId]: bytes } });
+    },
     setProgramData(blobId, data) {
       set({ programData: { ...get().programData, [blobId]: data } });
     },
     pruneProgramData(keepIds) {
       const keep = new Set(keepIds);
-      const { programBytes, programData } = get();
+      const { programBytes, programData, fontBytes } = get();
       set({
+        fontBytes: Object.fromEntries(Object.entries(fontBytes).filter(([id]) => keep.has(id))),
         programBytes: Object.fromEntries(Object.entries(programBytes).filter(([id]) => keep.has(id))),
         programData: Object.fromEntries(Object.entries(programData).filter(([id]) => keep.has(id))),
       });
@@ -291,7 +311,7 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
     setCamOutput(out) {
       const kept = Object.fromEntries(Object.entries(get().programData).filter(([id]) => !id.startsWith('gen:')));
       const next = {
-        generatedPrograms: out.programs, camFiles: out.files, camResults: out.results, catalog: out.catalog,
+        generatedPrograms: out.programs, camFiles: out.files, camResults: out.results, catalog: out.catalog, camTexts: out.texts,
         camStatus: 'idle' as const, programData: { ...kept, ...out.programData },
       };
       const programs = allPrograms({ job: get().job, generatedPrograms: out.programs });
@@ -302,10 +322,22 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
       set({ camStatus });
     },
     selectOperation(id) {
-      set({ selectedOperationId: id, ...(id !== get().selectedOperationId ? { camPick: null } : {}) });
+      set({
+        selectedOperationId: id, ...(id !== get().selectedOperationId ? { camPick: null } : {}),
+        ...(id !== null ? { selectedTextId: null, textPick: null } : {}),
+      });
+    },
+    selectText(id) {
+      set({
+        selectedTextId: id, ...(id !== get().selectedTextId ? { textPick: null } : {}),
+        ...(id !== null ? { selectedOperationId: null, camPick: null } : {}),
+      });
+    },
+    setTextPick(textId) {
+      set({ textPick: textId, ...(textId !== null ? { camPick: null, pickMode: 'none' as const } : {}) });
     },
     setCamPick(camPick) {
-      set({ camPick, ...(camPick !== null ? { pickMode: 'none' as const } : {}) });
+      set({ camPick, ...(camPick !== null ? { pickMode: 'none' as const, textPick: null } : {}) });
     },
     setInspectorTab(inspectorTab) {
       set({ inspectorTab });

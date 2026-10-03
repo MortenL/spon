@@ -35,13 +35,20 @@ function programBytesFrom(job: Job, blobs: BlobMap): Record<string, Uint8Array> 
   return out;
 }
 
+/** Bytes of the uploaded fonts the job's texts use, from the blobs read out of a file. */
+function fontBytesFrom(job: Job, blobs: BlobMap): Record<string, Uint8Array> {
+  const out: Record<string, Uint8Array> = {};
+  for (const t of job.texts) if (t.font.kind === 'file' && blobs[t.font.blobId]) out[t.font.blobId] = blobs[t.font.blobId];
+  return out;
+}
+
 function confirmDiscard(): boolean {
   return !state().dirty || window.confirm('Discard unsaved changes to this job?');
 }
 
 export async function newDocument(): Promise<void> {
   if (!confirmDiscard()) return;
-  state().loadDocument({ job: createJob(), geometry: null, modelBytes: null, warnings: [], dirty: false, fileHandle: null, programBytes: {} });
+  state().loadDocument({ job: createJob(), geometry: null, modelBytes: null, warnings: [], dirty: false, fileHandle: null, programBytes: {}, fontBytes: {} });
   await persistModelBlob(null, null);
 }
 
@@ -172,8 +179,8 @@ export async function importModelOutcome(fileName: string, bytes: Uint8Array, op
 }
 
 function currentSponBytes(): Uint8Array {
-  const { job, modelBytes, programBytes } = state();
-  const blobs: BlobMap = { ...programBytes };
+  const { job, modelBytes, programBytes, fontBytes } = state();
+  const blobs: BlobMap = { ...programBytes, ...fontBytes };
   if (job.model && modelBytes) blobs[job.model.blobId] = modelBytes;
   return writeSpon(job, blobs);
 }
@@ -231,7 +238,7 @@ async function openSponBytes(bytes: Uint8Array, handle: FileSystemFileHandle | n
       state().setBusy(null);
     }
   }
-  state().loadDocument({ job, geometry, modelBytes, warnings, dirty: false, fileHandle: handle, programBytes: programBytesFrom(job, blobs) });
+  state().loadDocument({ job, geometry, modelBytes, warnings, dirty: false, fileHandle: handle, programBytes: programBytesFrom(job, blobs), fontBytes: fontBytesFrom(job, blobs) });
   state().requestView('fit');
   for (const [id, data] of Object.entries(blobs)) await storeBlob(id, data);
   await pruneBlobs();
@@ -336,6 +343,17 @@ export async function restoreAutosave(): Promise<void> {
       missing.push(p.id);
     }
   }
+  // a font blob that is gone leaves its text with a font-missing error rather than dropping the text
+  const fontBytes: Record<string, Uint8Array> = {};
+  for (const t of job.texts) {
+    if (t.font.kind !== 'file' || fontBytes[t.font.blobId]) continue;
+    try {
+      const data = await getBlob(t.font.blobId);
+      if (data) fontBytes[t.font.blobId] = data;
+    } catch (err) {
+      console.error('Could not read an autosaved font', err);
+    }
+  }
   if (missing.length) {
     toast.warning(`${missing.length} autosaved program(s) could not be found and were removed from the job`);
     job = { ...job, programs: job.programs.filter((p) => !missing.includes(p.id)) };
@@ -343,7 +361,7 @@ export async function restoreAutosave(): Promise<void> {
   // the user already opened, imported or started something while the restore was pending: keep their work
   if (state().job !== jobAtStart) return;
   // the remembered panel stays open after a reload: the restore is not a file the user opened
-  withoutAutoPanel(() => state().loadDocument({ job, geometry, modelBytes, warnings, dirty: saved.dirty, fileHandle: null, programBytes }));
+  withoutAutoPanel(() => state().loadDocument({ job, geometry, modelBytes, warnings, dirty: saved.dirty, fileHandle: null, programBytes, fontBytes }));
   state().requestView('fit');
   await loadPrograms();
 }

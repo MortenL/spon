@@ -89,6 +89,12 @@ export function setCamModelInWorker(geometry: CamGeometry | null): Promise<void>
   return run((api) => api.setCamModel(geometry), 'Sending the model to the CAM worker timed out');
 }
 
+/** Sends uploaded font bytes to the worker (copied; the caller keeps its own). */
+export function addFontsInWorker(fonts: Record<string, Uint8Array>): Promise<void> {
+  const copy = Object.fromEntries(Object.entries(fonts).map(([id, b]) => [id, b.slice()]));
+  return run((api) => api.addFonts(copy), 'Sending fonts to the CAM worker timed out');
+}
+
 export function generateInWorker(job: Job, ctx: ProgramContext): Promise<CamRun> {
   return run((api) => api.generate(job, ctx), 'Generating toolpaths timed out');
 }

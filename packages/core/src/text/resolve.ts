@@ -1,7 +1,7 @@
-import type { CamContext } from '../cam/context';
+import { camContext, type CamContext, type CamGeometry } from '../cam/context';
 import type { Shape } from '../cam/features/chain';
 import { resolveFaceRef } from '../cam/features/mesh';
-import type { CamCode, CamDiagnostic } from '../cam/types';
+import type { CamCode, CamDiagnostic, MeshFaceRef } from '../cam/types';
 import { flattenPath } from '../geometry/offset/pathOps';
 import type { Path2D, Segment, Vec2 } from '../geometry/path2d';
 import type { Job } from '../job/types';
@@ -79,4 +79,15 @@ export function textSummaries(job: Job, ctx: CamContext): TextSummary[] {
     ];
     return { textId: item.id, diagnostics: r.diagnostics, z: r.z, loops };
   });
+}
+
+/** The bounding box of a model face's outer loop in program coordinates, or null when the face does not resolve. */
+export function faceOutlineBounds(job: Job, geometry: CamGeometry | null, face: MeshFaceRef): { min: Vec2; max: Vec2 } | null {
+  const ctx = camContext(job, geometry);
+  const res = resolveFaceRef(ctx, face);
+  if (!res.ok || !res.face.loops.length) return null;
+  const pts = flattenPath(res.face.loops[0], Math.max(ctx.tolerance, 0.01));
+  if (!pts.length) return null;
+  const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+  return { min: { x: Math.min(...xs), y: Math.min(...ys) }, max: { x: Math.max(...xs), y: Math.max(...ys) } };
 }

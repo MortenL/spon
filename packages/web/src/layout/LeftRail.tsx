@@ -6,7 +6,7 @@ import { autoPanelSuppressed } from '@/state/autoPanelGate';
 import { appStore, useApp } from '@/state/store';
 import { type RailPanel, RAIL_PANELS } from './railPanels';
 import { autoPanel, railStore, useRail, WIDTH } from './railStore';
-import { type StepId, setupStatus } from './setupStatus';
+import { type StepId, setupStatus, textStatus } from './setupStatus';
 import { SetupSummary } from './SetupSummary';
 
 appStore.subscribe((s, prev) => {
@@ -59,6 +59,7 @@ function RailButton({ panel, state, reason }: { panel: RailPanel; state?: 'ok' |
 function Rail() {
   const job = useApp((s) => s.job);
   const geometry = useApp((s) => s.geometry);
+  const camTexts = useApp((s) => s.camTexts);
   const status = useMemo(() => setupStatus(job, geometry), [job, geometry]);
   return (
     <nav aria-label="Panels" onKeyDown={onRailKey} className="flex w-11 shrink-0 flex-col items-center gap-1 border-r py-2">
@@ -67,7 +68,7 @@ function Rail() {
           {gi > 0 && <Separator className="my-1 w-6" />}
           <span aria-hidden className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">{g.short}</span>
           {RAIL_PANELS.filter((p) => p.group === g.id).map((p) => {
-            const step = p.group === 'setup' ? status.steps[p.id as StepId] : undefined;
+            const step = p.id === 'text' ? textStatus(camTexts) : p.group === 'setup' ? status.steps[p.id as StepId] : undefined;
             return <RailButton key={p.id} panel={p} state={step?.state} reason={step?.reason} />;
           })}
         </div>

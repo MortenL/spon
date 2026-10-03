@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyCommands, camContext, createJob, FontStore, type Job, PipelineCache, programContext, runPipeline, setStock } from '../src';
+import { applyCommands, camContext, createJob, faceOutlineBounds, FontStore, type Job, PipelineCache, programContext, runPipeline, setStock } from '../src';
 import { faceAt, plateSetup, tool6 } from './fixtures/camSetup';
 import { testFontBytes } from './fixtures/testFont';
 
@@ -124,5 +124,22 @@ describe('text as geometry', () => {
     const { run } = runPipeline(job, null, programContext(job, null), new PipelineCache(), { date: '2026-01-01' }, fonts);
     expect(run.results[0].diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
     await expect(run.files[0].text).toMatchFileSnapshot('./fixtures/text-engrave-spon.nc');
+  });
+});
+
+describe('faceOutlineBounds', () => {
+  it('returns the outer-loop box of a picked face in program coordinates, and null for a stale face', () => {
+    const { job, geometry } = plateSetup();
+    const mesh = geometry as typeof geometry & { kind: 'mesh' };
+    const p = mesh.mesh.positions;
+    let zTop = -Infinity, xMin = Infinity, yMin = Infinity, xMax = -Infinity, yMax = -Infinity;
+    for (let i = 0; i < p.length; i += 3) { zTop = Math.max(zTop, p[i + 2]); xMin = Math.min(xMin, p[i]); yMin = Math.min(yMin, p[i + 1]); xMax = Math.max(xMax, p[i]); yMax = Math.max(yMax, p[i + 1]); }
+    const face = faceAt(mesh, xMin + 1, yMin + 1, zTop);
+    const box = faceOutlineBounds(job, geometry, face)!;
+    const model = camContext(job, geometry).model!;
+    expect(box.min.x).toBeCloseTo(model.min.x, 3);
+    expect(box.max.y).toBeCloseTo(model.max.y, 3);
+    expect(box.max.x - box.min.x).toBeCloseTo(xMax - xMin, 3);
+    expect(faceOutlineBounds(job, null, face)).toBeNull();
   });
 });

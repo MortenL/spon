@@ -86,7 +86,7 @@ export function HeightsTab({ op }: { op: Operation }) {
                   Pick face
                 </Button>
                 <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-                  {spec.face ? refLabel(spec.face, catalog, null, units) : 'No face picked'}
+                  {spec.face ? refLabel(spec.face, catalog, null, units, job.texts) : 'No face picked'}
                 </span>
               </div>
             )}

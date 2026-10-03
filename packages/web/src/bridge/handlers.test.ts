@@ -6,6 +6,7 @@ import type { CamRun } from '../state/camTypes';
 
 const worker = vi.hoisted(() => ({
   setCamModelInWorker: vi.fn(async () => {}),
+  addFontsInWorker: vi.fn(async () => {}),
   generateInWorker: vi.fn(),
   catalogInWorker: vi.fn(async () => null),
   previewSvgInWorker: vi.fn(async () => '<svg/>'),

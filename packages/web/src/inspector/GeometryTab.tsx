@@ -30,6 +30,7 @@ export function GeometryTab({ op }: { op: Operation }) {
   const camPick = useApp((s) => s.camPick);
   const units = useApp((s) => s.job.displayUnits);
   const job = useApp((s) => s.job);
+  const texts = job.texts;
   const seeds = useMemo(() => new Map(openChains(op, camContext(job, geometry)).map((c) => [c.ref, c.members])), [op, job, geometry]);
 
   const drawingLayers = geometry?.kind === 'drawing' ? geometry.drawing.layers.map((l) => l.name) : null;
@@ -64,8 +65,8 @@ export function GeometryTab({ op }: { op: Operation }) {
               className={cn('flex items-center gap-2 rounded-md border px-2 py-1 text-sm', hasError && 'border-destructive/50')}
             >
               {hasError && <CircleX className="size-3.5 shrink-0 text-destructive" />}
-              <span className="min-w-0 flex-1 truncate" title={refLabel(ref, catalog, drawingLayers, units)}>
-                {refLabel(ref, catalog, drawingLayers, units)}
+              <span className="min-w-0 flex-1 truncate" title={refLabel(ref, catalog, drawingLayers, units, texts)}>
+                {refLabel(ref, catalog, drawingLayers, units, texts)}
               </span>
               {seeds.has(i) && (
                 <Toggle

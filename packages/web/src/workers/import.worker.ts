@@ -1,13 +1,16 @@
 import {
   type AnalysisContext, type AnalysisResult, analyzeTable, type CamGeometry, type CamRun, type GeometryCatalog, type ImportOptions, type ImportResult, importModel, importResultTransferables, type Job,
   type MotionTable, type ParsedProgram, parsedProgramTransferables, parseProgram, PipelineCache, type PreviewOptions, previewInput, type ProgramContext,
-  EMPTY_FONTS, renderPreviewSvg, runPipeline,
+  FontStore, renderPreviewSvg, runPipeline,
 } from '@sponcam/core';
 import * as Comlink from 'comlink';
 import { loadOcct } from './occtReader';
 
 let camGeometry: CamGeometry | null = null;
 let pipeline = new PipelineCache();
+const fonts = new FontStore();
+/** Uploaded font bytes by blob id; sent once per blob and kept across models. */
+const fontBlobs: Record<string, Uint8Array> = {};
 
 const api = {
   async import(fileName: string, bytes: Uint8Array, options: ImportOptions = {}): Promise<ImportResult> {
@@ -32,9 +35,14 @@ const api = {
     camGeometry = geometry;
     pipeline = new PipelineCache();
   },
+  /** Keeps uploaded font bytes (sent once per blob id) for text layout. */
+  addFonts(map: Record<string, Uint8Array>): void {
+    Object.assign(fontBlobs, map);
+  },
   /** Generates, posts, parses and analyses every operation; returns summaries, files and the geometry catalog. */
-  generate(job: Job, ctx: ProgramContext): CamRun {
-    const { run } = runPipeline(job, camGeometry, ctx, pipeline, {}, EMPTY_FONTS);
+  async generate(job: Job, ctx: ProgramContext): Promise<CamRun> {
+    await fonts.ensure(job, fontBlobs);
+    const { run } = runPipeline(job, camGeometry, ctx, pipeline, {}, fonts);
     return Comlink.transfer(run, run.files.flatMap((f) => parsedProgramTransferables(f.parsed)));
   },
   /** The geometry catalog for `job` and the model set with setCamModel (the live bridge's describe_geometry). */
@@ -42,8 +50,9 @@ const api = {
     return pipeline.catalogFor(job, camGeometry);
   },
   /** The preview drawing of `job` (the live bridge's render_preview); cached operations make this cheap after a generate. */
-  previewSvg(job: Job, ctx: ProgramContext, options: PreviewOptions): string {
-    return renderPreviewSvg(previewInput(job, camGeometry, runPipeline(job, camGeometry, ctx, pipeline, {}, EMPTY_FONTS)), options);
+  async previewSvg(job: Job, ctx: ProgramContext, options: PreviewOptions): Promise<string> {
+    await fonts.ensure(job, fontBlobs);
+    return renderPreviewSvg(previewInput(job, camGeometry, runPipeline(job, camGeometry, ctx, pipeline, {}, fonts)), options);
   },
 };
 
