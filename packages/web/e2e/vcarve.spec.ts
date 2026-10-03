@@ -82,7 +82,10 @@ test('DXF lines: an engraving with a 0.6 mm line width generates a program', asy
   await page.getByTestId('pass-engrave-mode').selectOption('width');
   await page.getByTestId('pass-engrave-width').fill('0.6');
   await page.getByTestId('pass-engrave-width').press('Enter');
-  await expect(rows(page).last()).toHaveAttribute('data-status', /ok|warning/);
+  await expect(rows(page).last()).toHaveAttribute('data-status', 'ok');
   await openPanel(page, 'programs');
   await expect(page.getByTestId('program-generated')).toHaveCount(1);
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByTestId('export-gcode').click(); // a single program downloads straight away, with no dialog
+  expect((await downloadPromise).suggestedFilename()).toMatch(/-T\d+\.nc$/);
 });
