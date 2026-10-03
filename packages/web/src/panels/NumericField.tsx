@@ -1,4 +1,5 @@
 import { formatLength, parseLength } from '@sponcam/core';
+import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -14,6 +15,17 @@ export interface NumericFieldProps {
   onCommit: (value: number) => void;
   testId?: string;
   disabled?: boolean;
+}
+
+/**
+ * Width and right padding of a field: the unit label sits in the padding, sized to the unit's length (in the input's
+ * monospace `ch`), and the field grows with a long unit (mm/min) so the number keeps at least 5.5rem — about 12
+ * digits. Fields with short units keep the usual 8rem.
+ */
+function fieldStyle(suffix: string | undefined): React.CSSProperties {
+  if (!suffix) return { width: '8rem' };
+  const unit = `calc(${suffix.length}ch + 0.875rem)`;
+  return { paddingRight: unit, width: `max(8rem, calc(5.5rem + ${unit}))` };
 }
 
 /** Text field for a number: commits on Enter or blur, reverts on Escape or invalid input. */
@@ -36,14 +48,13 @@ export function NumericField({ label, value, format, parse, suffix, onCommit, te
   };
 
   return (
-    <label className="grid grid-cols-[1fr_8rem] items-center gap-2 text-sm">
+    <label className="grid grid-cols-[1fr_auto] items-center gap-2 text-sm">
       <span className="text-muted-foreground">{label}</span>
       <span className="relative">
         <Input
           data-testid={testId} value={text} disabled={disabled} inputMode="decimal"
           className={cn('h-8 text-right font-mono text-xs', !suffix && 'pr-2.5')}
-          // room for the unit label on the right, sized to its length so a long unit (mm/min) never covers the number
-          style={suffix ? { paddingRight: `calc(${suffix.length}ch + 0.875rem)` } : undefined}
+          style={fieldStyle(suffix)}
           onFocus={(e) => {
             setEditing(true);
             e.currentTarget.select();

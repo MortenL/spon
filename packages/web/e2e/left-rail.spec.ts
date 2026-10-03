@@ -256,8 +256,10 @@ test('Machine settings open from the top bar', async ({ page }) => {
   await expect(page.getByTestId('machine-preset')).toBeVisible();
 });
 
-test('Machine dialog: unit labels never overlap the numbers, and the profile name fits', async ({ page }) => {
+test('Machine dialog: numbers are never clipped or covered by their units, and the profile name fits', async ({ page }) => {
   await page.getByTestId('machine-open').click();
+  await page.getByTestId('machine-preset').selectOption('Generic VMC'); // the widest values (30000.00 mm/min)
+  await expect(page.getByTestId('machine-rapid-x')).toHaveValue('30000.00');
   for (const id of ['machine-rapid-x', 'machine-rapid-z', 'machine-accel-x', 'machine-max-feed', 'machine-tool-change']) {
     // right edge of the typed text (right-aligned, so it ends at the input's content edge) vs the left edge of its unit label
     const gap = await page.getByTestId(id).evaluate((input: HTMLInputElement) => {
@@ -268,6 +270,8 @@ test('Machine dialog: unit labels never overlap the numbers, and the profile nam
       return suffix.left - textRight;
     });
     expect(gap, id).toBeGreaterThanOrEqual(0);
+    // the whole number is visible: the input does not scroll its text
+    expect(await page.getByTestId(id).evaluate((input: HTMLInputElement) => input.scrollWidth <= input.clientWidth), `${id} clipped`).toBe(true);
   }
   // the selected profile name must fit beside the dropdown arrow (about 20 px)
   const room = await page.getByTestId('machine-preset').evaluate((s: HTMLSelectElement) => {
