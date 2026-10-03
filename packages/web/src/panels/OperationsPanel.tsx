@@ -1,6 +1,7 @@
-import { OPERATION_LABELS } from '@sponcam/core';
+import { CommandError, OPERATION_LABELS } from '@sponcam/core';
 import { Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { addOperation } from '@/state/camView';
@@ -8,6 +9,7 @@ import { appStore, useApp } from '@/state/store';
 import { duplicateOperation, moveOperation, OP_TYPES, OperationRow, removeOperation, TYPE_ICON } from './OperationRow';
 import { shouldHandle } from './listShortcuts';
 import { PanelBody } from './PanelBody';
+import { SortableList } from './SortableList';
 
 export function OperationsPanel() {
   const operations = useApp((s) => s.job.operations);
@@ -59,9 +61,21 @@ export function OperationsPanel() {
         {operations.length === 0 ? (
           <p className="text-sm text-muted-foreground">No operations. Add a profile, pocket, drill, face, chamfer or slot operation.</p>
         ) : (
-          <ul className="space-y-1">
-            {operations.map((op, index) => <OperationRow key={op.id} op={op} index={index} count={operations.length} selected={op.id === selectedId} />)}
-          </ul>
+          <SortableList
+            items={operations} label={(op) => op.name} handleTestId="op-drag"
+            onMove={(id, steps) => {
+              const one = { type: 'moveOperation' as const, id, delta: (steps > 0 ? 1 : -1) as 1 | -1 };
+              try { appStore.getState().dispatchBatch(Array.from({ length: Math.abs(steps) }, () => one)); }
+              catch (err) { if (err instanceof CommandError) toast.error(err.message); else throw err; }
+            }}
+          >
+            {(op, handle) => (
+              <OperationRow
+                op={op} index={operations.findIndex((o) => o.id === op.id)} count={operations.length}
+                selected={op.id === selectedId} dragHandle={handle}
+              />
+            )}
+          </SortableList>
         )}
       </div>
     </PanelBody>

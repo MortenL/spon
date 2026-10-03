@@ -60,7 +60,7 @@ export function OperationRow({ op, index, count, selected, dragHandle }: {
   const stop = (e: React.MouseEvent) => e.stopPropagation();
 
   return (
-    <li
+    <div
       data-testid={`op-row-${index}`} data-selected={selected} data-status={status}
       onClick={() => appStore.getState().selectOperation(op.id)}
       className={cn('cursor-pointer rounded-md border px-2 py-1.5 text-sm', selected ? 'border-primary bg-accent' : 'hover:bg-accent/50')}
@@ -98,6 +98,6 @@ export function OperationRow({ op, index, count, selected, dragHandle }: {
           <span data-testid="op-problem" className={cn('min-w-0 flex-1 truncate', status === 'error' ? 'text-destructive' : 'text-amber-500')} title={problem}>{problem}</span>
         )}
       </div>
-    </li>
+    </div>
   );
 }
