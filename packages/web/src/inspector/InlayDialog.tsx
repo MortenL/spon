@@ -1,4 +1,4 @@
-import { defaultPlugBoard, InlayError, type VCarveOp } from '@sponcam/core';
+import { defaultPlugBoard, formatLength, InlayError, type VCarveOp } from '@sponcam/core';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -21,6 +21,7 @@ export function InlayDialog({ op, open, onOpenChange }: { op: VCarveOp; open: bo
   const [boardEdited, setBoardEdited] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const units = useApp((st) => st.job.displayUnits);
   const H = d - g + s;
 
   // opening starts from the operation's current settings (or the defaults)
@@ -91,7 +92,7 @@ export function InlayDialog({ op, open, onOpenChange }: { op: VCarveOp; open: bo
           <LengthField label="Plug board Y" valueMm={board?.y ?? 0} testId="inlay-board-y" min={0.01} onCommit={(v) => setBoardField('y', v)} />
           <LengthField label="Plug board Z" valueMm={board?.z ?? 0} testId="inlay-board-z" min={0.01} onCommit={(v) => setBoardField('z', v)} />
           <p data-testid="inlay-derived" className="text-xs text-muted-foreground">
-            Plug height H = {H.toFixed(2)} mm. {s.toFixed(2)} mm stands above the base board; plane it off.
+            Plug height H = {formatLength(H, units)} {units}. {formatLength(s, units)} {units} stands above the base board; plane it off.
           </p>
           {error && <p data-testid="inlay-error" role="alert" className="text-sm text-destructive">{error}</p>}
         </div>

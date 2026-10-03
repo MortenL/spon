@@ -1,5 +1,5 @@
 import {
-  applyCommands, type BlobMap, CommandError, FontStore, type InlaySettings, InlayError, type JobCommand, makePlugJob, type MakeInlayInput, readSpon, SPON_EXTENSION, type Tool, writeSpon,
+  applyCommands, type BlobMap, FontStore, type InlaySettings, type JobCommand, makePlugJob, type MakeInlayInput, readSpon, SPON_EXTENSION, type Tool, writeSpon,
 } from '@sponcam/core';
 import { createElement } from 'react';
 import { toast } from 'sonner';
@@ -60,9 +60,8 @@ export async function runInlay(
   vcarveId: string, values: InlayValues, opts: { library: readonly Tool[]; update?: boolean },
 ): Promise<InlayOutcome> {
   try {
-    const job = state().job;
-    const carve = job.operations.find((o) => o.id === vcarveId);
-    if (!carve || carve.type !== 'vcarve') return { status: 'error', message: 'Inlays need a V-carve operation' };
+    const first = state().job;
+    if (!first.operations.some((o) => o.id === vcarveId && o.type === 'vcarve')) return { status: 'error', message: 'Inlays need a V-carve operation' };
 
     let picked: { file: File; handle: FileSystemFileHandle | null } | null = null;
     let existing: { job: ReturnType<typeof readSpon>['job']; blobs: BlobMap } | undefined;
@@ -71,9 +70,12 @@ export async function runInlay(
       if (!picked) return { status: 'cancelled' };
       existing = readSpon(new Uint8Array(await picked.file.arrayBuffer()));
     }
-    const suggested = `${safeFileName(job.name)} plug${SPON_EXTENSION}`;
+    const suggested = `${safeFileName(first.name)} plug${SPON_EXTENSION}`;
     const plugFileName = picked ? picked.file.name : suggested;
 
+    // read the job again: it may have been edited while a picker was open
+    const job = state().job;
+    if (!job.operations.some((o) => o.id === vcarveId && o.type === 'vcarve')) return { status: 'error', message: 'Inlays need a V-carve operation' };
     // the clearing tool joins the job in the same batch, so compute against the job with it added
     const needsClearing = !job.operations.some((o) => o.enabled && o.type === 'vclear' && o.sourceId === vcarveId);
     const tool = needsClearing ? defaultClearingTool(job, opts.library) : null;
@@ -118,7 +120,7 @@ export async function runInlay(
     });
     return { status: 'done', H: result.H };
   } catch (err) {
-    if (err instanceof InlayError || err instanceof CommandError) return { status: 'error', message: err.message };
-    throw err;
+    // InlayError and CommandError messages are meant for the user; anything else (I/O, a corrupt file) shows its own message
+    return { status: 'error', message: err instanceof Error ? err.message : String(err) };
   }
 }

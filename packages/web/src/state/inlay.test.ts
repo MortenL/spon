@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto';
-import { createJob, readSpon, setStock, type Tool } from '@sponcam/core';
+import { createJob, readSpon, setStock, type Tool, writeSpon } from '@sponcam/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../workers/importClient', () => ({ importInWorker: vi.fn(), cadReaderLoaded: () => true, loadCadReaderInWorker: vi.fn(), addFontsInWorker: vi.fn() }));
@@ -19,6 +19,8 @@ const { clearAutosave } = await import('./autosave');
 const { addTextCentred, addTextOperation, updateText } = await import('./texts');
 const { runInlay } = await import('./inlay');
 const { appStore } = await import('./store');
+const { registerFontFile } = await import('./texts');
+const { testFontBytes } = await import('../../../core/test/fixtures/testFont');
 
 const s = () => appStore.getState();
 const vbit: Tool = {
@@ -98,6 +100,43 @@ describe('runInlay', () => {
     expect(written()).toHaveLength(2);
     expect(written()[1][0]).toBe(picked);
     expect(readSpon(written()[1][1]).job.texts).toHaveLength(texts);
+    expect(s().job.operations.find((o) => o.id === id)).toMatchObject({ inlay: { plugFileName: 'plug.spon' } });
     expect(s().past.length).toBe(past + 1);
+  });
+
+  it('returns an error, with the job unchanged, when writing the plug fails', async () => {
+    const id = fresh();
+    vi.mocked(fileio.pickSaveHandle).mockResolvedValue(handle('x.spon'));
+    vi.mocked(fileio.writeToHandle).mockRejectedValueOnce(new Error('disk full'));
+    const before = s().job;
+    const past = s().past.length;
+    expect(await runInlay(id, input, { library: [flat] })).toEqual({ status: 'error', message: 'disk full' });
+    expect(s().job).toBe(before);
+    expect(s().past.length).toBe(past);
+  });
+
+  it('refuses updating from a file that is not a plug job', async () => {
+    const id = fresh();
+    vi.mocked(fileio.pickSaveHandle).mockResolvedValue(handle('plug.spon'));
+    await runInlay(id, input, { library: [flat] });
+    const notPlug = writeSpon(createJob(), {});
+    vi.mocked(fileio.pickOpenFile).mockResolvedValue({ file: new File([notPlug.slice()], 'other.spon'), handle: handle('other.spon') });
+    const before = s().job;
+    expect(await runInlay(id, input, { library: [flat], update: true })).toEqual({ status: 'error', message: 'This job is not a plug job' });
+    expect(s().job).toBe(before);
+    vi.mocked(fileio.pickOpenFile).mockResolvedValue({ file: new File([new Uint8Array([1, 2, 3])], 'bad.spon'), handle: null as never });
+    expect((await runInlay(id, input, { library: [flat], update: true })).status).toBe('error');
+  });
+
+  it('carries an uploaded font into the plug job', async () => {
+    const id = fresh();
+    const font = await registerFontFile('Test.ttf', testFontBytes());
+    const text = s().job.operations.find((o) => o.id === id)!;
+    const textId = (text as { geometry: { textId: string }[] }).geometry[0].textId;
+    updateText(textId, { font });
+    vi.mocked(fileio.pickSaveHandle).mockResolvedValue(handle('f.spon'));
+    expect((await runInlay(id, input, { library: [flat] })).status).toBe('done');
+    const plug = readSpon(written()[0][1]);
+    expect(Object.keys(plug.blobs)).toContain(font.blobId);
   });
 });
