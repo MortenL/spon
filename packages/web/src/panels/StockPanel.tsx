@@ -4,7 +4,7 @@ import { usePlacement, useStockBox } from '@/state/selectors';
 import { appStore, useApp } from '@/state/store';
 import { formatSize } from './format';
 import { LengthField } from './NumericField';
-import { PanelSection } from './PanelSection';
+import { PanelBody } from './PanelBody';
 import { fixedStockPatch } from './stockNoModel';
 
 const AXES = ['x', 'y', 'z'] as const;
@@ -18,7 +18,7 @@ export function StockPanel() {
     const { commit } = appStore.getState();
     const size = job.stock.mode === 'fixed' ? job.stock.size : { x: 0, y: 0, z: 0 };
     return (
-      <PanelSection title="Stock">
+      <PanelBody>
         <p className="mb-3 text-sm text-muted-foreground">No model: set fixed stock for a spoilboard or blank</p>
         <div className="space-y-2">
           {AXES.map((axis) => (
@@ -29,14 +29,14 @@ export function StockPanel() {
         <p className="mt-3 text-xs text-muted-foreground">
           Stock: <span className="font-mono" data-testid="stock-size">{formatSize(box ? bboxSize(box) : size, job.displayUnits)}</span>
         </p>
-      </PanelSection>
+      </PanelBody>
     );
   }
   if (!placement || !box) {
     return (
-      <PanelSection title="Stock">
+      <PanelBody>
         <p className="text-sm text-muted-foreground">Load a model to set up stock.</p>
-      </PanelSection>
+      </PanelBody>
     );
   }
 
@@ -51,7 +51,7 @@ export function StockPanel() {
   };
 
   return (
-    <PanelSection title="Stock">
+    <PanelBody>
       <ToggleGroup type="single" variant="outline" size="sm" value={stock.mode} onValueChange={(v) => v && switchMode(v)} className="mb-3 w-full">
         <ToggleGroupItem value="auto" data-testid="stock-mode-auto" className="flex-1">Auto</ToggleGroupItem>
         <ToggleGroupItem value="fixed" data-testid="stock-mode-fixed" className="flex-1">Fixed</ToggleGroupItem>
@@ -86,6 +86,6 @@ export function StockPanel() {
       <p className="mt-3 text-xs text-muted-foreground">
         Stock: <span className="font-mono" data-testid="stock-size">{formatSize(bboxSize(box), job.displayUnits)}</span>
       </p>
-    </PanelSection>
+    </PanelBody>
   );
 }

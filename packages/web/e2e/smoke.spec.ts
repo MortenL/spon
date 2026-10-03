@@ -1,7 +1,6 @@
 import path from 'node:path';
 import { expect, type Page, test } from '@playwright/test';
-
-const FIXTURES = path.resolve(import.meta.dirname, '../../core/test/fixtures');
+import { FIXTURES, openPanel } from './helpers';
 
 test.beforeEach(async ({ page }) => {
   // Force the <input type="file"> fallback so tests can supply files.
@@ -37,19 +36,23 @@ test('STL: import, lay flat, stock, WCS, then autosave restores everything', asy
   // 2. lay the front face (-Y) flat: 20 × 10 × 5 becomes 20 × 5 × 10
   await page.getByTestId('view-front').click();
   await page.waitForTimeout(300);
+  await openPanel(page, 'orientation');
   await page.getByTestId('pick-face').click();
   await expect(page.getByTestId('pick-hint')).toBeVisible();
   await clickViewportCentre(page);
+  await openPanel(page, 'model');
   await expect(page.getByTestId('model-size')).toHaveText('20.00 × 5.00 × 10.00 mm');
   await expect(page.getByTestId('pick-hint')).toHaveCount(0);
 
   // 3. fixed stock 30 × 15 × 12 and the origin at the top centre
+  await openPanel(page, 'stock');
   await page.getByTestId('stock-mode-fixed').click();
   await expect(page.getByTestId('stock-size')).toHaveText('30.00 × 15.00 × 11.00 mm');
   const sizeZ = page.getByTestId('stock-size-z');
   await sizeZ.fill('12');
   await sizeZ.press('Enter');
   await expect(page.getByTestId('stock-size')).toHaveText('30.00 × 15.00 × 12.00 mm');
+  await openPanel(page, 'origin');
   await page.getByTestId('wcs-anchor-center-center').click();
   await page.getByTestId('wcs-z-top').click();
   await expect(page.getByTestId('wcs-position')).toHaveText('X 0.00 · Y 0.00 · Z 12.00 mm');
@@ -57,8 +60,14 @@ test('STL: import, lay flat, stock, WCS, then autosave restores everything', asy
   // 4. autosave (1 s debounce) survives a reload
   await page.waitForTimeout(1500);
   await page.reload();
+  // the remembered panel (Work origin) stays open once the restored job has loaded; the restore must not switch to Model
+  await expect(page.getByTestId('wcs-position')).toHaveText('X 0.00 · Y 0.00 · Z 12.00 mm');
+  await expect(page.getByTestId('left-panel')).toHaveAttribute('data-panel', 'origin');
+  await openPanel(page, 'model');
   await expect(page.getByTestId('model-size')).toHaveText('20.00 × 5.00 × 10.00 mm');
+  await openPanel(page, 'stock');
   await expect(page.getByTestId('stock-mode-fixed')).toHaveAttribute('data-state', 'on');
+  await openPanel(page, 'origin');
   await expect(page.getByTestId('wcs-position')).toHaveText('X 0.00 · Y 0.00 · Z 12.00 mm');
 });
 

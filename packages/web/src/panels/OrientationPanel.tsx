@@ -3,7 +3,7 @@ import { ArrowDownToLine, MoveHorizontal, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { appStore, useApp } from '@/state/store';
 import { NumericField } from './NumericField';
-import { PanelSection } from './PanelSection';
+import { PanelBody } from './PanelBody';
 
 const QUARTER_TURNS = [
   { axis: 'x', direction: 1, label: '+90° X', testId: 'rotate-x-pos' },
@@ -24,9 +24,9 @@ export function OrientationPanel() {
 
   if (!model) {
     return (
-      <PanelSection title="Orientation">
+      <PanelBody>
         <p className="text-sm text-muted-foreground">Load a model to orient it.</p>
-      </PanelSection>
+      </PanelBody>
     );
   }
 
@@ -35,7 +35,7 @@ export function OrientationPanel() {
   const toggle = (mode: 'face' | 'edge') => setPickMode(pickMode === mode ? 'none' : mode);
 
   return (
-    <PanelSection title="Orientation">
+    <PanelBody>
       <div className="grid grid-cols-2 gap-2">
         <Button size="sm" className="col-span-2" variant={pickMode === 'face' ? 'default' : 'outline'} disabled={!isMesh}
           onClick={() => toggle('face')} data-testid="pick-face">
@@ -59,6 +59,6 @@ export function OrientationPanel() {
       <Button size="sm" variant="ghost" className="mt-2 w-full" data-testid="reset-orientation" onClick={() => commit(resetOrientation)}>
         <RotateCcw className="size-4" /> Reset orientation
       </Button>
-    </PanelSection>
+    </PanelBody>
   );
 }

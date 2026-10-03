@@ -1,7 +1,6 @@
 import path from 'node:path';
 import { expect, type Page, test } from '@playwright/test';
-
-const FIXTURES = path.resolve(import.meta.dirname, '../../core/test/fixtures');
+import { FIXTURES, openPanel } from './helpers';
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -48,6 +47,7 @@ test('G-code: load over a job, analyse, jump to the diagnostic, scrub, and resto
   // autosave restores the program and its analysis
   await page.waitForTimeout(1500);
   await page.reload();
+  await openPanel(page, 'programs'); // the remembered panel; the restore no longer switches panels
   await expect(page.getByTestId('program-drill-arc.nc')).toBeVisible();
   await page.getByTestId('dock-tab-analysis').click();
   await expect(page.getByTestId('diagnostic')).toHaveCount(1);
@@ -64,7 +64,7 @@ test('G-code without a model: rapids below Z 0 are reported and the machine prof
   await page.getByTestId('dock-tab-analysis').click();
   await expect(page.getByTestId('diagnostic')).toHaveCount(1);
 
-  await page.getByRole('button', { name: 'Machine' }).click(); // expand the collapsed panel
+  await page.getByTestId('machine-open').click();
   await page.getByTestId('machine-preset').selectOption('Generic VMC');
   await expect(time).not.toHaveText(before!); // 5 s tool change instead of 30 s
 });
@@ -140,7 +140,7 @@ test('playback keys still work after dragging the scrubber or picking a speed', 
   expect(afterThird).toBe(afterSecond + 1);
 
   // a real text input must still block the playback keys
-  await page.getByRole('button', { name: 'Machine' }).click(); // expand the collapsed panel
+  await page.getByTestId('machine-open').click();
   await page.getByTestId('machine-tool-change').click();
   await page.keyboard.press('ArrowRight');
   await expect(move).toHaveText(new RegExp(`line ${afterThird}\\b`)); // unchanged: the keypress was blocked

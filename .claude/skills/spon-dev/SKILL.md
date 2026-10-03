@@ -30,6 +30,8 @@ Authoritative docs:
 
 Import fixtures: STL/DXF in `packages/core/test/fixtures/`, SVG files (Inkscape mm, Illustrator px, etc.) in `packages/core/test/fixtures/svg/`, and the LinuxCNC `tool.tbl` sample in `packages/core/test/fixtures/tool.tbl`. `e2e/inputs.spec.ts` drives SVG import, open-line sides and tool.tbl import. `stepped.stl` (a 60×40×10 slab with a 20×20×10 boss, no units) is built by `make-fixtures.mjs` from `steppedData.mjs`; `e2e/face-chamfer.spec.ts` uses it for the gouge check. `slot-plate.stl` and `slot-lines.dxf` are built by `make-fixtures.mjs` from `terraced.mjs`; `e2e/slots.spec.ts` and the MCP tests use them.
 
+e2e tests reach the left panels through `openPanel(page, id)` in `e2e/helpers.ts` (ids: model, orientation, stock, origin, operations, post, programs), and Machine settings through the `machine-open` button.
+
 Before claiming a change works: run the focused tests for the files you touched, then `pnpm typecheck && pnpm test` once. UI changes also need `pnpm build`, and user flows need `pnpm e2e`.
 
 ## Rules that are easy to break

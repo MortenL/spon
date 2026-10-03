@@ -6,6 +6,10 @@ An MCP server lets Claude (or any MCP client) drive the same jobs: on `.spon` fi
 
 ## Features
 
+**Workspace**
+- A left icon rail with Setup (Model, Orientation, Stock, Origin) and CAM (Operations, Post, Programs). One panel is open at a time; it can be resized, or hidden by clicking its icon again. Status dots show what needs attention, and a setup summary sits under the CAM panels.
+- Operation rows show the first problem, reorder by dragging, and have a ⋯ menu and shortcuts that act while the Operations panel is open (Ctrl+D duplicates, Del deletes, Alt+↑/↓ moves). Machine settings are in the top bar.
+
 **Import**
 - STL meshes, STEP and IGES solids (multi-body files ask which body), DXF drawings and SVG drawings.
 - SVG files from Inkscape, Illustrator, Affinity, CAD exports and web artwork. Shapes are layered by Inkscape layer or by colour. Pixel-based files ask for a scale: 96 dpi, 72 dpi or a target width.
@@ -102,8 +106,8 @@ More detail is in [`.claude/skills/spon-dev/SKILL.md`](.claude/skills/spon-dev/S
 | 4.1 | SVG import, LinuxCNC tool tables, open-line profile sides | Done |
 | 4.2 | Facing, chamfer and the gouge check | Done |
 | 4.3 | Slots | Done |
-| 4.3a | Left-panel rethink | Next |
-| 4.4 | Engraving and V-carve | Planned |
+| 4.3a | Left-panel rethink | Done |
+| 4.4 | Engraving and V-carve | Next |
 | 4.5 | Thread milling | Planned |
 | 4.6 | Automatic operation suggestions | Planned |
 

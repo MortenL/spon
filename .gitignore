@@ -5,3 +5,6 @@ playwright-report/
 test-results/
 .vite/
 *.log
+
+# impeccable design-hook settings (local)
+.impeccable/

@@ -5,7 +5,7 @@ import { useWcsPoint } from '@/state/selectors';
 import { appStore, useApp } from '@/state/store';
 import { formatPoint } from './format';
 import { LengthField } from './NumericField';
-import { PanelSection } from './PanelSection';
+import { PanelBody } from './PanelBody';
 
 // Seen from above: Y points away from the viewer, so the top row is Y max.
 const ROWS: AxisAnchor[] = ['max', 'center', 'min'];
@@ -18,7 +18,7 @@ export function WcsPanel() {
   const { commit } = appStore.getState();
 
   return (
-    <PanelSection title="Work origin (WCS)">
+    <PanelBody>
       <div className="flex items-start gap-4">
         <div className="grid grid-cols-3 gap-1" role="group" aria-label="Origin position on the stock (seen from above)">
           {ROWS.map((y) => COLUMNS.map((x) => {
@@ -58,6 +58,6 @@ export function WcsPanel() {
       <p className="mt-3 text-xs text-muted-foreground">
         Origin: <span className="font-mono" data-testid="wcs-position">{point ? formatPoint(point, units) : '—'}</span>
       </p>
-    </PanelSection>
+    </PanelBody>
   );
 }
