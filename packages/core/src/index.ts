@@ -96,3 +96,4 @@ export * from './cam/vcarve/sample';
 export * from './cam/vcarve/medial';
 export * from './cam/vcarve/strokes';
 export { flatAreas, shapePolys, vcarveToolpath } from './cam/ops/vcarve';
+export { vclearToolpath } from './cam/ops/vclear';

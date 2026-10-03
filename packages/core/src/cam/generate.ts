@@ -1,6 +1,6 @@
 import type { Job } from '../job/types';
 import { camContext, type CamContext, type CamGeometry } from './context';
-import { resolveGeometry } from './features/resolve';
+import { resolveGeometry, type ResolvedGeometry } from './features/resolve';
 import { gougeCheck } from './gouge/check';
 import { chamferGeometry, chamferToolpath } from './ops/chamfer';
 import { drillToolpath } from './ops/drill';
@@ -11,6 +11,7 @@ import { pocketToolpath } from './ops/pocket';
 import { profileToolpath } from './ops/profile';
 import { slotToolpath } from './ops/slot';
 import { vcarveToolpath } from './ops/vcarve';
+import { vclearToolpath } from './ops/vclear';
 import type { CamDiagnostic, Operation } from './types';
 
 export interface OperationResult extends OpOutput {
@@ -39,6 +40,8 @@ export function operationKey(op: Operation, job: Job): string {
   return JSON.stringify([op, job.tools.find((t) => t.id === op.toolId) ?? null, job.tolerance, job.model, job.stock, job.wcs, job.machine.maxFeed]);
 }
 
+const emptyGeometry = (): ResolvedGeometry => ({ contours: [], shapes: [], holes: [], slots: [], diagnostics: [], sagitta: 0, faceZ: () => null });
+
 export function generateOperation(op: Operation, ctx: CamContext): OperationResult {
   const base: OperationResult = { operationId: op.id, key: '', toolpath: null, diagnostics: [], heights: null, overlays: emptyOverlays() };
   if (!op.enabled) return base;
@@ -50,11 +53,12 @@ export function generateOperation(op: Operation, ctx: CamContext): OperationResu
     const tool = ctx.job.tools.find((t) => t.id === op.toolId);
     if (!tool) return err('no-tool', 'Choose a tool for this operation');
     if (!op.geometry.length && op.type !== 'vclear' && !(op.type === 'face' && op.area === 'stock')) return err('no-geometry', 'Pick geometry for this operation');
-    if (op.type === 'vclear') return err('internal', 'Not implemented yet');
     // facing the whole stock top needs no geometry; stale references are ignored
-    const geo = resolveGeometry(op.type === 'face' && op.area === 'stock' ? { ...op, geometry: [] } : op, ctx);
+    // a V-carve clearing builds its own geometry from its source operation
+    const geo = op.type === 'vclear' ? emptyGeometry() : resolveGeometry(op.type === 'face' && op.area === 'stock' ? { ...op, geometry: [] } : op, ctx);
     const res =
-      op.type === 'profile' ? profileToolpath(op, tool, ctx, geo)
+      op.type === 'vclear' ? vclearToolpath(op, tool, ctx)
+      : op.type === 'profile' ? profileToolpath(op, tool, ctx, geo)
       : op.type === 'pocket' ? pocketToolpath(op, tool, ctx, geo)
       : op.type === 'drill' ? drillToolpath(op, tool, ctx, geo)
       : op.type === 'face' ? faceToolpath(op, tool, ctx, geo)
