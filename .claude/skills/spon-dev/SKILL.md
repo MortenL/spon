@@ -32,6 +32,8 @@ Import fixtures: STL/DXF in `packages/core/test/fixtures/`, SVG files (Inkscape 
 
 e2e tests reach the left panels through `openPanel(page, id)` in `e2e/helpers.ts` (ids: model, orientation, stock, origin, text, operations, post, programs), and Machine settings through the `machine-open` button.
 
+Inlays (milestone 4.4c): `packages/core/test/inlay-fit.test.ts` proves the plug fits the pocket, using the sweep helpers in `packages/core/test/fixtures/sweep.ts`; `packages/web/e2e/inlay.spec.ts` drives Make inlay… and Update inlay (it removes the File System Access pickers so the download and file-input fallbacks run, and accepts the discard confirmation when opening the plug job).
+
 Before claiming a change works: run the focused tests for the files you touched, then `pnpm typecheck && pnpm test` once. UI changes also need `pnpm build`, and user flows need `pnpm e2e`.
 
 ## Rules that are easy to break
