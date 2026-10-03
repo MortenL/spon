@@ -1,5 +1,6 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import type { Job, ModelRef, ProgramRef } from '../job/types';
+import { fontBlobPath } from '../text/types';
 import { SponFileError } from './errors';
 import { migrateJob } from './migrations';
 
@@ -19,13 +20,21 @@ export function programFilePath(program: ProgramRef): string {
 
 /** Every blob the job references: the model (if any) first, then programs in list order. */
 export function jobBlobIds(job: Job): string[] {
-  return [...(job.model ? [job.model.blobId] : []), ...job.programs.map((p) => p.blobId)];
+  return blobPaths(job).map(([blobId]) => blobId);
+}
+
+/** Uploaded fonts of the job's texts, deduplicated by blobId. */
+function fontBlobPaths(job: Job): [blobId: string, path: string][] {
+  const seen = new Map<string, string>();
+  for (const t of job.texts) if (t.font.kind === 'file' && !seen.has(t.font.blobId)) seen.set(t.font.blobId, fontBlobPath(t.font.blobId, t.font.name));
+  return [...seen];
 }
 
 function blobPaths(job: Job): [blobId: string, path: string][] {
   return [
     ...(job.model ? [[job.model.blobId, modelFilePath(job.model)] as [string, string]] : []),
     ...job.programs.map((p): [string, string] => [p.blobId, programFilePath(p)]),
+    ...fontBlobPaths(job),
   ];
 }
 

@@ -3,7 +3,7 @@ import type { Job } from '../job/types';
 import { defaultPostSettings } from '../post/types';
 import { SponFileError } from './errors';
 
-export const CURRENT_SCHEMA_VERSION = 5;
+export const CURRENT_SCHEMA_VERSION = 6;
 
 export type Migration = (job: Record<string, unknown>) => Record<string, unknown>;
 
@@ -28,6 +28,8 @@ export const MIGRATIONS: Readonly<Record<number, Migration>> = {
   }),
   // v4 → v5 (Milestone 4.2): facing and chamfer operations exist; nothing to change in older jobs
   4: (job) => job,
+  // v5 → v6 (Milestone 4.4b): texts
+  5: (job) => ({ ...job, texts: [] }),
 };
 
 export function migrateJob(raw: unknown, migrations: Readonly<Record<number, Migration>> = MIGRATIONS, current = CURRENT_SCHEMA_VERSION): Job {
@@ -61,7 +63,7 @@ function assertJobShape(job: Record<string, unknown>): void {
     typeof stock === 'object' && stock !== null && (stock.mode === 'auto' || stock.mode === 'fixed') &&
     typeof wcs === 'object' && wcs !== null && typeof wcs.anchor === 'object' && typeof wcs.offset === 'object' &&
     typeof job.machine === 'object' && job.machine !== null && Array.isArray(job.programs) &&
-    Array.isArray(job.tools) && Array.isArray(job.operations) &&
+    Array.isArray(job.tools) && Array.isArray(job.operations) && Array.isArray(job.texts) &&
     typeof job.post === 'object' && job.post !== null && typeof job.tolerance === 'number';
   if (!ok) throw new SponFileError('job.json is not a valid job');
 }

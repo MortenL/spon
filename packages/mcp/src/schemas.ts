@@ -22,6 +22,31 @@ const heightSpec = z.strictObject({ from: heightFrom, offset: z.number(), face: 
 const coolant = z.enum(['off', 'flood', 'mist']);
 const lapPosition = z.strictObject({ refIndex: z.number().int(), t: z.number() });
 
+const textAnchors = ['topLeft', 'top', 'topRight', 'left', 'center', 'right', 'bottomLeft', 'bottom', 'bottomRight'] as const;
+const fontRefSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('bundled'), id: z.enum(['sans', 'sansBold', 'serif', 'hersheySans', 'hersheyDuplex', 'hersheyScript']) }),
+  z.strictObject({ kind: z.literal('file'), blobId: z.string(), name: z.string() }),
+]);
+export const textPatchSchema = z.strictObject({
+  name: z.string().optional(),
+  text: z.string().optional(),
+  font: fontRefSchema.optional(),
+  size: z.number().optional(),
+  letterSpacing: z.number().optional(),
+  lineSpacing: z.number().optional(),
+  align: z.enum(['left', 'center', 'right']).optional(),
+  fit: z.strictObject({ width: z.number(), height: z.number().nullable() }).nullable().optional(),
+  position: z.strictObject({ x: z.number(), y: z.number() }).optional(),
+  anchor: z.enum(textAnchors).optional(),
+  angle: z.number().optional(),
+  mirror: z.boolean().optional(),
+  arc: z.strictObject({ radius: z.number(), side: z.enum(['outside', 'inside']) }).nullable().optional(),
+  surface: z.discriminatedUnion('from', [
+    z.strictObject({ from: z.literal('stockTop') }),
+    z.strictObject({ from: z.literal('face'), face: meshFaceRef }),
+  ]).optional(),
+});
+
 export const operationPatchSchema = z.strictObject({
   name: z.string(),
   enabled: z.boolean(),
@@ -123,6 +148,10 @@ export const jobCommandSchema = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('duplicateOperation'), id: z.string(), newId: z.string().optional() }),
   z.strictObject({ type: z.literal('moveOperation'), id: z.string(), delta }),
   z.strictObject({ type: z.literal('setOperationEnabled'), id: z.string(), enabled: z.boolean() }),
+  z.strictObject({ type: z.literal('addText'), id: z.string().optional(), patch: textPatchSchema.optional() }),
+  z.strictObject({ type: z.literal('updateText'), id: z.string(), patch: textPatchSchema }),
+  z.strictObject({ type: z.literal('removeText'), id: z.string() }),
+  z.strictObject({ type: z.literal('moveText'), id: z.string(), delta }),
   z.strictObject({ type: z.literal('addTool'), tool: toolSchema }),
   z.strictObject({ type: z.literal('updateTool'), id: z.string(), patch: toolSchema.omit({ id: true }).partial() }),
   z.strictObject({ type: z.literal('removeTool'), id: z.string() }),
