@@ -54,7 +54,7 @@
    - **Licence check:** verify the notice text before committing. If the only available copy is under GPL terms, stop and report BLOCKED.
    - **Generated tables:** `build-fonts.mjs` turns them into `src/text/bundled/<id>.ts` stroke tables (`export default` a JSON-compatible object).
 3. **Uploaded-font test fixture:** instead of a committed `.ttf`, tests build a small font in code with opentype.js (`new opentype.Font({...}).toArrayBuffer()`) and load those bytes. This avoids a binary fixture and gives exact glyph geometry.
-4. **Fit with an arc:** `fit` limits the straight layout (advance width of the widest line, ink height of the block) before arc placement.
+4. **Fit with an arc:** `fit` limits the straight layout (ink width and ink height of the block) before arc placement.
 5. **Texts are only drawn after a generate:** the web app draws texts from the pipeline result (`CamRun.texts`). Generation already runs after every job change.
 6. **Live MCP mode:** `load_font` follows whatever the live bridge does for model import. If importing a model is not available live, `load_font` is refused live with `Load fonts in the Spon window while connected live`. The other text tools are plain job commands and work in both modes.
 
@@ -460,7 +460,7 @@ export function layoutText(item: TextItem, font: LoadedFont, tol: number): TextL
    - **Pen:** `x += (advance + kerning(prev, ch)) · k + letterSpacing` after each glyph. Kerning counts only between adjacent drawn glyphs.
    - **Line width:** the pen x after the last glyph minus the trailing `letterSpacing`.
 4. **Stacking and alignment:** baseline `yᵢ = −i · lineSpacing · size`. A line's x-shift is `0` for left, `(W − wᵢ)/2` for centre and `W − wᵢ` for right, where `W` is the widest line. Blank lines take their vertical slot.
-5. **Fit:** measure `W` (advance width) and the ink height `H` of the straight block. The scale is `s = min(1, fit.width / W, fit.height ? fit.height / H : 1)`. Scale every coordinate, the spacings and letter spacing included, by `s`. If `size · s < 1` → `error: 'text-fit'`, with no geometry.
+5. **Fit:** measure the ink width `W` and the ink height `H` of the straight block (spec §4.4: from the ink bounds). The scale is `s = min(1, fit.width / W, fit.height ? fit.height / H : 1)`. Scale every coordinate, the spacings and letter spacing included, by `s`. If `size · s < 1` → `error: 'text-fit'`, with no geometry.
 6. **Arc** (when `arc`): line *i* has radius `Rᵢ = R − i·lineSpacing·size·s` (outside) or `Rᵢ = R + i·lineSpacing·size·s` (inside). Any `Rᵢ ≤ size·s` → `error: 'text-arc'`, with no geometry.
    - **Arc position:** for a glyph whose advance-centre is at straight x-position `u` on its line, take `σ = u − a`, where `a` is `0` for left, `wᵢ/2` for centre and `wᵢ` for right.
    - **Outside:** `θ = π/2 − σ/Rᵢ`, and the glyph is rotated by `θ − π/2`.
