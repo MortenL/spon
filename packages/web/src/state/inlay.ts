@@ -11,7 +11,7 @@ import { appStore } from './store';
 const state = () => appStore.getState();
 
 export type InlayValues = Pick<MakeInlayInput, 'inlayDepth' | 'startDepth' | 'glueGap' | 'margin' | 'plugBoard'>;
-export type InlayOutcome = { status: 'done'; H: number } | { status: 'cancelled' } | { status: 'error'; message: string };
+export type InlayOutcome = { status: 'done'; H: number; warnings: string[] } | { status: 'cancelled' } | { status: 'error'; message: string };
 
 /** A FontStore holding the fonts of the job's texts, from the store's font bytes (main thread). */
 export async function inlayFonts(): Promise<FontStore> {
@@ -113,12 +113,13 @@ export async function runInlay(
     ]);
 
     const handle = picked?.handle ?? null;
+    for (const w of result.warnings) toast.warning(w);
     toast.success('Plug job saved', {
       action: createElement('button', {
         'data-testid': 'inlay-open-plug', className: 'ml-auto rounded bg-primary px-2 py-1 text-xs text-primary-foreground', onClick: () => openPlugJob(handle),
       }, 'Open plug job'),
     });
-    return { status: 'done', H: result.H };
+    return { status: 'done', H: result.H, warnings: result.warnings };
   } catch (err) {
     // InlayError and CommandError messages are meant for the user; anything else (I/O, a corrupt file) shows its own message
     return { status: 'error', message: err instanceof Error ? err.message : String(err) };

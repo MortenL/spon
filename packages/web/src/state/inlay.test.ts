@@ -139,4 +139,23 @@ describe('runInlay', () => {
     const plug = readSpon(written()[0][1]);
     expect(Object.keys(plug.blobs)).toContain(font.blobId);
   });
+
+  it("clears the plug with the base clearing's tool when the V-carve already has a clearing", async () => {
+    const id = fresh();
+    s().dispatchBatch([
+      { type: 'addTool', tool: flat },
+      { type: 'addOperation', opType: 'vclear', toolId: 'f6', id: 'bc' },
+      { type: 'updateOperation', id: 'bc', patch: { sourceId: id } },
+      { type: 'updateOperation', id, patch: { maxDepth: 4 } },
+    ]);
+    vi.mocked(fileio.pickSaveHandle).mockResolvedValue(handle('p.spon'));
+    const flat3 = { ...flat, id: 'f3', number: 2, diameter: 3 } as Tool;
+    expect(await runInlay(id, input, { library: [flat3] })).toEqual({ status: 'done', H: 5.5, warnings: [] });
+    expect(s().job.tools.some((t) => t.id === 'f3')).toBe(false);
+    expect(s().job.operations.filter((o) => o.type === 'vclear')).toHaveLength(1);
+    const plug = readSpon(written()[0][1]).job;
+    expect(plug.operations.find((o) => o.type === 'vclear')!.toolId).toBe('f6');
+    expect(plug.tools.map((t) => t.id).sort()).toEqual(['f6', 'v60']);
+    expect(toast.warning).not.toHaveBeenCalled();
+  });
 });

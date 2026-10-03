@@ -1,4 +1,4 @@
-import { defaultPlugBoard, formatLength, InlayError, type VCarveOp } from '@sponcam/core';
+import { defaultPlugBoard, formatLength, InlayError, plugBoardFits, type VCarveOp } from '@sponcam/core';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -34,6 +34,21 @@ export function InlayDialog({ op, open, onOpenChange }: { op: VCarveOp; open: bo
     setBoard(op.inlay?.plugBoard ?? null);
     setBoardEdited(op.inlay !== undefined);
     setError(null);
+    // a stored board that no longer holds the plug (the shapes grew since) goes back to the default size
+    const stored = op.inlay;
+    if (!stored) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const fonts = await inlayFonts();
+        const settings = { inlayDepth: op.maxDepth ?? DEFAULTS.inlayDepth, startDepth: stored.startDepth, glueGap: stored.glueGap };
+        if (!cancelled && !plugBoardFits(appStore.getState().job, geometry, op.id, fonts, stored.plugBoard, settings)) setBoardEdited(false);
+      } catch (err) {
+        if (!(err instanceof InlayError)) throw err;
+        if (!cancelled) setError(err.message);
+      }
+    })();
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 

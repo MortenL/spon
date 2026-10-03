@@ -90,10 +90,10 @@ test('make an inlay from a V-carve, open the plug job, then update it', async ({
   await openPanel(page, 'programs');
   await expect(page.getByTestId('program-generated')).toHaveCount(2);
   const baseStatuses = await generatedStatuses(page);
-  // the clearing is the first row: a 3 mm flat mill cannot reach the letters' narrow corners, which is a warning, not an error
-  expect(baseStatuses).toEqual(['warning', 'ok']);
+  // the clearing is the first row; the 3 mm flat mill can't reach the letters' narrow corners, but the V-bit cleans them, so nothing is reported
+  expect(baseStatuses).toEqual(['ok', 'ok']);
   await openPanel(page, 'operations');
-  await expect(opRows(page).first().getByTestId('op-problem')).toHaveText(/^The tool cannot reach \d+ area\(s\) of this pocket$/);
+  await expect(opRows(page).first().getByTestId('op-problem')).toHaveCount(0);
 
   // open the plug job (the base job is replaced after accepting the discard confirmation)
   await page.getByTestId('open-input').setInputFiles({ name: plug.suggestedFilename(), mimeType: 'application/octet-stream', buffer: plugBytes });
@@ -108,12 +108,12 @@ test('make an inlay from a V-carve, open the plug job, then update it', async ({
   await openPanel(page, 'programs');
   await expect(page.getByTestId('program-generated')).toHaveCount(2);
   const plugStatuses = await generatedStatuses(page);
-  // same reason as the base: the 3 mm clearing mill cannot reach every corner (a warning, not an error); the V-carve plug is ok
-  expect(plugStatuses).toEqual(['warning', 'ok']);
+  // same as the base: the plug's V-bit cleans the floor between the letters that the 3 mm clearing mill can't reach
+  expect(plugStatuses).toEqual(['ok', 'ok']);
   await openPanel(page, 'operations');
   await expect(opRows(page).first()).toContainText('clearing');
   await expect(opRows(page).last()).toContainText('V-carve plug');
-  await expect(opRows(page).first().getByTestId('op-problem')).toHaveText(/^The tool cannot reach \d+ area\(s\) of this pocket$/);
+  await expect(opRows(page).first().getByTestId('op-problem')).toHaveCount(0);
   const gcode = page.waitForEvent('download');
   await openPanel(page, 'programs');
   await page.getByTestId('export-gcode').click();
@@ -121,7 +121,7 @@ test('make an inlay from a V-carve, open the plug job, then update it', async ({
   expect((await bytesOf(await gcode)).length).toBeGreaterThan(0);
 });
 
-test('update an inlay after the text changes: the plug file is replaced with one text, SIGN', async ({ page }) => {
+test('update an inlay after the text grows: the plug file is replaced with one text on a board that fits it', async ({ page }) => {
   await openPanel(page, 'stock');
   await setNumber(page, 'stock-size-x', 200);
   await setNumber(page, 'stock-size-y', 100);
@@ -137,20 +137,24 @@ test('update an inlay after the text changes: the plug file is replaced with one
   await openPanel(page, 'operations');
   await opRows(page).first().getByTestId('op-menu').click();
   await page.getByTestId('op-make-inlay').click();
+  await expect(page.getByTestId('inlay-board-x')).not.toHaveValue('0');
+  const firstBoardX = Number(await page.getByTestId('inlay-board-x').inputValue());
   const first = page.waitForEvent('download');
   await page.getByTestId('inlay-ok').click();
   const firstPlug = await first;
   const firstBytes = await bytesOf(firstPlug);
   await expect(page.getByTestId('inlay-dialog')).toBeHidden();
 
-  // change the text, then update: the existing plug file is picked through a file input
+  // make the text longer than the stored plug board, then update: the existing plug file is picked through a file input
   await openPanel(page, 'text');
   await textRows(page).first().click();
-  await setContent(page, 'SIGN');
+  await setContent(page, 'SPONS');
   await openPanel(page, 'operations');
   await opRows(page).last().getByTestId('op-menu').click();
   await page.getByTestId('op-make-inlay').click();
   await expect(page.getByRole('heading', { name: 'Update inlay' })).toBeVisible();
+  // the stored board no longer holds the plug, so the dialog goes back to the default size
+  await expect.poll(async () => Number(await page.getByTestId('inlay-board-x').inputValue())).toBeGreaterThan(firstBoardX + 20);
   const chooser = page.waitForEvent('filechooser');
   const second = page.waitForEvent('download');
   await page.getByTestId('inlay-ok').click();
@@ -163,7 +167,7 @@ test('update an inlay after the text changes: the plug file is replaced with one
   await page.getByTestId('open-input').setInputFiles({ name: updated.suggestedFilename(), mimeType: 'application/octet-stream', buffer: updatedBytes });
   await openPanel(page, 'text');
   await expect(textRows(page)).toHaveCount(1);
-  await expect(textRows(page).first()).toContainText('SIGN');
+  await expect(textRows(page).first()).toContainText('SPONS');
   await openPanel(page, 'operations');
   await expect(opRows(page)).toHaveCount(2);
   await expect(opRows(page).filter({ hasText: /clearing/i })).toHaveCount(1);
