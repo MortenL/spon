@@ -92,3 +92,5 @@ export * from './cam/ops/slotEnds';
 export * from './cam/ops/slotPaths';
 export * from './cam/ops/slot';
 export * from './cam/ops/engrave';
+export * from './cam/vcarve/sample';
+export * from './cam/vcarve/medial';
