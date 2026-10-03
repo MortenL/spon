@@ -8,14 +8,14 @@ import type { TextItem } from './types';
 export type TextLayoutError = 'text-empty' | 'text-fit' | 'text-arc';
 export interface TextLayout {
   /** Outline fonts: unioned regions; each region is one Shape (outer CCW, islands CW). Empty for single-line fonts. */
-  shapes: Shape[];
+  readonly shapes: readonly Shape[];
   /** Single-line fonts: open polylines. Empty for outline fonts. */
-  strokes: Path2D[];
+  readonly strokes: readonly Path2D[];
   /** Characters the font lacks (each once, in order of first use). */
-  missing: string[];
+  readonly missing: readonly string[];
   /** Ink bounds, stock coordinates; null if nothing was drawn. */
-  bounds: { min: Vec2; max: Vec2 } | null;
-  error: TextLayoutError | null;
+  readonly bounds: Readonly<{ min: Readonly<Vec2>; max: Readonly<Vec2> }> | null;
+  readonly error: TextLayoutError | null;
 }
 
 /** One drawn glyph: points relative to its advance-centre on the baseline (mm, before fit), plus its line placement. */
@@ -90,7 +90,7 @@ function compute(item: TextItem, font: LoadedFont, tol: number): TextLayout {
     const W = block.max.x - block.min.x;
     const H = block.max.y - block.min.y;
     s = Math.min(1, W > 0 ? item.fit.width / W : 1, item.fit.height && H > 0 ? item.fit.height / H : 1);
-    if (item.size * s < 1) return failure('text-fit', missing);
+    if (!Number.isFinite(s) || s <= 0 || item.size * s < 1) return failure('text-fit', missing);
   }
 
   // Place every point (before anchor/mirror/rotate/position).
@@ -166,6 +166,10 @@ export function layoutText(item: TextItem, font: LoadedFont, tol: number): TextL
   const hit = cache.get(key);
   if (hit) return hit;
   const out = compute(item, font, tol);
+  // Callers share the cached result: freeze its top level.
+  Object.freeze(out.shapes); Object.freeze(out.strokes); Object.freeze(out.missing);
+  if (out.bounds) { Object.freeze(out.bounds.min); Object.freeze(out.bounds.max); Object.freeze(out.bounds); }
+  Object.freeze(out);
   cache.set(key, out);
   if (cache.size > CACHE_LIMIT) cache.delete(cache.keys().next().value!);
   return out;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { layoutText, loadBundledFont, newTextItem, parseFontFile, type LoadedFont, type TextItem, type TextLayout } from '../src';
+import { layoutText, pathArea, loadBundledFont, newTextItem, parseFontFile, type LoadedFont, type TextItem, type TextLayout } from '../src';
 import { testFontBytes } from './fixtures/testFont';
 
 const font = parseFontFile(testFontBytes(), 'TestSans.otf');
@@ -88,6 +88,66 @@ describe('text layout', () => {
     near(Math.hypot(ic[1].x, ic[1].y), 46.5); expect(ic[1].y).toBeLessThan(0);
     expect(layoutText(item({ size: 7, arc: { radius: 6, side: 'outside' } }), font, 0.01).error).toBe('text-arc');
     expect(layoutText(item({ size: 7, text: 'H\nH', lineSpacing: 2, arc: { radius: 18, side: 'outside' } }), font, 0.01).error).toBe('text-arc'); // second line radius 4
+  });
+
+  it('outputs outer CCW and islands CW, also when mirrored', () => {
+    for (const mirror of [false, true]) {
+      const o = layoutText(item({ size: 7, text: 'O', mirror }), font, 0.01);
+      expect(pathArea(o.shapes[0].outer)).toBeGreaterThan(0);
+      expect(pathArea(o.shapes[0].islands[0])).toBeLessThan(0);
+    }
+  });
+
+  it('turns each arc glyph to follow the circle', () => {
+    const R = 50;
+    const radii = (l: TextLayout) => l.shapes.map((sh) => {
+      const pts = sh.outer.segments.map((g) => (g.kind === 'line' ? g.from : { x: NaN, y: NaN })).map((p) => ({ ...p, r: Math.hypot(p.x, p.y) }));
+      const low = [...pts].sort((a, b) => a.r - b.r).slice(0, 2); // the two baseline corners of an outside glyph
+      return low.map((p) => p.r);
+    });
+    const out = layoutText(item({ size: 7, text: 'HHH', arc: { radius: R, side: 'outside' } }), font, 0.01);
+    // glyph corners sit at x = +-3 on the baseline, so the baseline corners are at radius sqrt(R^2 + 9) and are not on a rotated-away line
+    for (const r of radii(out).flat()) expect(Math.abs(r - Math.hypot(R, 3))).toBeLessThan(0.01);
+    // inside: the baseline corners again sit at sqrt(R^2 + 9), the top corners 7 mm nearer the centre
+    const inside = layoutText(item({ size: 7, text: 'HHH', arc: { radius: R, side: 'inside' } }), font, 0.01);
+    for (const sh of inside.shapes) {
+      const rs = sh.outer.segments.map((g) => (g.kind === 'line' ? Math.hypot(g.from.x, g.from.y) : NaN));
+      expect(Math.abs(Math.max(...rs) - Math.hypot(R, 3))).toBeLessThan(0.01);
+      expect(Math.abs(Math.min(...rs) - Math.hypot(R - 7, 3))).toBeLessThan(0.01);
+    }
+  });
+
+  it('aligns arc text from the top: left runs clockwise from it, right ends at it', () => {
+    const centres = (align: 'left' | 'right') => layoutText(item({ size: 7, text: 'HHH', align, arc: { radius: 50, side: 'outside' } }), font, 0.01)
+      .shapes.map((sh) => { const p = sh.outer.segments.map((g) => (g.kind === 'line' ? g.from : { x: NaN, y: NaN })); return p.reduce((a, q) => a + q.x, 0) / p.length; });
+    for (const x of centres('left')) expect(x).toBeGreaterThanOrEqual(-1e-6);
+    for (const x of centres('right')) expect(x).toBeLessThanOrEqual(1e-6);
+  });
+
+  it('puts a second arc line on a smaller radius and fits before arcing', () => {
+    const l = layoutText(item({ size: 7, text: 'H\nH', lineSpacing: 2, arc: { radius: 40, side: 'outside' } }), font, 0.01);
+    expect(l.error).toBeNull();
+    const rc = l.shapes.map((sh) => {
+      const p = sh.outer.segments.map((g) => (g.kind === 'line' ? g.from : { x: NaN, y: NaN }));
+      const cx = p.reduce((a, q) => a + q.x, 0) / p.length, cy = p.reduce((a, q) => a + q.y, 0) / p.length;
+      return Math.hypot(cx, cy);
+    }).sort((a, b) => a - b);
+    near(rc[1], 40 + 3.5);
+    near(rc[0], 40 - 14 + 3.5);
+    const f = layoutText(item({ size: 7, text: 'HHHH', fit: { width: 13.5, height: null }, arc: { radius: 50, side: 'outside' } }), font, 0.01);
+    expect(f.error).toBeNull();
+    // fit scales the straight block by 0.5 first, so every glyph is 3.5 mm tall (radial extent, within the small curvature effect)
+    for (const s of f.shapes) {
+      const rs = s.outer.segments.map((g) => (g.kind === 'line' ? Math.hypot(g.from.x, g.from.y) : NaN));
+      expect(Math.max(...rs) - Math.min(...rs)).toBeGreaterThan(3.4);
+      expect(Math.max(...rs) - Math.min(...rs)).toBeLessThan(3.6);
+    }
+  });
+
+  it('never produces NaN geometry from a NaN fit', () => {
+    const l = layoutText(item({ size: 7, fit: { width: NaN, height: null } }), font, 0.01);
+    expect(l.error).toBe('text-fit');
+    expect(l.shapes).toEqual([]);
   });
 
   it('unions overlapping contours and keeps counters as islands', async () => {
