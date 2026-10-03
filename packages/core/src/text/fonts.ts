@@ -23,9 +23,9 @@ export const BUNDLED_FONTS: readonly { id: BundledFontId; family: string; kind: 
   { id: 'sans', family: 'Inter', kind: 'outline' },
   { id: 'sansBold', family: 'Inter Bold', kind: 'outline' },
   { id: 'serif', family: 'Roboto Slab', kind: 'outline' },
-  { id: 'hersheySans', family: 'Hershey Sans', kind: 'singleLine' },
+  { id: 'hersheySans', family: 'Hershey Simplex', kind: 'singleLine' },
   { id: 'hersheyDuplex', family: 'Hershey Duplex', kind: 'singleLine' },
-  { id: 'hersheyScript', family: 'Hershey Script', kind: 'singleLine' },
+  { id: 'hersheyScript', family: 'Hershey Script Simplex', kind: 'singleLine' },
 ];
 
 export class FontFileError extends Error {}
@@ -164,6 +164,9 @@ export const fontKey = (ref: FontRef): string => (ref.kind === 'bundled' ? `bund
 export class FontStore implements FontSet {
   private loaded = new Map<string, LoadedFont | 'unreadable'>();
 
+  /** `loadBundled` is a seam for tests: how a bundled font is loaded. */
+  constructor(private readonly loadBundled: (id: BundledFontId) => Promise<LoadedFont> = loadBundledFont) {}
+
   /** Loads every font the job's texts reference (bundled modules and blobs from `blobs`); idempotent and cached by font key. */
   async ensure(job: Job, blobs: Readonly<Record<string, Uint8Array>>): Promise<void> {
     const pending: Promise<void>[] = [];
@@ -173,7 +176,8 @@ export class FontStore implements FontSet {
       if (this.loaded.has(key) || seen.has(key)) continue;
       seen.add(key);
       if (ref.kind === 'bundled') {
-        pending.push(loadBundledFont(ref.id).then((f) => void this.loaded.set(key, f)));
+        // a chunk that fails to load must not fail the whole call: only texts in this font report it
+        pending.push(this.loadBundled(ref.id).then((f) => void this.loaded.set(key, f), () => void this.loaded.set(key, 'unreadable')));
       } else {
         const bytes = blobs[ref.blobId];
         if (!bytes) continue;

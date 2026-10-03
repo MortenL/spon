@@ -36,7 +36,7 @@ function compute(item: TextItem, font: LoadedFont, tol: number): TextLayout {
   const missing: string[] = [];
   const placed: Placed[] = [];
   const widths: number[] = [];
-  const lines = item.text.split('\n');
+  const lines = item.text.replace(/\r\n?/g, '\n').split('\n');
   lines.forEach((text, li) => {
     let x = 0;
     let prev: string | null = null;
@@ -90,7 +90,7 @@ function compute(item: TextItem, font: LoadedFont, tol: number): TextLayout {
     const W = block.max.x - block.min.x;
     const H = block.max.y - block.min.y;
     s = Math.min(1, W > 0 ? item.fit.width / W : 1, item.fit.height && H > 0 ? item.fit.height / H : 1);
-    if (!Number.isFinite(s) || s <= 0 || item.size * s < 1) return failure('text-fit', missing);
+    if (!Number.isFinite(s) || s <= 0 || (s < 1 && item.size * s < 1)) return failure('text-fit', missing);
   }
 
   // Place every point (before anchor/mirror/rotate/position).

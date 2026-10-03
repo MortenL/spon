@@ -57,6 +57,12 @@ describe('text as geometry', () => {
     expect(glyphs.run.texts[0].diagnostics).toEqual([expect.objectContaining({ severity: 'warning', code: 'text-missing-glyphs', message: 'Inter has no glyph for: 😀' })]);
   });
 
+  it('shows control characters escaped in the missing-glyph message', async () => {
+    const { run } = await signJob({ text: 'SP\tON\r\n\u000bX', font: { kind: 'bundled', id: 'sansBold' } });
+    const d = run.texts[0].diagnostics.find((x) => x.code === 'text-missing-glyphs');
+    expect(d?.message).toBe('Inter Bold has no glyph for: \\tU+000B');
+  });
+
   it('survives a text whose characters are all missing', async () => {
     const { run } = await signJob({ text: '😀' });
     expect(run.texts[0].diagnostics).toEqual([expect.objectContaining({ code: 'text-missing-glyphs' })]);
@@ -111,7 +117,7 @@ describe('text as geometry', () => {
     expect(run.results[0].diagnostics.every((d) => d.code !== 'internal')).toBe(true);
   });
 
-  it('posts an engraving of SPON in Hershey Sans (golden G-code)', async () => {
+  it('posts an engraving of SPON in Hershey Simplex (golden G-code)', async () => {
     let job: Job = setStock(createJob(), { mode: 'fixed', size: { x: 100, y: 50, z: 10 }, modelOffset: { x: 0, y: 0, z: 0 } });
     job = applyCommands(job, [
       { type: 'addText', id: 't', patch: { text: 'SPON', size: 20, font: { kind: 'bundled', id: 'hersheySans' } } },

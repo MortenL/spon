@@ -46,5 +46,5 @@ export function runPipeline(job: Job, geometry: CamGeometry | null, ctx: Program
     return { ...f, parsed, postErrors: parsed.interpretDiagnostics.filter((d) => d.severity === 'error') };
   });
   const summaries = results.map(({ operationId, diagnostics, heights, overlays, toolpath }) => ({ operationId, diagnostics, heights, overlays, hasToolpath: toolpath !== null }));
-  return { run: { results: summaries, files, catalog: cache.catalogFor(job, geometry), texts: textSummaries(job, camContext(job, geometry, fonts)) }, toolpaths };
+  return { run: { results: summaries, files, catalog: cache.catalogFor(job, geometry), texts: job.texts.length ? textSummaries(job, camContext(job, geometry, fonts)) : [] }, toolpaths };
 }

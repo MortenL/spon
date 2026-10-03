@@ -19,6 +19,13 @@ export interface ResolvedText {
 
 export interface TextSummary { textId: string; diagnostics: CamDiagnostic[]; z: number | null; loops: { points: Vec2[]; closed: boolean }[] }
 
+/** A character for a message: control characters are escaped (\t, U+000B), everything else is shown as is. */
+const visible = (ch: string): string => {
+  const c = ch.codePointAt(0)!;
+  if (ch === '\t') return '\\t';
+  return c < 0x20 || (c >= 0x7f && c < 0xa0) ? `U+${c.toString(16).toUpperCase().padStart(4, '0')}` : ch;
+};
+
 const move = (p: Vec2, dx: number, dy: number): Vec2 => ({ x: p.x + dx, y: p.y + dy });
 const moveSegment = (s: Segment, dx: number, dy: number): Segment =>
   s.kind === 'line' ? { kind: 'line', from: move(s.from, dx, dy), to: move(s.to, dx, dy) } : { ...s, center: move(s.center, dx, dy) };
@@ -41,7 +48,7 @@ export function resolveText(item: TextItem, ctx: CamContext): ResolvedText {
     if (layout.error === 'text-empty') diag('error', 'text-empty', `${item.name} has no text`);
     else if (layout.error === 'text-fit') diag('error', 'text-fit', `${item.name} doesn't fit its box`);
     else if (layout.error === 'text-arc') diag('error', 'text-arc', `The arc radius of ${item.name} is smaller than its text`);
-    if (layout.missing.length) diag('warning', 'text-missing-glyphs', `${font.name} has no glyph for: ${layout.missing.join('')}`);
+    if (layout.missing.length) diag('warning', 'text-missing-glyphs', `${font.name} has no glyph for: ${layout.missing.map(visible).join('')}`);
   }
 
   const stock = ctx.stock;

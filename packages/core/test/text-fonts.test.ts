@@ -117,3 +117,22 @@ describe('fonts', () => {
     expect(store.status(job.texts[1].font)).toBe('ok');
   });
 });
+
+describe('font names and failures', () => {
+  it('uses the Hershey display names of the spec', () => {
+    expect(BUNDLED_FONTS.filter((f) => f.kind === 'singleLine').map((f) => f.family)).toEqual(['Hershey Simplex', 'Hershey Duplex', 'Hershey Script Simplex']);
+  });
+  it('a failing bundled import only marks that font unreadable', async () => {
+    const job = applyCommands(createJob(), [
+      { type: 'addText', id: 'a', patch: { font: { kind: 'bundled', id: 'serif' } } },
+      { type: 'addText', id: 'b', patch: { font: { kind: 'bundled', id: 'sans' } } },
+    ]);
+    const store = new FontStore(async (id) => {
+      if (id === 'serif') throw new Error('chunk failed');
+      return loadBundledFont(id);
+    });
+    await expect(store.ensure(job, {})).resolves.toBeUndefined();
+    expect(store.status({ kind: 'bundled', id: 'serif' })).toBe('unreadable');
+    expect(store.status({ kind: 'bundled', id: 'sans' })).toBe('ok');
+  });
+});

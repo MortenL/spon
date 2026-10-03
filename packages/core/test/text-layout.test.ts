@@ -195,3 +195,18 @@ describe('text layout', () => {
     expect(performance.now() - t).toBeLessThan(50);
   });
 });
+
+describe('text layout review fixes', () => {
+  it('flags text-fit only when the fit actually scales a tiny text down', () => {
+    expect(layoutText(item({ size: 0.8, fit: { width: 100, height: null } }), font, 0.01).error).toBeNull();
+    expect(layoutText(item({ size: 0.8, fit: { width: 0.1, height: null } }), font, 0.01).error).toBe('text-fit');
+  });
+  it('treats CRLF and CR as line breaks', () => {
+    const lf = layoutText(item({ size: 7, text: 'H\nH' }), font, 0.01);
+    for (const t of ['H\r\nH', 'H\rH']) {
+      const l = layoutText(item({ size: 7, text: t }), font, 0.01);
+      expect(l.missing).toEqual([]);
+      near(h(l), h(lf));
+    }
+  });
+});
