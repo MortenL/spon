@@ -116,7 +116,7 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
       if (op.type !== 'drill' && op.type !== 'pocket' && op.type !== 'engrave' && op.type !== 'vcarve') usesLoops(f, [0]);
       if (op.type === 'pocket' || op.type === 'engrave' || op.type === 'vcarve') usesLoops(f, f.loops.keys());
       if (op.type === 'vcarve') {
-        // spec ง2.2: each recess of the face is a shape; faces at the same height inside it are islands left standing
+        // spec ยง2.2: each recess of the face is a shape; faces at the same height inside it are islands left standing
         if (f.loops.length < 2) return fail(i, 'no-geometry', 'This face has no recessed outlines to V-carve', 'warning');
         faceOutlines ??= upFaceOutlines(ctx);
         for (let k = 1; k < f.loops.length; k++) {
