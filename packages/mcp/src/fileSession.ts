@@ -15,6 +15,16 @@ export interface NewJobOptions { name?: string; machinePreset?: MachinePresetNam
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
+/** Re-reads a job's model exactly as the web app does; null when the job has none. */
+export async function loadModelGeometry(job: Job, blobs: BlobMap, loadReader: OcctLoader, path: string): Promise<ModelGeometry | null> {
+  if (!job.model) return null;
+  const step = importStep(await importModel(modelFilePath(job.model), blobs[job.model.blobId], { body: job.model.body, svgScale: job.model.svgScale }, loadReader));
+  if (step.kind === 'error') throw new SessionError(`${path}: Could not load the job's model: ${step.error}`);
+  if (step.kind === 'chooseBody') throw new SessionError(`${path}: Could not load the job's model: the file has several bodies and the job does not say which one`);
+  if (step.kind === 'needsScale') throw new SessionError(`${path}: Could not load the job's model: the SVG's scale is missing`);
+  return toModelGeometry(step.result);
+}
+
 /** A job held in memory, loaded from and saved to a .spon file. There is no undo: reopen, or issue new commands. */
 export class FileSession implements JobSession {
   readonly kind = 'file' as const;
@@ -56,14 +66,7 @@ export class FileSession implements JobSession {
     } catch (err) {
       throw new SessionError(`${path}: ${message(err)}`);
     }
-    let geometry: ModelGeometry | null = null;
-    if (job.model) {
-      const step = importStep(await importModel(modelFilePath(job.model), blobs[job.model.blobId], { body: job.model.body, svgScale: job.model.svgScale }, options.loadReader));
-      if (step.kind === 'error') throw new SessionError(`${path}: Could not load the job's model: ${step.error}`);
-      if (step.kind === 'chooseBody') throw new SessionError(`${path}: Could not load the job's model: the file has several bodies and the job does not say which one`);
-      if (step.kind === 'needsScale') throw new SessionError(`${path}: Could not load the job's model: the SVG's scale is missing`);
-      geometry = toModelGeometry(step.result);
-    }
+    const geometry = await loadModelGeometry(job, blobs, options.loadReader, path);
     return new FileSession(job, blobs, geometry, path, false, options);
   }
 
@@ -73,6 +76,10 @@ export class FileSession implements JobSession {
 
   async job(): Promise<Job> {
     return this.current;
+  }
+
+  async spon(): Promise<Uint8Array> {
+    return writeSpon(this.current, this.blobs);
   }
 
   async apply(commands: readonly JobCommand[]): Promise<Job> {

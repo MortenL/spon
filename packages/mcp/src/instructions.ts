@@ -51,6 +51,11 @@ Text
 - To use your own font, load_font { path } first, then set the returned ref as the text's font (add_text or update_text). Uploaded fonts are saved inside the .spon file. Accepted uploads are .ttf, .otf and .woff outline fonts; .woff2 is refused.
 - Defaults: font sans, size 10 mm, letterSpacing 0, lineSpacing 1.6, align center, anchor center, angle 0, no mirror, no arc, no fit; without position the text is centred on the stock (the stock's own box, so it does not depend on the work origin), or put at the stock's min corner when no stock is known yet. fit { width, height } scales the text to a box (height null keeps the proportions); arc { radius, side } sets it on a circle.
 
+Inlays
+- An inlay is a V-carved pocket in the base plus a mirrored plug cut in a second board with the same V-bit. Three numbers: D (inlayDepth) is the pocket depth in the base (default 4 mm), S (startDepth) is how far the plug is cut below its flat top before it meets the pocket (default 2 mm), g (glueGap) is the space left at the pocket floor for glue (default 0.5 mm, smaller than D). The plug board is H = D - g + S tall plus 2 mm.
+- Prepare the base: a text or drawing, a vcarve with a V-bit, and a flat or bull-nose tool in the job for the clearing. make_inlay { operationId: <the vcarve>, plugPath } creates the pocket here (sets the V-carve's maxDepth to D, adds a vclear of its floor) and writes a plug job to plugPath. Save the base job with save_job; open the plug job with open_job to generate and export it.
+- After editing the base text or shapes, call make_inlay again with update: true: the plug job's shapes are replaced and its tools, origin and extra operations are kept. Without update it refuses to overwrite plugPath.
+
 Gouges
 - generate tests every toolpath against the model with the real tool shape. A gouge is an error ("Cuts into the model by up to ..."): export_gcode refuses until you fix it with the operation's heights or geometry (for example a bottom height that is too deep, or a tool that is too large).
 
