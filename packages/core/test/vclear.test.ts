@@ -166,11 +166,6 @@ describe('V-carve clearing cache', () => {
 });
 
 describe('V-carve clearing cache', () => {
-  function rerun(s: ReturnType<typeof setup>, cache: PipelineCache, cmds: JobCommand[]) {
-    const job = applyCommands(s.job, cmds);
-    const { run, toolpaths } = runPipeline(job, s.base.geometry as never, programContext(job, s.base.geometry as never), cache, { date: '2026-01-01' });
-    return { job, res: (id: string) => run.results.find((r) => r.operationId === id)!, tp: (id: string) => toolpaths.find((t) => t.operationId === id) as Toolpath | undefined };
-  }
   const deepest = (tp?: Toolpath) => Math.min(...tp!.moves.flatMap((m) => (m.kind === 'cycle' ? [] : [m.to.z])));
   it('follows the source through a shared cache', () => {
     const s = setup();
