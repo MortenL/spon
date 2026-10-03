@@ -69,9 +69,9 @@ export function OperationsPanel() {
               catch (err) { if (err instanceof CommandError) toast.error(err.message); else throw err; }
             }}
           >
-            {(op, handle) => (
+            {(op, handle, index) => (
               <OperationRow
-                op={op} index={operations.findIndex((o) => o.id === op.id)} count={operations.length}
+                op={op} index={index} count={operations.length}
                 selected={op.id === selectedId} dragHandle={handle}
               />
             )}

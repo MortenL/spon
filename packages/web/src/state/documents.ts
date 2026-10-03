@@ -5,7 +5,7 @@ import {
 } from '@sponcam/core';
 import { toast } from 'sonner';
 import { cadReaderLoaded, importInWorker, loadCadReaderInWorker } from '../workers/importClient';
-import { withoutAutoPanel } from '@/layout/railStore';
+import { withoutAutoPanel } from './autoPanelGate';
 import { getBlob, loadCurrentJob } from './autosave';
 import { downloadBytes, pickOpenFile, pickSaveHandle, safeFileName, supportsFsAccess, writeToHandle } from './fileio';
 import { importProgramBytes, isProgramFile, loadPrograms, pruneBlobs, storeBlob } from './programs';

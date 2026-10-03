@@ -22,8 +22,8 @@ const KEY = { open: 'spon.rail.open', hidden: 'spon.rail.hidden', width: 'spon.r
 const clampWidth = (px: number) => Math.round(Math.min(WIDTH.max, Math.max(WIDTH.min, px)));
 
 /** Missing or non-numeric gives the default; 0 gives the minimum; anything else is clamped. */
-function initialWidth(text: string | null): number {
-  if (!text) return WIDTH.default;
+function initialWidth(text: string | null | undefined): number {
+  if (!text?.trim()) return WIDTH.default;
   const n = Number(text);
   return Number.isFinite(n) ? clampWidth(n) : WIDTH.default;
 }
@@ -56,6 +56,7 @@ export function createRailStore(raw: Settings): StoreApi<RailState> {
     },
     setWidth(px) {
       const width = clampWidth(px);
+      if (width === get().width) return;
       set({ width });
       s.set(KEY.width, String(width));
     },
@@ -79,11 +80,3 @@ export function autoPanel(prev: JobLists, next: JobLists): PanelId | null {
   if (added(prev.operations, next.operations)) return 'operations';
   return null;
 }
-
-let suppressed = 0;
-/** Runs `fn` (synchronously) without automatic panel switches, e.g. the startup restore, which must keep the remembered panel. */
-export function withoutAutoPanel<T>(fn: () => T): T {
-  suppressed++;
-  try { return fn(); } finally { suppressed--; }
-}
-export const autoPanelSuppressed = (): boolean => suppressed > 0;

@@ -9,8 +9,8 @@ import { GripVertical } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { moveSteps } from './listShortcuts';
 
-function SortableItem<T extends { id: string }>({ item, label, handleTestId, children }: {
-  item: T; label: (item: T) => string; handleTestId: string; children: (item: T, handle: ReactNode) => ReactNode;
+function SortableItem<T extends { id: string }>({ item, index, label, handleTestId, children }: {
+  item: T; index: number; label: (item: T) => string; handleTestId: string; children: (item: T, handle: ReactNode, index: number) => ReactNode;
 }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
   const handle = (
@@ -24,7 +24,7 @@ function SortableItem<T extends { id: string }>({ item, label, handleTestId, chi
   );
   return (
     <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 10 : undefined, position: 'relative' }}>
-      {children(item, handle)}
+      {children(item, handle, index)}
     </li>
   );
 }
@@ -32,7 +32,7 @@ function SortableItem<T extends { id: string }>({ item, label, handleTestId, chi
 /** A vertical list whose rows reorder by dragging the handle (pointer or keyboard). `onMove` gets the number of places moved. */
 export function SortableList<T extends { id: string }>({ items, label, handleTestId, onMove, children }: {
   items: readonly T[]; label: (item: T) => string; handleTestId: string;
-  onMove: (id: string, steps: number) => void; children: (item: T, handle: ReactNode) => ReactNode;
+  onMove: (id: string, steps: number) => void; children: (item: T, handle: ReactNode, index: number) => ReactNode;
 }) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -65,8 +65,8 @@ export function SortableList<T extends { id: string }>({ items, label, handleTes
     >
       <SortableContext items={ids} strategy={verticalListSortingStrategy}>
         <ul className="space-y-1">
-          {items.map((item) => (
-            <SortableItem key={item.id} item={item} label={label} handleTestId={handleTestId}>{children}</SortableItem>
+          {items.map((item, index) => (
+            <SortableItem key={item.id} item={item} index={index} label={label} handleTestId={handleTestId}>{children}</SortableItem>
           ))}
         </ul>
       </SortableContext>

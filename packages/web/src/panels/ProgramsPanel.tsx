@@ -7,7 +7,6 @@ import { SortableList } from './SortableList';
 
 export function ProgramsPanel() {
   const programs = useApp((s) => allPrograms(s));
-  const imported = useApp((s) => s.job.programs);
   const generated = programs.filter((p) => p.source === 'generated');
   const importedShown = programs.filter((p) => p.source !== 'generated');
 
@@ -19,7 +18,7 @@ export function ProgramsPanel() {
         <div className="space-y-1">
           {generated.length > 0 && (
             <ul className="space-y-1">
-              {generated.map((p) => <li key={p.id}><ProgramRow p={p} index={-1} count={0} /></li>)}
+              {generated.map((p) => <li key={p.id}><ProgramRow p={p} /></li>)}
             </ul>
           )}
           <SortableList
@@ -30,7 +29,7 @@ export function ProgramsPanel() {
               return out;
             })}
           >
-            {(p, handle) => <ProgramRow p={p} index={imported.findIndex((x) => x.id === p.id)} count={imported.length} dragHandle={handle} />}
+            {(p, handle, index) => <ProgramRow p={p} index={index} count={importedShown.length} dragHandle={handle} />}
           </SortableList>
         </div>
       )}

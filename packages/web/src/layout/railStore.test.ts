@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { autoPanel, autoPanelSuppressed, createRailStore, type Settings, withoutAutoPanel } from './railStore';
+import { autoPanel, createRailStore, type Settings } from './railStore';
 
 function memory(init: Record<string, string> = {}): Settings & { data: Record<string, string> } {
   const data = { ...init };
@@ -43,12 +43,24 @@ describe('railStore', () => {
   });
 
   it('ignores corrupt stored values (review focus 2)', () => {
-    for (const [w, want] of [['abc', 320], ['0', 260], ['9999', 560], ['', 320]] as const) {
+    for (const [w, want] of [['abc', 320], ['0', 260], ['9999', 560], ['', 320], ['   ', 320]] as const) {
       expect(createRailStore(memory({ 'spon.rail.width': w })).getState().width).toBe(want);
     }
     expect(createRailStore(memory({ 'spon.rail.open': 'machine' })).getState().open).toBe('model');
     const st = createRailStore(memory());
     st.getState().setWidth(100);
+    expect(st.getState().width).toBe(260);
+  });
+
+  it('setWidth does not write when the clamped width is unchanged', () => {
+    const m = memory();
+    let writes = 0;
+    const counting: Settings = { get: m.get, set: (k, v) => { writes++; m.set(k, v); } };
+    const st = createRailStore(counting);
+    st.getState().setWidth(320.2);
+    st.getState().setWidth(100);
+    st.getState().setWidth(50);
+    expect(writes).toBe(1);
     expect(st.getState().width).toBe(260);
   });
 
@@ -75,16 +87,12 @@ describe('autoPanel', () => {
     expect(autoPanel(job({ operations: [{ id: 'a' }] }), job({ operations: [{ id: 'a' }, { id: 'b' }] }))).toBe('operations');
     expect(autoPanel(job({ operations: [{ id: 'a' }, { id: 'b' }] }), job({ operations: [{ id: 'a' }] }))).toBeNull();
   });
+  it('undo re-adds an operation: the panel is brought forward (review focus 3)', () => {
+    const removed = job({ operations: [] });
+    const restored = job({ operations: [{ id: 'a' }] });
+    expect(autoPanel(removed, restored)).toBe('operations');
+  });
   it('a model change wins over operations arriving with it (opening a .spon job)', () => {
     expect(autoPanel(job({}), job({ model: model('a'), operations: [{ id: 'x' }] }))).toBe('model');
-  });
-});
-
-describe('withoutAutoPanel', () => {
-  it('suppresses automatic switches only while the callback runs, even when it throws', () => {
-    expect(autoPanelSuppressed()).toBe(false);
-    withoutAutoPanel(() => expect(autoPanelSuppressed()).toBe(true));
-    expect(() => withoutAutoPanel(() => { throw new Error('x'); })).toThrow('x');
-    expect(autoPanelSuppressed()).toBe(false);
   });
 });

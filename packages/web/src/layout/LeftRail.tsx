@@ -1,10 +1,11 @@
-import { Fragment, type JSX, type KeyboardEvent, type ReactNode, useMemo } from 'react';
+import { type JSX, type KeyboardEvent, type ReactNode, useMemo, useState } from 'react';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { autoPanelSuppressed } from '@/state/autoPanelGate';
 import { appStore, useApp } from '@/state/store';
 import { type RailPanel, RAIL_PANELS } from './railPanels';
-import { autoPanel, autoPanelSuppressed, railStore, useRail, WIDTH } from './railStore';
+import { autoPanel, railStore, useRail, WIDTH } from './railStore';
 import { type StepId, setupStatus } from './setupStatus';
 import { SetupSummary } from './SetupSummary';
 
@@ -14,10 +15,13 @@ appStore.subscribe((s, prev) => {
   if (id) railStore.getState().show(id);
 });
 
-const GROUP_LABEL = { setup: 'SETUP', cam: 'CAM' } as const;
+const GROUPS = [
+  { id: 'setup', label: 'Setup', short: 'SETUP' },
+  { id: 'cam', label: 'CAM', short: 'CAM' },
+] as const;
 
 function onRailKey(e: KeyboardEvent<HTMLElement>) {
-  if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+  if ((e.key !== 'ArrowUp' && e.key !== 'ArrowDown') || e.altKey || e.ctrlKey || e.metaKey) return;
   const buttons = [...e.currentTarget.querySelectorAll<HTMLButtonElement>('button[data-testid^="rail-"]')];
   const at = buttons.indexOf(document.activeElement as HTMLButtonElement);
   if (at < 0) return;
@@ -33,13 +37,18 @@ function RailButton({ panel, state, reason }: { panel: RailPanel; state?: 'ok' |
     <Tooltip>
       <TooltipTrigger asChild>
         <button
-          type="button" data-testid={`rail-${panel.id}`} aria-label={panel.title} aria-pressed={pressed}
+          type="button" data-testid={`rail-${panel.id}`} aria-pressed={pressed}
           onClick={() => railStore.getState().select(panel.id)}
           className="relative flex size-9 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring aria-pressed:bg-muted aria-pressed:text-foreground"
         >
-          <Icon className="size-5" />
-          {state === 'empty' && <span data-testid={`rail-dot-${panel.id}`} data-state="empty" className="absolute right-1 top-1 size-2 rounded-full border border-muted-foreground" />}
-          {state === 'attention' && <span data-testid={`rail-dot-${panel.id}`} data-state="attention" className="absolute right-1 top-1 size-2 rounded-full bg-amber-500" />}
+          <Icon aria-hidden className="size-5" />
+          <span className="sr-only">
+            {panel.title}
+            {state === 'empty' && ' (not set)'}
+            {state === 'attention' && ` (needs attention${reason ? `: ${reason}` : ''})`}
+          </span>
+          {state === 'empty' && <span data-testid={`rail-dot-${panel.id}`} data-state="empty" aria-hidden className="absolute right-1 top-1 size-2 rounded-full border border-muted-foreground" />}
+          {state === 'attention' && <span data-testid={`rail-dot-${panel.id}`} data-state="attention" aria-hidden className="absolute right-1 top-1 size-2 rounded-full bg-amber-500" />}
         </button>
       </TooltipTrigger>
       <TooltipContent side="right">{state === 'attention' && reason ? `${panel.title}: ${reason}` : panel.title}</TooltipContent>
@@ -53,17 +62,16 @@ function Rail() {
   const status = useMemo(() => setupStatus(job, geometry), [job, geometry]);
   return (
     <nav aria-label="Panels" onKeyDown={onRailKey} className="flex w-11 shrink-0 flex-col items-center gap-1 border-r py-2">
-      {RAIL_PANELS.map((p, i) => {
-        const step = p.group === 'setup' ? status.steps[p.id as StepId] : undefined;
-        const first = RAIL_PANELS[i - 1]?.group !== p.group;
-        return (
-          <Fragment key={p.id}>
-            {first && i > 0 && <Separator className="my-1 w-6" />}
-            {first && <span className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">{GROUP_LABEL[p.group]}</span>}
-            <RailButton panel={p} state={step?.state} reason={step?.reason} />
-          </Fragment>
-        );
-      })}
+      {GROUPS.map((g, gi) => (
+        <div key={g.id} role="group" aria-label={g.label} className="flex flex-col items-center gap-1">
+          {gi > 0 && <Separator className="my-1 w-6" />}
+          <span aria-hidden className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">{g.short}</span>
+          {RAIL_PANELS.filter((p) => p.group === g.id).map((p) => {
+            const step = p.group === 'setup' ? status.steps[p.id as StepId] : undefined;
+            return <RailButton key={p.id} panel={p} state={step?.state} reason={step?.reason} />;
+          })}
+        </div>
+      ))}
     </nav>
   );
 }
@@ -86,8 +94,13 @@ function PanelHost(): JSX.Element {
 /** The icon rail, the one open panel (resizable, hideable) and the rest of the workspace as `children`. */
 export function LeftRail({ children }: { children: ReactNode }): JSX.Element {
   const hidden = useRail((s) => s.hidden);
-  // Read again only when the panel is shown or hidden: feeding every drag step back as `defaultSize` makes the panel group restart the drag.
-  const width = useMemo(() => railStore.getState().width, [hidden]);
+  // Read again only when the panel turns from hidden to shown: feeding every drag step back as `defaultSize` makes the panel group restart the drag.
+  const [width, setWidth] = useState(() => railStore.getState().width);
+  const [wasHidden, setWasHidden] = useState(hidden);
+  if (wasHidden !== hidden) {
+    setWasHidden(hidden);
+    if (!hidden) setWidth(railStore.getState().width);
+  }
   return (
     <div className="flex min-h-0 flex-1">
       <Rail />

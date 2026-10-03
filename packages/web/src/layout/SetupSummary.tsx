@@ -1,3 +1,4 @@
+import { TriangleAlert } from 'lucide-react';
 import { Fragment, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/state/store';
@@ -14,11 +15,16 @@ export function SetupSummary() {
         <Fragment key={part.id}>
           {i > 0 && <span aria-hidden>·</span>}
           <button
-            type="button" data-testid={`setup-summary-${part.id}`} onClick={() => railStore.getState().show(part.id)}
+            type="button" data-testid={`setup-summary-${part.id}`} onClick={() => {
+              railStore.getState().show(part.id);
+              document.querySelector<HTMLElement>(`[data-testid="rail-${part.id}"]`)?.focus();
+            }}
             className={cn('rounded px-0.5 hover:text-foreground hover:underline', status.steps[part.id].state === 'attention' && 'text-amber-500')}
             title={status.steps[part.id].reason}
           >
+            {status.steps[part.id].state === 'attention' && <TriangleAlert aria-hidden className="mr-0.5 inline size-3 align-[-1px]" />}
             {part.text}
+            {status.steps[part.id].state === 'attention' && <span className="sr-only"> (needs attention)</span>}
           </button>
         </Fragment>
       ))}

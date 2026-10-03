@@ -19,7 +19,7 @@ function removeImported(id: string): void {
 }
 
 export function ProgramRow({ p, index, count, dragHandle }: {
-  p: ProgramRef; index: number; count: number; dragHandle?: ReactNode;
+  p: ProgramRef; /** Position among the imported programs; only imported rows have a ⋯ menu. */ index?: number; count?: number; dragHandle?: ReactNode;
 }) {
   const d = useApp((s) => s.programData[p.blobId]);
   const active = useApp((s) => s.activeProgramId === p.id);
@@ -61,7 +61,7 @@ export function ProgramRow({ p, index, count, dragHandle }: {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" onClick={stop}>
               <DropdownMenuItem data-testid="program-up" disabled={index === 0} onSelect={() => commit((j) => moveProgram(j, p.id, -1))}>Move up</DropdownMenuItem>
-              <DropdownMenuItem data-testid="program-down" disabled={index === count - 1} onSelect={() => commit((j) => moveProgram(j, p.id, 1))}>Move down</DropdownMenuItem>
+              <DropdownMenuItem data-testid="program-down" disabled={index === (count ?? 0) - 1} onSelect={() => commit((j) => moveProgram(j, p.id, 1))}>Move down</DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem data-testid="program-remove" variant="destructive" onSelect={() => removeImported(p.id)}>Remove</DropdownMenuItem>
             </DropdownMenuContent>

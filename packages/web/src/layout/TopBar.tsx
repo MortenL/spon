@@ -5,10 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { MachineDialog } from '@/layout/MachineDialog';
 import { useExportConfirm } from '@/layout/ExportDialog';
-import { exportGcode } from '@/state/export';
+import { MachineDialog } from '@/layout/MachineDialog';
 import { newDocument, openFile, openViaPicker, registerOpenFallback, saveDocument } from '@/state/documents';
+import { exportGcode } from '@/state/export';
 import { appStore, useApp } from '@/state/store';
 import { ToolLibraryDialog } from '@/tools/ToolLibraryDialog';
 

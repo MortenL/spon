@@ -1,6 +1,6 @@
 import { Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { MachineSettings } from '@/panels/MachinePanel';
 import { useApp } from '@/state/store';
 
@@ -15,6 +15,7 @@ export function MachineDialog() {
       </DialogTrigger>
       <DialogContent className="max-h-[85dvh] overflow-y-auto">
         <DialogTitle>Machine</DialogTitle>
+        <DialogDescription className="sr-only">Machine profile used for time estimates</DialogDescription>
         <MachineSettings />
       </DialogContent>
     </Dialog>

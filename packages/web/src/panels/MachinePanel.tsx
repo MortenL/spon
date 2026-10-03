@@ -3,7 +3,6 @@ import {
 } from '@sponcam/core';
 import { appStore, useApp } from '@/state/store';
 import { NumericField } from './NumericField';
-import { PanelBody } from './PanelBody';
 
 const AXES = ['x', 'y', 'z'] as const;
 
@@ -27,7 +26,7 @@ export function MachineSettings() {
   const axisPatch = (group: 'rapid' | 'accel', axis: keyof AxisValues, v: number) => commit((j) => setMachineProfile(j, { [group]: { [axis]: v } }));
 
   return (
-    <PanelBody>
+    <>
       <label className="mb-3 grid grid-cols-[1fr_10rem] items-center gap-2 text-sm">
         <span className="text-muted-foreground">Profile</span>
         <select
@@ -52,6 +51,6 @@ export function MachineSettings() {
           onCommit={(v) => commit((j) => setMachineProfile(j, { toolChangeSeconds: v }))}
         />
       </div>
-    </PanelBody>
+    </>
   );
 }

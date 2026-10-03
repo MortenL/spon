@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils';
 import { operationSeconds, operationStatus, runCommand, type OperationStatus } from '@/state/camView';
 import { appStore, useApp } from '@/state/store';
 import { formatDuration } from './format';
-import { firstProblem } from './listShortcuts';
+import { duplicateShortcutLabel, firstProblem } from './listShortcuts';
 
 export const TYPE_ICON: Record<OperationType, typeof Scissors> = { profile: Scissors, pocket: SquareDashed, drill: Circle, face: Layers, chamfer: Triangle, slot: RectangleHorizontal };
 export const OP_TYPES: readonly OperationType[] = ['profile', 'pocket', 'drill', 'face', 'chamfer', 'slot'];
@@ -29,8 +29,19 @@ export function moveOperation(id: string, delta: -1 | 1): void {
   runCommand({ type: 'moveOperation', id, delta });
 }
 export function removeOperation(id: string): void {
-  if (runCommand({ type: 'removeOperation', id })) appStore.getState().selectOperation(null);
+  const index = appStore.getState().job.operations.findIndex((o) => o.id === id);
+  if (!runCommand({ type: 'removeOperation', id })) return;
+  appStore.getState().selectOperation(null);
+  // The removed row (and the menu that returns focus to it) is gone: hand focus to the next row's menu, else to Add operation.
+  requestAnimationFrame(() => {
+    const next = document.querySelector<HTMLElement>(`[data-testid="op-row-${index}"] [data-testid="op-menu"]`);
+    (next ?? document.querySelector<HTMLElement>('[data-testid="add-op"]'))?.focus();
+  });
 }
+
+const DUPLICATE_SHORTCUT = duplicateShortcutLabel(
+  (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform ?? navigator.platform ?? '',
+);
 
 function StatusBadge({ status }: { status: OperationStatus }) {
   switch (status) {
@@ -62,8 +73,13 @@ export function OperationRow({ op, index, count, selected, dragHandle }: {
   return (
     <div
       data-testid={`op-row-${index}`} data-selected={selected} data-status={status}
-      onClick={() => appStore.getState().selectOperation(op.id)}
-      className={cn('cursor-pointer rounded-md border px-2 py-1.5 text-sm', selected ? 'border-primary bg-accent' : 'hover:bg-accent/50')}
+      onClick={() => appStore.getState().selectOperation(op.id)} tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
+        e.preventDefault();
+        appStore.getState().selectOperation(op.id);
+      }}
+      className={cn('cursor-pointer rounded-md border px-2 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring', selected ? 'border-primary bg-accent' : 'hover:bg-accent/50')}
     >
       <div className="flex items-start gap-2">
         {dragHandle}
@@ -83,7 +99,7 @@ export function OperationRow({ op, index, count, selected, dragHandle }: {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" onClick={stop}>
-            <DropdownMenuItem data-testid="op-duplicate" onSelect={() => duplicateOperation(op.id)}>Duplicate<DropdownMenuShortcut>Ctrl+D</DropdownMenuShortcut></DropdownMenuItem>
+            <DropdownMenuItem data-testid="op-duplicate" onSelect={() => duplicateOperation(op.id)}>Duplicate<DropdownMenuShortcut>{DUPLICATE_SHORTCUT}</DropdownMenuShortcut></DropdownMenuItem>
             <DropdownMenuItem data-testid="op-up" disabled={index === 0} onSelect={() => moveOperation(op.id, -1)}>Move up<DropdownMenuShortcut>Alt+↑</DropdownMenuShortcut></DropdownMenuItem>
             <DropdownMenuItem data-testid="op-down" disabled={index === count - 1} onSelect={() => moveOperation(op.id, 1)}>Move down<DropdownMenuShortcut>Alt+↓</DropdownMenuShortcut></DropdownMenuItem>
             <DropdownMenuSeparator />
@@ -91,7 +107,7 @@ export function OperationRow({ op, index, count, selected, dragHandle }: {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      <div className="mt-0.5 flex flex-wrap gap-x-3 pl-[2.75rem] text-xs text-muted-foreground">
+      <div className="mt-0.5 flex flex-wrap gap-x-3 pl-16 text-xs text-muted-foreground">
         <span data-testid="op-tool" className={tool ? undefined : 'text-destructive'}>{tool ? `T${tool.number} · ${tool.name}` : 'No tool'}</span>
         <span data-testid="op-time" className="font-mono">{seconds === null ? '–' : formatDuration(seconds)}</span>
         {problem && (

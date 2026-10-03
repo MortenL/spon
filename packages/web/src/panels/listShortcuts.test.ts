@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { firstProblem, moveSteps, shouldHandle, type KeyLike } from './listShortcuts';
+import { duplicateShortcutLabel, firstProblem, moveSteps, shouldHandle, type KeyLike } from './listShortcuts';
 
 const key = (k: string, mods: Partial<KeyLike> = {}, target: KeyLike['target'] = { tagName: 'BODY' }): KeyLike =>
   ({ key: k, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, target, ...mods });
@@ -11,6 +11,7 @@ describe('shouldHandle', () => {
     expect(shouldHandle(key('Delete'), false)).toBe('delete');
     expect(shouldHandle(key('ArrowUp', { altKey: true }), false)).toBe('up');
     expect(shouldHandle(key('ArrowDown', { altKey: true }), false)).toBe('down');
+    expect(shouldHandle(key('D', { ctrlKey: true, shiftKey: true }), false)).toBeNull();
     expect(shouldHandle(key('d'), false)).toBeNull();
     expect(shouldHandle(key('ArrowUp'), false)).toBeNull();
     expect(shouldHandle(key('Backspace'), false)).toBeNull();
@@ -48,5 +49,15 @@ describe('open menu', () => {
     const inMenu = { tagName: 'DIV', closest: (sel: string) => (sel === '[role="menu"]' ? {} : null) };
     expect(shouldHandle(key('Delete', {}, inMenu), false)).toBeNull();
     expect(shouldHandle(key('d', { ctrlKey: true }, inMenu), false)).toBeNull();
+  });
+});
+
+describe('duplicateShortcutLabel', () => {
+  it('is ⌘D on Apple platforms and Ctrl+D elsewhere', () => {
+    expect(duplicateShortcutLabel('MacIntel')).toBe('⌘D');
+    expect(duplicateShortcutLabel('iPhone')).toBe('⌘D');
+    expect(duplicateShortcutLabel('Win32')).toBe('Ctrl+D');
+    expect(duplicateShortcutLabel('Linux x86_64')).toBe('Ctrl+D');
+    expect(duplicateShortcutLabel('')).toBe('Ctrl+D');
   });
 });

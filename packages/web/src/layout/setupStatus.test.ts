@@ -64,8 +64,16 @@ describe('setupStatus', () => {
 
   it('a drawing is checked in X and Y only', () => {
     const { job, geometry } = drawingJob();
+    // the points span Z 0 to 5, above the stock's Z range (-3 to 0), but are inside it in X and Y
+    const raised = { ...geometry, rawPoints: new Float32Array([0, 0, 0, 40, 30, 5]) } as ModelGeometry;
     const fixed = setStock(job, { mode: 'fixed', size: vec3(50, 40, 3), modelOffset: vec3(5, 5, 0) });
-    expect(setupStatus(fixed, geometry).steps.stock).toEqual({ state: 'ok' });
+    expect(setupStatus(fixed, raised).steps.stock).toEqual({ state: 'ok' });
+  });
+
+  it('a drawing that sticks out of fixed stock in X needs attention', () => {
+    const { job, geometry } = drawingJob();
+    const narrow = setStock(job, { mode: 'fixed', size: vec3(35, 40, 3), modelOffset: vec3(0, 0, 0) });
+    expect(setupStatus(narrow, geometry).steps.stock).toEqual({ state: 'attention', reason: 'The model sticks out of the stock' });
   });
 });
 
