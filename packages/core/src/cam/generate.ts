@@ -47,7 +47,8 @@ export function generateOperation(op: Operation, ctx: CamContext): OperationResu
     base.key = operationKey(op, ctx.job);
     const tool = ctx.job.tools.find((t) => t.id === op.toolId);
     if (!tool) return err('no-tool', 'Choose a tool for this operation');
-    if (!op.geometry.length && !(op.type === 'face' && op.area === 'stock')) return err('no-geometry', 'Pick geometry for this operation');
+    if (!op.geometry.length && op.type !== 'vclear' && !(op.type === 'face' && op.area === 'stock')) return err('no-geometry', 'Pick geometry for this operation');
+    if (op.type === 'engrave' || op.type === 'vcarve' || op.type === 'vclear') return err('internal', 'Not implemented yet');
     // facing the whole stock top needs no geometry; stale references are ignored
     const geo = resolveGeometry(op.type === 'face' && op.area === 'stock' ? { ...op, geometry: [] } : op, ctx);
     const res =
@@ -59,7 +60,7 @@ export function generateOperation(op: Operation, ctx: CamContext): OperationResu
       : chamferToolpath(op, tool, ctx, geo);
     const diagnostics: CamDiagnostic[] = [...geo.diagnostics, ...res.diagnostics];
     const warn = (code: CamDiagnostic['code'], message: string) => diagnostics.push({ operationId: op.id, severity: 'warning', code, message });
-    if (op.type !== 'drill' && !(op.type === 'slot' && op.strategy === 'trochoidal') && op.stepdown > tool.fluteLength) warn('stepdown-exceeds-flute', `Stepdown ${op.stepdown} mm is deeper than the ${tool.fluteLength} mm flutes`);
+    if (op.type !== 'drill' && typeof op.stepdown === 'number' && !(op.type === 'slot' && op.strategy === 'trochoidal') && op.stepdown > tool.fluteLength) warn('stepdown-exceeds-flute', `Stepdown ${op.stepdown} mm is deeper than the ${tool.fluteLength} mm flutes`);
     const maxFeed = op.type === 'drill' ? op.feeds.plungeFeed : op.feeds.feed;
     if (maxFeed > ctx.job.machine.maxFeed) warn('feed-exceeds-machine', `Feed ${maxFeed} mm/min is above the machine maximum of ${ctx.job.machine.maxFeed}`);
     // a gouge keeps its toolpath, so the user can see where it cuts into the model

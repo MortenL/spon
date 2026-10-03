@@ -250,3 +250,30 @@ describe('slot operations', () => {
     expect(defaultHeights('slot', 'drawing').bottom).toEqual({ from: 'stockTop', offset: -3 });
   });
 });
+
+describe('engrave, V-carve and clearing operations', () => {
+  it('adds them with defaults and validates their fields', () => {
+    let job = applyCommand(withTool(), { type: 'addOperation', opType: 'engrave', toolId: 't6', id: 'e' });
+    expect(job.operations[0]).toMatchObject({ type: 'engrave', name: 'Engrave 1', depthMode: 'depth', depth: 0.2, lineWidth: 0.5 });
+    job = applyCommand(job, { type: 'addOperation', opType: 'vcarve', toolId: 't6', id: 'v' });
+    expect(job.operations[1]).toMatchObject({ type: 'vcarve', name: 'V-carve 1', maxDepth: null, stepdown: null });
+    job = applyCommand(job, { type: 'addOperation', opType: 'vclear', toolId: 't6', id: 'c' });
+    expect(job.operations[2]).toMatchObject({ type: 'vclear', name: 'V-carve clearing 1', sourceId: '', geometry: [] });
+    job = applyCommand(job, { type: 'updateOperation', id: 'v', patch: { maxDepth: 3, stepdown: 1 } });
+    job = applyCommand(job, { type: 'updateOperation', id: 'v', patch: { maxDepth: null } });
+    expect(job.operations[1]).toMatchObject({ maxDepth: null, stepdown: 1 });
+    job = applyCommand(job, { type: 'updateOperation', id: 'c', patch: { sourceId: 'v' } });
+    expect((job.operations[2] as { sourceId: string }).sourceId).toBe('v');
+    expect(() => applyCommand(job, { type: 'updateOperation', id: 'e', patch: { depthMode: 'deep' } as never })).toThrow('depthMode must be one of depth, width');
+    expect(() => applyCommand(job, { type: 'updateOperation', id: 'e', patch: { lineWidth: 0 } })).toThrow('lineWidth must be greater than 0');
+    expect(() => applyCommand(job, { type: 'updateOperation', id: 'v', patch: { maxDepth: -1 } })).toThrow('maxDepth must be greater than 0');
+    expect(() => applyCommand(job, { type: 'updateOperation', id: 'v', patch: { side: 'inside' } as never })).toThrow('"side" does not apply to a vcarve operation');
+  });
+
+  it('defaults engrave to width mode with a V-bit', () => {
+    const vbit = { ...tool, id: 'v60', number: 7, type: 'vbit' as const, tipAngleDeg: 60, cornerRadius: 0 };
+    let job = applyCommand(createJob(), { type: 'addTool', tool: vbit as never });
+    job = applyCommand(job, { type: 'addOperation', opType: 'engrave', toolId: 'v60', id: 'e' });
+    expect(job.operations[0]).toMatchObject({ depthMode: 'width' });
+  });
+});

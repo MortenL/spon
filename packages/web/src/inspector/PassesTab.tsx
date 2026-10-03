@@ -427,5 +427,6 @@ export function PassesTab({ op }: { op: Operation }) {
   if (op.type === 'drill') return <DrillPasses op={op} />;
   if (op.type === 'face') return <FacePasses op={op} />;
   if (op.type === 'slot') return <SlotPasses op={op} />;
+  if (op.type === 'engrave' || op.type === 'vcarve' || op.type === 'vclear') return null; // Task 7
   return <ChamferPasses op={op} />;
 }

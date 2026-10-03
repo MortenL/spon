@@ -18,6 +18,9 @@ const PICK_HINT: Record<OperationType, string> = {
   face: 'Facing the stock needs no geometry; for a picked area, click faces or closed paths',
   chamfer: 'Click edges: paths, faces, edge loops or holes',
   slot: 'Click centrelines (lines or arcs), or a slot in the model',
+  engrave: 'Click paths, or edges and edge loops of the model',
+  vcarve: 'Click closed paths, or faces and edge loops of the model',
+  vclear: 'Clearing takes its outlines from the V-carve it clears',
 };
 
 export function GeometryTab({ op }: { op: Operation }) {

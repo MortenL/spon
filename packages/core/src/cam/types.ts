@@ -2,7 +2,7 @@ import type { Vec2 } from '../geometry/path2d';
 import type { Vec3 } from '../geometry/vec3';
 
 export type Coolant = 'off' | 'flood' | 'mist';
-export type OperationType = 'profile' | 'pocket' | 'drill' | 'face' | 'chamfer' | 'slot';
+export type OperationType = 'profile' | 'pocket' | 'drill' | 'face' | 'chamfer' | 'slot' | 'engrave' | 'vcarve' | 'vclear';
 
 /** A planar face of the mesh, in model-local (raw, pre-orientation) coordinates. */
 export interface MeshFaceRef { kind: 'meshFace'; blobId: string; seed: number; normal: Vec3; point: Vec3 }
@@ -138,12 +138,36 @@ export interface SlotOp extends OperationBase {
   /** How square ends of recognised slots are cut; null = not chosen yet (an error when a picked slot has one). */
   squareEnds: 'inside' | 'endWall' | 'dogbone' | null;
 }
-export type Operation = ProfileOp | PocketOp | DrillOp | FaceOp | ChamferOp | SlotOp;
+export interface EngraveOp extends OperationBase {
+  type: 'engrave';
+  /** `depth`: cut to `depth`; `width`: a V-bit sinks until the groove is `lineWidth` wide. */
+  depthMode: 'depth' | 'width';
+  depth: number;
+  lineWidth: number;
+  stepdown: number;
+}
+export interface VCarveOp extends OperationBase {
+  type: 'vcarve';
+  /** null = no limit (the shape's own depth). */
+  maxDepth: number | null;
+  /** null = one pass. */
+  stepdown: number | null;
+}
+export interface VClearOp extends OperationBase {
+  type: 'vclear';
+  /** The V-carve operation this clears; '' = not chosen yet. */
+  sourceId: string;
+  stepoverPct: number;
+  stepdown: number;
+  direction: 'climb' | 'conventional';
+  entry: EntrySettings;
+}
+export type Operation = ProfileOp | PocketOp | DrillOp | FaceOp | ChamferOp | SlotOp | EngraveOp | VCarveOp | VClearOp;
 
 type FieldsOf<T> = T extends unknown ? Omit<T, 'id' | 'type'> : never;
 /** The type of field K over every operation type that has it (a union where the types differ). */
 type FieldValue<K extends PropertyKey> = FieldsOf<Operation> extends infer F ? (F extends unknown ? (K extends keyof F ? F[K] : never) : never) : never;
-type AllKeys = keyof (FieldsOf<ProfileOp> & FieldsOf<PocketOp> & FieldsOf<DrillOp> & FieldsOf<FaceOp> & FieldsOf<ChamferOp> & FieldsOf<SlotOp>);
+type AllKeys = keyof (FieldsOf<ProfileOp> & FieldsOf<PocketOp> & FieldsOf<DrillOp> & FieldsOf<FaceOp> & FieldsOf<ChamferOp> & FieldsOf<SlotOp> & FieldsOf<EngraveOp> & FieldsOf<VCarveOp> & FieldsOf<VClearOp>);
 /** Any operation field; object-valued fields are merged one level deep. */
 export type OperationPatch = {
   [K in AllKeys]?: K extends 'heights' ? Partial<Heights> : K extends 'feeds' | 'entry' | 'leads' | 'tabs' | 'trochoidal' ? Partial<FieldValue<K>> : FieldValue<K>;
@@ -177,7 +201,8 @@ export type CamCode =
   | 'no-tool' | 'no-geometry' | 'ref-missing' | 'ref-changed' | 'face-not-horizontal' | 'open-contour' | 'no-stock'
   | 'heights-invalid' | 'offset-collapsed' | 'tool-too-large' | 'tool-undersize' | 'entry-plunge' | 'unmachined-area'
   | 'tab-skipped' | 'stepdown-exceeds-flute' | 'feed-exceeds-machine' | 'tool-number-duplicate' | 'bend-rounded' | 'gouge' | 'facing-depth' | 'wrong-tool'
-  | 'slot-width-mismatch' | 'slot-too-narrow' | 'slot-ends-unset' | 'slot-overcut' | 'wrong-geometry' | 'internal';
+  | 'slot-width-mismatch' | 'slot-too-narrow' | 'slot-ends-unset' | 'slot-overcut' | 'wrong-geometry'
+  | 'flute-exceeded' | 'vcarve-uncleared' | 'source-missing' | 'source-incomplete' | 'internal';
 export interface CamDiagnostic {
   operationId: string;
   severity: CamSeverity;
