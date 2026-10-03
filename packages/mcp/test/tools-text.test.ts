@@ -1,5 +1,6 @@
-import { existsSync, readdirSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import { testFontBytes } from '../../core/test/fixtures/testFont';
 import { connect, data, text } from './connect';
@@ -61,6 +62,26 @@ describe('text and font tools', () => {
     expect(text(r)).toBe('WOFF2 fonts are not supported; use TTF, OTF or WOFF');
   });
 
+  it('accepts a .woff font', async () => {
+    const t = await signJob();
+    const woff = createRequire(import.meta.url).resolve('@fontsource/inter/files/inter-latin-400-normal.woff');
+    copyFileSync(woff, join(t.dir, 'Inter.woff'));
+    const r = await t.call('load_font', { path: 'Inter.woff' });
+    expect(r.isError).toBeFalsy();
+    expect(data(r).font).toMatchObject({ kind: 'file', name: 'Inter.woff' });
+  });
+
+  it('refuses a font ref that was never loaded', async () => {
+    const t = await signJob();
+    const font = { kind: 'file', blobId: 'font-nope', name: 'x.ttf' };
+    const added = await t.call('add_text', { text: 'A', font });
+    expect(added.isError).toBe(true);
+    expect(text(added)).toBe('Unknown font font-nope; call load_font first');
+    const id = data(await t.call('add_text', { text: 'A' })).id;
+    expect(text(await t.call('update_text', { id, patch: { font } }))).toBe('Unknown font font-nope; call load_font first');
+    expect(data(await t.call('get_job', { section: 'texts' })).texts[0].font).toEqual({ kind: 'bundled', id: 'sans' });
+  });
+
   it('keeps the text and the uploaded font through save and reopen', async () => {
     const t = await signJob();
     writeFileSync(join(t.dir, 'Test.ttf'), testFontBytes());
@@ -84,7 +105,7 @@ describe('text and font tools', () => {
     expect(id).toBe('my-text');
     const bad = await t.call('update_text', { id, patch: { size: 0 } });
     expect(bad.isError).toBe(true);
-    expect(text(bad)).toContain('size');
+    expect(text(bad)).toContain('size must be greater than 0');
     expect((await t.call('update_text', { id, patch: { size: 12 } })).isError).toBeFalsy();
     expect((await t.call('remove_text', { id })).isError).toBeFalsy();
     expect(text(await t.call('remove_text', { id }))).toContain(id);

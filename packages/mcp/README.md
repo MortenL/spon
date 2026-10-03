@@ -41,7 +41,7 @@ Slots: `describe_geometry` lists recognised slots as `S1…` (`filter: "slots"`)
 centrelines (each line end is the centre of a round end; set `width`). `strategy` is `auto`, `toolWidth`, `wider` or `trochoidal`. A square-ended slot needs
 `squareEnds` (`inside`, `endWall` or `dogbone`); `export_gcode` refuses until it is set, and `endWall`/`dogbone` overcuts give a `slot-overcut` warning.
 
-Text: `add_text` puts a text in the job (stock coordinates, mm from the stock's min corner); give an operation `geometry: [{ "kind": "text", "textId": ... }]`. Outline fonts serve profile, pocket, engrave and V-carve; single-line Hershey fonts serve engrave only. `load_font { path }` checks a TTF, OTF or Hershey file and returns a font ref for `add_text` / `update_text` (it is refused while connected live: load fonts in the Spon window).
+Text: `add_text` puts a text in the job (stock coordinates, mm from the stock's min corner); give an operation `geometry: [{ "kind": "text", "textId": ... }]`. Outline fonts serve profile, pocket, engrave and V-carve; single-line Hershey fonts serve engrave only. `load_font { path }` checks a .ttf, .otf or .woff outline font (.woff2 is refused) and returns a font ref for `add_text` / `update_text` (it is refused while connected live: load fonts in the Spon window).
 
 ## Tools
 

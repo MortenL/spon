@@ -1,7 +1,5 @@
-import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { testFontBytes } from '../../core/test/fixtures/testFont';
 import { FileSession } from '../src/fileSession';
 import { ToolLibraryFile } from '../src/library';
 import { LiveBridge } from '../src/live/bridge';
@@ -64,8 +62,7 @@ describe('live tools', () => {
 
   it('edits texts live but refuses to load a font through the bridge', async () => {
     const bridge = await withBridge();
-    const { call, dir } = await connect({ bridge });
-    writeFileSync(join(dir, 'Test.ttf'), testFontBytes());
+    const { call } = await connect({ bridge });
     const tab = backingTab(bridge);
     await tab.welcomed;
     await call('use_live_tab');
@@ -73,7 +70,7 @@ describe('live tools', () => {
     expect(added.isError).toBeFalsy();
     expect(data(await call('get_job', { section: 'texts' })).texts).toHaveLength(1);
     expect(data(await call('list_fonts')).bundled).toHaveLength(6);
-    const refused = await call('load_font', { path: 'Test.ttf' });
+    const refused = await call('load_font', { path: 'does-not-exist.ttf' });
     expect(refused.isError).toBe(true);
     expect(text(refused)).toBe('Load fonts in the Spon window while connected live');
   });

@@ -76,6 +76,10 @@ export class FileSession implements JobSession {
   }
 
   async apply(commands: readonly JobCommand[]): Promise<Job> {
+    for (const c of commands) {
+      const font = (c.type === 'addText' || c.type === 'updateText') ? c.patch?.font : undefined;
+      if (font?.kind === 'file' && !this.blobs[font.blobId]) throw new SessionError(`Unknown font ${font.blobId}; call load_font first`);
+    }
     const next = applyCommands(this.current, commands);
     if (next !== this.current) {
       this.current = next;
@@ -100,12 +104,16 @@ export class FileSession implements JobSession {
 
   private async pipeline(): Promise<{ result: PipelineResult; report: RunReport }> {
     if (this.last && this.last.job === this.current && this.last.geometry === this.geometry) return this.last;
-    try {
-      await this.fonts.ensure(this.current, this.blobs);
-    } catch (err) {
-      throw new SessionError(`Could not load a bundled font: ${message(err)}`);
-    }
-    // the job may have changed while the fonts loaded
+    // the job may change while the fonts load: ensure again for the new job until it is stable
+    let job: Job;
+    do {
+      job = this.current;
+      try {
+        await this.fonts.ensure(job, this.blobs);
+      } catch (err) {
+        throw new SessionError(`Could not load a bundled font: ${message(err)}`);
+      }
+    } while (job !== this.current);
     if (this.last && this.last.job === this.current && this.last.geometry === this.geometry) return this.last;
     const opts = this.options.postDate ? { date: this.options.postDate } : {};
     const result = runPipeline(this.current, this.geometry, programContext(this.current, this.geometry), this.cache, opts, this.fonts);
