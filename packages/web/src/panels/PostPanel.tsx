@@ -5,7 +5,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { runCommand } from '@/state/camView';
 import { useApp } from '@/state/store';
 import { LengthField, NumericField } from './NumericField';
-import { PanelSection } from './PanelSection';
+import { PanelBody } from './PanelBody';
 
 const EXTENSIONS = ['nc', 'gcode', 'tap'] as const;
 
@@ -41,7 +41,7 @@ export function PostPanel() {
   const tolerance = useApp((s) => s.job.tolerance);
 
   return (
-    <PanelSection title="Post" defaultOpen={false}>
+    <PanelBody>
       <label className="mb-1 grid grid-cols-[1fr_10rem] items-center gap-2 text-sm">
         <span className="text-muted-foreground">Dialect</span>
         <select
@@ -143,6 +143,6 @@ export function PostPanel() {
           onCommit={(v) => runCommand({ type: 'setTolerance', tolerance: v })}
         />
       </div>
-    </PanelSection>
+    </PanelBody>
   );
 }

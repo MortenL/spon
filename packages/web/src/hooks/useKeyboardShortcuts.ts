@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 import { movePlayhead, togglePlaying } from '@/gcode/playback';
 import { buildTimeline, stepTime } from '@/gcode/timeline';
-import { runCommand } from '@/state/camView';
 import { openViaPicker, saveDocument } from '@/state/documents';
 import { allPrograms } from '@/state/programList';
 import { appStore } from '@/state/store';
@@ -25,8 +24,8 @@ function isTypingForPlaybackKeys(target: EventTarget | null): boolean {
 
 /**
  * Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y undo-redo, Ctrl+S save (Shift = Save As), Ctrl+O open, F fit,
- * Delete removes the selected operation, Ctrl/Cmd+D duplicates it, Esc cancels a CAM pick or
- * lay-flat picking, Space play/pause, ←/→ step one move, Home/End jump.
+ * Esc cancels a CAM pick or lay-flat picking, Space play/pause, ←/→ step one move, Home/End jump.
+ * (Delete, Ctrl+D and Alt+↑/↓ on the selected operation live in the Operations panel.)
  */
 export function useKeyboardShortcuts(): void {
   useEffect(() => {
@@ -71,14 +70,6 @@ export function useKeyboardShortcuts(): void {
         s.redo();
       } else if (!mod && key === 'f') {
         s.requestView('fit');
-      } else if (key === 'delete' && s.selectedOperationId) {
-        const id = s.selectedOperationId;
-        if (runCommand({ type: 'removeOperation', id })) s.selectOperation(null);
-      } else if (mod && key === 'd' && s.selectedOperationId) {
-        e.preventDefault();
-        const id = s.selectedOperationId;
-        const newId = crypto.randomUUID();
-        if (runCommand({ type: 'duplicateOperation', id, newId })) s.selectOperation(newId);
       } else if (key === 'escape') {
         if (s.camPick) s.setCamPick(null);
         else if (s.pickMode !== 'none') s.setPickMode('none');

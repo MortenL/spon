@@ -1,7 +1,6 @@
 import path from 'node:path';
 import { expect, type Page, test } from '@playwright/test';
-
-const FIXTURES = path.resolve(import.meta.dirname, '../../core/test/fixtures');
+import { FIXTURES, openPanel } from './helpers';
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -15,9 +14,12 @@ const open = (page: Page, rel: string) => page.getByTestId('open-input').setInpu
 
 test('Inkscape SVG opens without a prompt; an open line profiles on its right with a direction arrow', async ({ page }) => {
   await open(page, 'svg/inkscape.svg');
+  await expect(page.getByTestId('model-size')).toBeVisible(); // the import has finished and brought the Model panel forward
   await expect(page.getByTestId('svg-scale-dialog')).toHaveCount(0);
+  await openPanel(page, 'stock');
   await page.getByTestId('stock-margin-bottom').fill('6');
   await page.getByTestId('stock-margin-bottom').press('Enter');
+  await openPanel(page, 'operations');
   await page.getByTestId('add-op').click();
   await page.getByTestId('add-op-profile').click();
   await page.getByTestId('catalog-contour-Engrave-0').click();
@@ -36,6 +38,7 @@ test('a px SVG asks for its scale and shows the resulting size', async ({ page }
   await page.getByTestId('svg-scale-72').click();
   await expect(dialog).toHaveCount(0);
   // the catalog lists once an operation is selected (adapted: there is no catalog without one)
+  await openPanel(page, 'operations');
   await page.getByTestId('add-op').click();
   await page.getByTestId('add-op-profile').click();
   await expect(page.getByTestId('catalog-list')).toContainText('#ff0000');

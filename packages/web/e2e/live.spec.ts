@@ -5,11 +5,11 @@ import path from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { FIXTURES } from './helpers';
 import { expect, test } from '@playwright/test';
 
 const MCP = path.resolve(import.meta.dirname, '../../mcp');
 const DIST = path.join(MCP, 'dist', 'spon-mcp.js');
-const FIXTURES = path.resolve(import.meta.dirname, '../../core/test/fixtures');
 const PORT = 5196;
 const text = (r: CallToolResult) => r.content.map((c) => (c.type === 'text' ? c.text : '')).join('\n');
 
@@ -45,6 +45,7 @@ test('Claude drives the open tab: each tool call is one undo step, the preview r
     const catalog = (await call('describe_geometry')).structuredContent as { contours: { handle: string; layer: string }[] };
     const outline = catalog.contours.filter((c) => c.layer === 'OUTLINE').map((c) => c.handle);
     await call('add_operation', { type: 'profile', tool: 'starter-flat-6', geometry: outline, params: { tabs: { enabled: true } } });
+    await expect(page.getByTestId('left-panel')).toHaveAttribute('data-panel', 'operations'); // the add switched the panel
     await expect(page.locator('[data-testid^="op-row-"]')).toHaveCount(1);
     await expect(page.getByText(/Claude: Add Profile on/)).toBeVisible();
 

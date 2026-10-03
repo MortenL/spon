@@ -1,8 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { expect, type Page, test } from '@playwright/test';
-
-const FIXTURES = path.resolve(import.meta.dirname, '../../core/test/fixtures');
+import { FIXTURES, openPanel } from './helpers';
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -16,6 +15,7 @@ test.beforeEach(async ({ page }) => {
 const openFixture = (page: Page, name: string) => page.getByTestId('open-input').setInputFiles(path.join(FIXTURES, name));
 
 async function addOp(page: Page, type: 'profile' | 'pocket' | 'drill') {
+  await openPanel(page, 'operations');
   await page.getByTestId('add-op').click();
   await page.getByTestId(`add-op-${type}`).click();
   await expect(page.getByTestId('inspector')).toBeVisible();
@@ -50,6 +50,7 @@ test('single-body STEP: no prompts, pocket and drill generate, and the job survi
   await addOp(page, 'drill');
   await page.getByTestId('catalog-hole-0').click(); // the Ø8 through hole
   await expect(lastRow(page)).toHaveAttribute('data-status', /ok|warning/);
+  await openPanel(page, 'programs');
   await expect(page.getByTestId('program-generated').first()).toBeVisible();
 
   const downloadPromise = page.waitForEvent('download');
@@ -62,6 +63,7 @@ test('single-body STEP: no prompts, pocket and drill generate, and the job survi
   await expect(page.getByTestId('model-source')).toHaveCount(0);
   await page.getByTestId('open-input').setInputFiles({ name: 'box-hole.spon', mimeType: 'application/octet-stream', buffer: await fs.readFile(saved) });
   await expect(page.getByTestId('model-source')).toHaveText('STEP · body 1 of 1 · Bracket', { timeout: 30_000 });
+  await openPanel(page, 'operations');
   const rows = page.locator('[data-testid^="op-row-"]');
   await expect(rows).toHaveCount(2);
   for (let i = 0; i < 2; i++) await expect(rows.nth(i)).toHaveAttribute('data-status', /ok|warning/);
