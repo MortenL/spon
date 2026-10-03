@@ -49,7 +49,10 @@ async function canvasBox(page: Page) {
   return box;
 }
 
-/** Clicks around the viewport centre until a click selects the text (its lines are thin), and returns that point. */
+/**
+ * Finds a point on the text's lines: one coarse search (rows outward from the viewport centre, 5 px apart, finer than the
+ * 5 px pick band) that stops at the first click selecting the text. The caller reuses the point.
+ */
 async function findText(page: Page): Promise<{ x: number; y: number }> {
   const box = await canvasBox(page);
   const cx = box.x + box.width / 2;
@@ -57,12 +60,12 @@ async function findText(page: Page): Promise<{ x: number; y: number }> {
   let found: { x: number; y: number } | null = null;
   await expect(async () => {
     await page.getByTestId('inspector-close').click({ timeout: 1000 }).catch(() => {}); // deselect first: a click on the lines selects again
-    for (let dy = -30; dy <= 30 && !found; dy += 3) {
-      for (let dx = -120; dx <= 120 && !found; dx += 3) {
-        await page.mouse.move(cx + dx, cy + dy);
+    for (const dy of [0, -8, 8, -16, 16, -24, 24, -32, 32]) {
+      for (let dx = -125; dx <= 125 && !found; dx += 5) {
         await page.mouse.click(cx + dx, cy + dy);
         if (await page.getByTestId('text-x').isVisible()) found = { x: cx + dx, y: cy + dy };
       }
+      if (found) break;
     }
     expect(found).not.toBeNull();
   }).toPass({ timeout: 30_000 });
@@ -96,26 +99,31 @@ test('sign without a model: drag, undo, V-carve with clearing, generate and expo
   const hit = await findText(page);
   const x0 = await numberOf(page, 'text-x');
   const y0 = await numberOf(page, 'text-y');
-  const dragPx = async () => {
+  const dragBy = async (px: number) => {
     await page.mouse.move(hit.x, hit.y);
     await page.mouse.down();
-    await page.mouse.move(hit.x + 30, hit.y, { steps: 6 });
-    await page.mouse.move(hit.x + 60, hit.y, { steps: 6 });
+    await page.mouse.move(hit.x + px / 2, hit.y, { steps: 6 });
+    await page.mouse.move(hit.x + px, hit.y, { steps: 6 });
     await page.mouse.up();
   };
-  await dragPx();
-  await expect.poll(() => numberOf(page, 'text-x')).toBeGreaterThan(x0 + 3);
-  const moved = (await numberOf(page, 'text-x')) - x0;
-  expect(Math.abs((await numberOf(page, 'text-y')) - y0)).toBeLessThan(1); // a horizontal drag moves along X only
-  expect(moved).toBeLessThan(200); // tens of mm for 60 px, never a jump past the stock
-
-  await page.keyboard.press('Control+z'); // the drag was one undo step
-  await expect.poll(() => numberOf(page, 'text-x')).toBeCloseTo(x0, 6);
-  expect(await numberOf(page, 'text-y')).toBeCloseTo(y0, 6);
-  await dragPx(); // the same screen distance gives the same distance in mm
-  await expect.poll(() => numberOf(page, 'text-x')).toBeCloseTo(x0 + moved, 0);
-  await page.keyboard.press('Control+z');
-  await expect.poll(() => numberOf(page, 'text-x')).toBeCloseTo(x0, 6);
+  const undoToStart = async () => {
+    await page.keyboard.press('Control+z'); // a drag is one undo step
+    await expect.poll(() => numberOf(page, 'text-x')).toBeCloseTo(x0, 6);
+    expect(await numberOf(page, 'text-y')).toBeCloseTo(y0, 6);
+  };
+  // two drags of different length in the same direction: the mm moved must be proportional to the pixels moved
+  await dragBy(30);
+  await expect.poll(() => numberOf(page, 'text-x')).toBeGreaterThan(x0 + 1); // to the right in the top view
+  const moved30 = (await numberOf(page, 'text-x')) - x0;
+  expect(Math.abs((await numberOf(page, 'text-y')) - y0)).toBeLessThan(0.01); // a horizontal drag moves along X only
+  await undoToStart();
+  await dragBy(60);
+  await expect.poll(() => numberOf(page, 'text-x')).toBeGreaterThan(x0 + moved30 * 1.5);
+  const moved60 = (await numberOf(page, 'text-x')) - x0;
+  expect(Math.abs((await numberOf(page, 'text-y')) - y0)).toBeLessThan(0.01);
+  expect(moved60 / moved30).toBeGreaterThan(1.9);
+  expect(moved60 / moved30).toBeLessThan(2.1);
+  await undoToStart();
 
   await addOpFromRow(page, 'vcarve');
   await pickTool(page, 'starter-vbit-60');
@@ -125,7 +133,10 @@ test('sign without a model: drag, undo, V-carve with clearing, generate and expo
   await page.getByTestId('vcarve-add-clearing').click();
   await expect(opRows(page)).toHaveCount(2);
   await pickTool(page, 'starter-flat-3');
-  await expect(opRows(page).first()).toHaveAttribute('data-status', /ok|warning/);
+  // The V-carve is clean once its clearing exists (its max-depth warning is gone). The clearing is the first row: a 3 mm mill, the
+  // smallest in the starter library, cannot reach the narrow strokes and corners of the letters, which is a warning, not an error.
+  await expect(opRows(page).first()).toHaveAttribute('data-status', 'warning');
+  await expect(opRows(page).first().getByTestId('op-problem')).toHaveText(/^The tool cannot reach \d+ area\(s\) of this pocket$/);
   await expect(opRows(page).last()).toHaveAttribute('data-status', 'ok');
 
   await openPanel(page, 'programs');
