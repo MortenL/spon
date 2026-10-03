@@ -115,9 +115,13 @@ test('operation ⋯ menu and Alt+Arrow shortcuts move and delete rows; focus fol
   await page.getByTestId('op-row-0').getByTestId('op-menu').click();
   await expect(page.getByTestId('op-up')).toBeDisabled();
   await page.keyboard.press('Escape');
+  await expect(page.getByRole('menu')).toHaveCount(0);
   await page.getByTestId('op-row-2').getByTestId('op-menu').click();
   await expect(page.getByTestId('op-down')).toBeDisabled();
   await page.keyboard.press('Escape');
+  // wait until the menu has closed and handed focus back to its ⋯ button, so the focus below sticks
+  await expect(page.getByRole('menu')).toHaveCount(0);
+  await expect(page.getByTestId('op-row-2').getByTestId('op-menu')).toBeFocused();
   // a row is keyboard-selectable; Alt+ArrowDown / Alt+ArrowUp move it
   await page.getByTestId('op-row-0').focus();
   await page.keyboard.press('Enter');
@@ -250,4 +254,32 @@ test('reorder by drag and by keyboard; one undo step each; menu and shortcuts', 
 test('Machine settings open from the top bar', async ({ page }) => {
   await page.getByTestId('machine-open').click();
   await expect(page.getByTestId('machine-preset')).toBeVisible();
+});
+
+test('Machine dialog: numbers are never clipped or covered by their units, and the profile name fits', async ({ page }) => {
+  await page.getByTestId('machine-open').click();
+  await page.getByTestId('machine-preset').selectOption('Generic VMC'); // the widest values (30000.00 mm/min)
+  await expect(page.getByTestId('machine-rapid-x')).toHaveValue('30000.00');
+  for (const id of ['machine-rapid-x', 'machine-rapid-z', 'machine-accel-x', 'machine-max-feed', 'machine-tool-change']) {
+    // right edge of the typed text (right-aligned, so it ends at the input's content edge) vs the left edge of its unit label
+    const gap = await page.getByTestId(id).evaluate((input: HTMLInputElement) => {
+      const style = getComputedStyle(input);
+      const box = input.getBoundingClientRect();
+      const textRight = box.right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth);
+      const suffix = input.parentElement!.querySelector('span')!.getBoundingClientRect();
+      return suffix.left - textRight;
+    });
+    expect(gap, id).toBeGreaterThanOrEqual(0);
+    // the whole number is visible: the input does not scroll its text
+    expect(await page.getByTestId(id).evaluate((input: HTMLInputElement) => input.scrollWidth <= input.clientWidth), `${id} clipped`).toBe(true);
+  }
+  // the selected profile name must fit beside the dropdown arrow (about 20 px)
+  const room = await page.getByTestId('machine-preset').evaluate((s: HTMLSelectElement) => {
+    const style = getComputedStyle(s);
+    const ctx = document.createElement('canvas').getContext('2d')!;
+    ctx.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+    const text = ctx.measureText(s.selectedOptions[0].text).width;
+    return s.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - 20 - text;
+  });
+  expect(room).toBeGreaterThanOrEqual(0);
 });
