@@ -38,6 +38,7 @@ An MCP server lets Claude (or any MCP client) drive the same jobs: on `.spon` fi
   - Engrave lines and outlines by depth, or by V-bit line width.
   - V-carve closed outlines with the depth following the width and sharp corners.
   - A max depth with a linked clearing operation for wide letters.
+- **Text:** typed text in bundled or uploaded fonts (outline and single-line), on the stock or a model face, with multi-line, spacing, fit, arc, rotation and mirror; V-carve, engrave, pocket or profile it.
 - **Gouge check.** Toolpaths are checked against the model (chamfer depth and the facets of round walls are allowed for). A cut into it is an error that keeps the toolpath, shows red markers in the viewport and blocks export.
 - Geometry is picked in the viewport, or from a catalog of faces, edge loops, holes and drawing contours.
 
@@ -112,8 +113,8 @@ More detail is in [`.claude/skills/spon-dev/SKILL.md`](.claude/skills/spon-dev/S
 | 4.3 | Slots | Done |
 | 4.3a | Left-panel rethink | Done |
 | 4.4 | Engraving and V-carve | Done |
-| 4.4b | Text in Spon | Next |
-| 4.4c | V-carve inlays | Planned |
+| 4.4b | Text in Spon | Done |
+| 4.4c | V-carve inlays | Next |
 | 4.5 | Thread milling | Planned |
 | 4.6 | Automatic operation suggestions | Planned |
 
