@@ -13,10 +13,10 @@ import { type Stroke, vcarveStrokes } from '../vcarve/strokes';
 import { emptyOverlays, type OpOutput } from './output';
 import { MoveWriter } from './writer';
 
-/** A shape as flattened polygons (within `tol / 4`): the outline counter-clockwise, the islands clockwise. */
 /** A polygon wound counter-clockwise (`ccw`) or clockwise. */
 export const orientPoly = (poly: Vec2[], ccw: boolean): Vec2[] => ((polyArea(poly) > 0) === ccw ? poly : [...poly].reverse());
 
+/** A shape as flattened polygons (within `tol / 4`): the outline counter-clockwise, the islands clockwise. */
 export function shapePolys(shape: Shape, tol: number): Vec2[][] {
   return [
     orientPoly(flattenPath(orientPath(shape.outer, true), tol / 4), true),

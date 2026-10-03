@@ -1,4 +1,5 @@
 import { polysToRegions } from '../../geometry/offset/clipper';
+import type { Vec2 } from '../../geometry/path2d';
 import type { Tool } from '../../tools/types';
 import type { CamContext } from '../context';
 import type { ResolvedGeometry } from '../features/resolve';
@@ -11,6 +12,10 @@ import { emitStrokes, orientPoly, shapePolys } from './vcarve';
 import { MoveWriter } from './writer';
 
 const EPS = 1e-9;
+
+/** The plug's mirrored shapes M as loops (outers counter-clockwise, holes clockwise); touching shapes are one M. */
+export const plugShapeLoops = (geo: ResolvedGeometry, tol: number): Vec2[][] =>
+  polysToRegions(geo.shapes.flatMap((sh) => shapePolys(sh.shape, tol))).flatMap((r) => [orientPoly(r.outer, true), ...r.holes.map((x) => orientPoly(x, false))]);
 
 /** Spec §2: the V-carve plug: walls around the mirrored shapes M, cut from D − g at M out to the flat floor H. */
 export function vplugToolpath(op: VPlugOp, tool: Tool, ctx: CamContext, geo: ResolvedGeometry): OpOutput {
@@ -39,7 +44,6 @@ export function vplugToolpath(op: VPlugOp, tool: Tool, ctx: CamContext, geo: Res
     return out;
   }
   if (H > tool.fluteLength + EPS) diag('warning', 'flute-exceeded', `The plug needs ${H.toFixed(2)} mm of V-bit; its cutting length is ${tool.fluteLength.toFixed(2)} mm`);
-  // Task 3 teaches the clearing to take a plug as its source
   if (!ctx.job.operations.some((o) => o.enabled && o.type === 'vclear' && o.sourceId === op.id)) {
     diag('warning', 'vcarve-uncleared', 'Wide areas stop at the max depth; add a clearing operation');
   }
@@ -55,8 +59,7 @@ export function vplugToolpath(op: VPlugOp, tool: Tool, ctx: CamContext, geo: Res
   out.heights = h;
   const tol = ctx.tolerance;
   const s = sampleSpacing(tol);
-  // touching shapes are one M
-  const M = polysToRegions(geo.shapes.flatMap((sh) => shapePolys(sh.shape, tol))).flatMap((r) => [orientPoly(r.outer, true), ...r.holes.map((x) => orientPoly(x, false))]);
+  const M = plugShapeLoops(geo, tol);
   const strokes = plugStrokes(M, { top: h.top, t: Math.tan((tool.tipAngleDeg * Math.PI) / 360), D, S, g, spacing: s, tol });
   const w = new MoveWriter();
   emitStrokes(w, strokes, h, H, op.stepdown, 2 * s, op.feeds.feed, op.feeds.plungeFeed);

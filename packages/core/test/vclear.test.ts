@@ -196,3 +196,60 @@ describe('V-carve clearing: review fixes', () => {
     expect(n).toBeGreaterThan(10);
   });
 });
+
+describe('V-carve clearing of a plug', () => {
+  const t = Math.tan(Math.PI / 6);
+  const D = 4, S = 2, g = 0.5, H = D - g + S, R = S * t;
+  const v60: Tool = { ...tool6, id: 'v60', number: 7, type: 'vbit', tipAngleDeg: 60, cornerRadius: 0, fluteLength: 20 };
+  const stock = { mode: 'fixed' as const, size: { x: 80, y: 60, z: 8 }, modelOffset: { x: 20, y: 20, z: 0 } };
+  function plugSetup(extra: JobCommand[] = []) {
+    const base = drawingJob([rect(40, 20)], 'vplug', { inlayDepth: D, startDepth: S, glueGap: g }, v60, stock);
+    const job = applyCommands(base.job, [
+      { type: 'addTool', tool: tool6 },
+      { type: 'addOperation', opType: 'vclear', toolId: 't6', id: 'c' },
+      { type: 'updateOperation', id: 'c', patch: { sourceId: 'o' } as never },
+      ...extra,
+    ]);
+    const run = (j: typeof job, cache = new PipelineCache()) => runPipeline(j, base.geometry as never, programContext(j, base.geometry as never), cache, { date: '2026-01-01' });
+    const { run: r, toolpaths } = run(job);
+    return { base, job, run, res: (id: string) => r.results.find((x) => x.operationId === id)!, tp: toolpaths.find((x) => x.operationId === 'c') as Toolpath | undefined };
+  }
+  const cutPts = (tp: Toolpath) => tp.moves.filter((m): m is Feed => m.kind === 'line' || m.kind === 'arc').map((m) => m.to);
+
+  it('clears the floor outside the M + R loop at top - H, reaching the stock edges', () => {
+    const s = plugSetup();
+    expect(errs(s.res('c'))).toEqual([]);
+    expect(errs(s.res('o'))).toEqual([]);
+    expect(s.res('o').diagnostics.some((d) => d.code === 'vcarve-uncleared')).toBe(false);
+    const tp = s.tp!;
+    const top = s.res('o').heights!.top;
+    expect(Math.min(...tp.moves.flatMap((m) => (m.kind === 'cycle' ? [] : [m.to.z])))).toBeCloseTo(top - H, 6);
+    const b = bounds(s.base.program(0));
+    const pts = cutPts(tp);
+    const r = 3; // tool6 radius
+    for (const p of pts) {
+      const d = Math.hypot(Math.max(b.x0 - p.x, 0, p.x - b.x1), Math.max(b.y0 - p.y, 0, p.y - b.y1));
+      expect(d).toBeGreaterThanOrEqual(R + r - 0.01);
+    }
+    const box = camContext(s.job, s.base.geometry).stock!;
+    expect(Math.min(...pts.map((p) => p.x)) - box.min.x).toBeLessThanOrEqual(r + 0.05);
+    expect(box.max.x - Math.max(...pts.map((p) => p.x))).toBeLessThanOrEqual(r + 0.05);
+    expect(Math.min(...pts.map((p) => p.y)) - box.min.y).toBeLessThanOrEqual(r + 0.05);
+    expect(box.max.y - Math.max(...pts.map((p) => p.y))).toBeLessThanOrEqual(r + 0.05);
+  });
+
+  it('follows the plug through a shared cache', () => {
+    const s = plugSetup();
+    const cache = new PipelineCache();
+    const lowest = (j: typeof s.job) => Math.min(...(s.run(j, cache).toolpaths.find((x) => x.operationId === 'c') as Toolpath).moves.flatMap((m) => (m.kind === 'cycle' ? [] : [m.to.z])));
+    const a = lowest(s.job);
+    const b = lowest(applyCommands(s.job, [{ type: 'updateOperation', id: 'o', patch: { startDepth: 3 } }]));
+    expect(a - b).toBeCloseTo(1, 6);
+  });
+
+  it('errors when the plug has errors', () => {
+    const s = plugSetup([{ type: 'updateOperation', id: 'o', patch: { glueGap: 9 } }]);
+    expect(errs(s.res('c'))).toEqual(['V-carve plug 1 has errors']);
+    expect(s.tp).toBeUndefined();
+  });
+});
