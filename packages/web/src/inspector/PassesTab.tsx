@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import { runCommand } from '@/state/camView';
 import { appStore, useApp } from '@/state/store';
 import { toolLibraryStore } from '@/state/toolLibrary';
-import { addClearingCommands, clearingFor, defaultClearingTool } from './vcarveInfo';
+import { addClearingBatch, clearingFor, engraveModeUi } from './vcarveInfo';
 import { chamferInfo } from './chamferInfo';
 import { slotView } from './slotInfo';
 import { contourKinds } from './openChains';
@@ -428,11 +428,11 @@ function EngravePasses({ op }: { op: EngraveOp }) {
   const patch = (p: Partial<EngraveOp>) => runCommand({ type: 'updateOperation', id: op.id, patch: p });
   const job = useApp((s) => s.job);
   const tool = job.tools.find((t) => t.id === op.toolId) ?? null;
-  const byWidth = op.depthMode === 'width' && tool?.type === 'vbit';
+  const { widthAllowed, showWidth } = engraveModeUi(op, tool);
 
   return (
     <div className="space-y-3">
-      {tool?.type === 'vbit' && (
+      {(
         <label className="grid grid-cols-[1fr_10rem] items-center gap-2 text-sm">
           <span className="text-muted-foreground">Depth by</span>
           <select
@@ -440,11 +440,11 @@ function EngravePasses({ op }: { op: EngraveOp }) {
             onChange={(e) => patch({ depthMode: e.target.value as EngraveOp['depthMode'] })}
           >
             <option value="depth" className="bg-background">Depth</option>
-            <option value="width" className="bg-background">Line width</option>
+            <option value="width" disabled={!widthAllowed} className="bg-background">Line width</option>
           </select>
         </label>
       )}
-      {byWidth
+      {showWidth
         ? <LengthField label="Line width" valueMm={op.lineWidth} testId="pass-engrave-width" min={0.01} onCommit={(v) => patch({ lineWidth: v })} />
         : <LengthField label="Depth" valueMm={op.depth} testId="pass-engrave-depth" min={0.01} onCommit={(v) => patch({ depth: v })} />}
       <LengthField label="Stepdown" valueMm={op.stepdown} testId="pass-engrave-stepdown" min={0.01} onCommit={(v) => patch({ stepdown: v })} />
@@ -459,12 +459,8 @@ function VCarvePasses({ op }: { op: VCarveOp }) {
 
   const addClearing = () => {
     const s = appStore.getState();
-    const tool = defaultClearingTool(s.job, toolLibraryStore.getState().tools);
     const newId = crypto.randomUUID();
-    const commands = [
-      ...(tool && !s.job.tools.some((t) => t.id === tool.id) ? [{ type: 'addTool' as const, tool }] : []),
-      ...addClearingCommands(s.job, op.id, tool?.id ?? null, newId),
-    ];
+    const commands = addClearingBatch(s.job, toolLibraryStore.getState().tools, op.id, newId);
     try {
       s.dispatchBatch(commands);
     } catch (err) {

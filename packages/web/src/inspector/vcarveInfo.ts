@@ -22,3 +22,17 @@ export function addClearingCommands(job: Job, vcarveId: string, toolId: string |
 export function defaultClearingTool(job: Job, library: readonly Tool[]): Tool | null {
   return job.tools.find((t) => t.type === 'flat') ?? library.find((t) => t.type === 'flat') ?? null;
 }
+
+/** Which engrave depth field shows, and whether "Line width" may be chosen (it needs a V-bit). */
+export function engraveModeUi(op: { depthMode: 'depth' | 'width' }, tool: Tool | null): { widthAllowed: boolean; showWidth: boolean } {
+  return { widthAllowed: tool?.type === 'vbit', showWidth: op.depthMode === 'width' };
+}
+
+/** The whole "Add clearing operation" batch: the default tool is added first only when it is not in the job yet. */
+export function addClearingBatch(job: Job, library: readonly Tool[], vcarveId: string, newId: string): JobCommand[] {
+  const tool = defaultClearingTool(job, library);
+  return [
+    ...(tool && !job.tools.some((t) => t.id === tool.id) ? [{ type: 'addTool' as const, tool }] : []),
+    ...addClearingCommands(job, vcarveId, tool?.id ?? null, newId),
+  ];
+}
