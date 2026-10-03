@@ -75,11 +75,16 @@ export function registerInlayTools(server: McpServer, ctx: ToolContext): void {
       if (err instanceof InlayError) throw new SessionError(err.message);
       throw err;
     }
-    await session.apply(result.base, 'Make inlay');
+    // plug file first: a bad path then leaves the base job untouched
     try {
       await writeFileAtomic(plugPath, writeSpon(result.plug.job, result.plug.blobs));
     } catch (err) {
       throw new SessionError(`Could not write ${plugPath}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    try {
+      await session.apply(result.base, 'Make inlay');
+    } catch (err) {
+      throw new SessionError(`The plug file ${plugPath} was written, but the base job was not changed: ${err instanceof Error ? err.message : String(err)}`);
     }
     const data = { plugPath, H: result.H, plugBoard: result.plugBoard, baseChanges: result.base };
     return ok(`${existing ? 'Updated' : 'Wrote'} the plug job ${plugPath} (plug height ${result.H.toFixed(2)} mm, board ${result.plugBoard.x.toFixed(1)} x ${result.plugBoard.y.toFixed(1)} x ${result.plugBoard.z.toFixed(1)} mm). The base V-carve is now ${result.base.length} change(s) richer. Next: save this job if you want to keep the pocket, then open_job the plug job.`, data);

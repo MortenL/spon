@@ -66,4 +66,28 @@ describe('make_inlay', () => {
     expect(text(r)).toBe('Inlays need a V-bit');
     expect(existsSync(join(t.dir, 'plug.spon'))).toBe(false);
   });
+
+  it('leaves the base unchanged when the plug file cannot be written', async () => {
+    const { t, opId } = await signJob();
+    const before = JSON.stringify(data(await t.call('get_job')).job);
+    const r = await t.call('make_inlay', { operationId: opId, plugPath: join('missing-dir', 'plug.spon') });
+    expect(r.isError).toBe(true);
+    expect(text(r)).toContain('Could not write');
+    expect(JSON.stringify(data(await t.call('get_job')).job)).toBe(before);
+  });
+
+  it('refuses update on a file that is not a plug job', async () => {
+    const { t, opId } = await signJob();
+    await t.call('save_job', { path: 'other.spon' });
+    const r = await t.call('make_inlay', { operationId: opId, plugPath: 'other.spon', update: true });
+    expect(r.isError).toBe(true);
+    expect(text(r)).toBe('This job is not a plug job');
+  });
+
+  it('refuses update on a missing file', async () => {
+    const { t, opId } = await signJob();
+    const r = await t.call('make_inlay', { operationId: opId, plugPath: 'nope.spon', update: true });
+    expect(r.isError).toBe(true);
+    expect(text(r)).toContain(`Could not read ${join(t.dir, 'nope.spon')}`);
+  });
 });
