@@ -126,7 +126,7 @@ Worked out from the job and the loaded geometry by one pure function, `setupStat
 ## 6. Programs and Post panels
 
 - **Programs:** rows use the same two lines.
-  - Line 1: drag handle, name, the "generated" tag (`program-generated`), the include-in-timeline checkbox (`program-in-timeline`) and ⋯.
+  - Line 1: drag handle, the "generated" tag (`program-generated`) or the include-in-timeline checkbox (`program-in-timeline`), name, ⋯.
   - Line 2: the time (`program-time`).
   - The ⋯ menu has Move up (`program-up`), Move down (`program-down`) and Remove (`program-remove`). Generated programs keep their current rules (no move or remove where that is not allowed today).
   - Drag-to-reorder for imported programs uses the same dnd-kit setup and the existing `moveProgram`.
@@ -142,7 +142,7 @@ Worked out from the job and the loaded geometry by one pure function, `setupStat
 
 - `layout/LeftRail.tsx`: the rail, the panel host and the resizable split.
 - `layout/railPanels.ts`: the panel list (id, group, icon, title, component).
-- `layout/railStore.ts`: the open panel, the hidden state and the width, kept in `localStorage` (wrapped in try/catch as `bridge/status.ts` does). It also exposes `showPanel(id)` for the automatic switches.
+- `layout/railStore.ts`: the open panel, the hidden state and the width, kept in `localStorage` (wrapped in try/catch as `bridge/status.ts` does). `autoPanel(prev, next)` decides the automatic switches; `state/autoPanelGate.ts` holds `withoutAutoPanel` (the startup restore uses it).
 - `layout/setupStatus.ts`: `setupStatus(job, geometry)` → per-step state and reason, plus the summary parts. Pure, with no React.
 - `layout/SetupSummary.tsx`: the summary line.
 - `panels/OperationRow.tsx` and `panels/ProgramRow.tsx`: the two-line rows.
