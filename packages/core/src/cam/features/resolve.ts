@@ -139,7 +139,6 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
     }
     const path = f.loops[g.loop];
     if (!path) return fail(i, 'ref-missing', 'The picked edge loop no longer exists');
-    if (op.type === 'vcarve' && g.kind === 'meshHole') return fail(i, 'wrong-geometry', 'V-carve needs outlines');
     if (op.type === 'engrave' && g.kind === 'meshHole') return fail(i, 'wrong-geometry', 'Engraving needs lines or outlines');
     if (g.kind === 'meshHole' && op.type === 'face') return fail(i, 'open-contour', 'Facing needs closed areas');
     if (g.kind === 'meshHole' || op.type === 'drill') {

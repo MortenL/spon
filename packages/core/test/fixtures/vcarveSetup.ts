@@ -59,7 +59,7 @@ export function vSwept(tp: Toolpath, top: number, tanHalf: number): Poly[] {
   type P = { x: number; y: number; z: number };
   let prev: P | null = null;
   let anchor: P | null = null;
-  let dir = 0, len = 0;
+  let dir = 0, len = 0, slope = 0;
   const flush = () => {
     if (anchor && prev && (prev.z < top - 1e-6 || anchor.z < top - 1e-6)) {
       const hull = coneHull(anchor, Math.max(0, (top - anchor.z) * tanHalf), prev, Math.max(0, (top - prev.z) * tanHalf));
@@ -67,6 +67,7 @@ export function vSwept(tp: Toolpath, top: number, tanHalf: number): Poly[] {
     }
     anchor = null;
     len = 0;
+    slope = 0;
   };
   for (const m of tp.moves) {
     if (m.kind === 'cycle' || m.kind === 'rapid') { flush(); prev = m.kind === 'cycle' ? null : m.to; continue; }
@@ -74,9 +75,12 @@ export function vSwept(tp: Toolpath, top: number, tanHalf: number): Poly[] {
     const d = Math.atan2(m.to.y - prev.y, m.to.x - prev.x), l = Math.hypot(m.to.x - prev.x, m.to.y - prev.y);
     if (anchor) {
       const turn = Math.abs(Math.atan2(Math.sin(d - dir), Math.cos(d - dir)));
-      if (l > 1e-9 && (turn > (3 * Math.PI) / 180 || len + l > 1)) flush();
+      const dz = Math.abs(m.to.z - prev.z) > 1e-9 ? Math.sign(m.to.z - prev.z) : 0;
+      // a run's deepest point must be at an end: split where the depth stops being monotone
+      if (l > 1e-9 && (turn > (3 * Math.PI) / 180 || len + l > 1 || (dz !== 0 && slope !== 0 && dz !== slope))) flush();
+      if (dz !== 0) slope = dz;
     }
-    if (!anchor) { anchor = prev; dir = d; }
+    if (!anchor) { anchor = prev; dir = d; slope = Math.abs(m.to.z - prev.z) > 1e-9 ? Math.sign(m.to.z - prev.z) : 0; }
     len += l;
     prev = m.to;
   }

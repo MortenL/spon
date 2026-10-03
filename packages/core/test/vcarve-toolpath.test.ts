@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  applyCommands, differencePolys, type JobCommand, type Move, offsetPolys, type Path2D, pathFromPoints, PipelineCache, programContext, runPipeline,
-  type Tool, type Toolpath, type Vec2,
+  applyCommands, differencePolys, flattenPath, type JobCommand, type Move, offsetPolys, type Path2D, pathFromPoints, PipelineCache, programContext, runPipeline,
+  outlineDistance, polysArea, type Tool, type Toolpath, type Vec2,
 } from '../src';
 import { tool6 } from './fixtures/camSetup';
 import { terracedSetup, uncovered } from './fixtures/slotSetup';
@@ -16,6 +16,36 @@ const errors = (d: { severity: string; message: string }[]) => d.filter((x) => x
 type Feed = Exclude<Move, { kind: 'cycle' }>;
 const feeds = (tp: Toolpath) => tp.moves.filter((m): m is Feed => m.kind !== 'rapid' && m.kind !== 'cycle');
 const startOf = (p: Path2D) => (p.segments[0] as { from: Vec2 }).from;
+
+describe('vSwept', () => {
+  it('keeps a radius peak in the middle of a collinear run', () => {
+    const tp = { moves: [{ kind: 'rapid', to: { x: 0, y: 0, z: 0 } }, { kind: 'line', to: { x: 0.5, y: 0, z: -0.5 }, feed: 1 }, { kind: 'line', to: { x: 1, y: 0, z: 0 }, feed: 1 }] } as unknown as Toolpath;
+    expect(polysArea(vSwept(tp, 0, 1))).toBeGreaterThanOrEqual(Math.PI * 0.5 * 0.5 * 0.9);
+  });
+});
+
+describe('V-carve overcut', () => {
+  for (const scale of [1, 4]) {
+    it(`a T-shape x${scale}: the groove never exceeds the true clearance by more than 2s`, () => {
+      const k = scale;
+      const T = pathFromPoints([[8, 0], [12, 0], [12, 30], [20, 30], [20, 35], [0, 35], [0, 30], [8, 30]].map(([x, y]) => ({ x: x * k, y: y * k })), true);
+      const r = drawingJob([T], 'vcarve', {}, { ...vbit90, fluteLength: 100 });
+      expect(errors(r.diagnostics)).toEqual([]);
+      const outline = [flattenPath(r.program(0), 0.001)];
+      const dist = outlineDistance(outline, 1);
+      let worst = -Infinity, n = 0;
+      for (const m of feeds(r.tp!)) {
+        const d = -m.to.z;
+        if (d <= 0) continue;
+        n++;
+        worst = Math.max(worst, d * tanHalf - dist(m.to.x, m.to.y));
+      }
+      console.log(`T-shape x${scale}: ${n} points, max overcut ${worst.toFixed(4)} mm`);
+      expect(n).toBeGreaterThan(100);
+      expect(worst).toBeLessThanOrEqual(0.08);
+    });
+  }
+});
 
 describe('V-carve toolpaths', () => {
   it('a 40 x 10 rectangle: deepest at half width, inside the outline, covering it', () => {

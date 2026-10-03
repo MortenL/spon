@@ -61,7 +61,7 @@ export function vcarveToolpath(op: VCarveOp, tool: Tool, ctx: CamContext, geo: R
     const R = op.maxDepth === null ? Infinity : op.maxDepth * tanHalf;
     const flat = op.maxDepth === null ? [] : flatAreas(polys, R, tol);
     if (flat.length) hasFlat = true;
-    const strokes = vcarveStrokes(g, { top: h.top, tanHalf, maxDepth: op.maxDepth, spacing: s, tol, flatLoops: flat });
+    const strokes = vcarveStrokes(g, { top: h.top, tanHalf, maxDepth: op.maxDepth, spacing: s, tol, flatLoops: flat, outline: polys });
     let shapeDeepest = 0;
     for (const st of strokes) for (const p of st.points) shapeDeepest = Math.max(shapeDeepest, h.top - p.z);
     deepest = Math.max(deepest, shapeDeepest);
@@ -86,6 +86,8 @@ function emitShape(w: MoveWriter, strokes: Stroke[], h: ResolvedHeights, deepest
   else for (let k = 1; (k - 1) * stepdown < deepest - EPS; k++) limits.push(Math.min(k * stepdown, deepest));
   limits.forEach((limit, k) => {
     const prevLimit = k > 0 ? limits[k - 1] : null;
+    // the first stroke of a shape never links to the previous shape's end
+    let firstStroke = k === 0;
     const pending = strokes.filter((st) => prevLimit === null || st.points.some((p) => h.top - p.z > prevLimit + EPS));
     const cut = (st: Stroke): Stroke => ({ ...st, points: st.points.map((p) => ({ x: p.x, y: p.y, z: Math.max(p.z, h.top - limit) })) });
     while (pending.length) {
@@ -108,7 +110,8 @@ function emitShape(w: MoveWriter, strokes: Stroke[], h: ResolvedHeights, deepest
       else if (bestRev) st = { ...st, points: [...st.points].reverse() };
       const pts = st.points;
       const first = pts[0];
-      const linked = w.pos !== null && w.pos.z <= h.top - 0.01 && first.z <= h.top - 0.01 && Math.hypot(first.x - w.pos.x, first.y - w.pos.y) <= link;
+      const linked = !firstStroke && w.pos !== null && w.pos.z <= h.top - 0.01 && first.z <= h.top - 0.01 && Math.hypot(first.x - w.pos.x, first.y - w.pos.y) <= link;
+      firstStroke = false;
       if (linked) w.line(first, feed);
       else {
         if (w.pos) w.up(h.retract);
