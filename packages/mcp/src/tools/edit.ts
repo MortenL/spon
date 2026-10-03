@@ -98,6 +98,10 @@ export function registerEditTools(server: McpServer, ctx: ToolContext): void {
       { type: 'addOperation', opType: a.type, toolId, id, ...(a.name ? { name: a.name } : {}) },
       { type: 'updateOperation', id, patch: { ...(a.params ?? {}), geometry: refs } },
     );
+    // a clearing runs before the V-carve it clears: move it up past its source in the same batch (one undo step)
+    const sourceId = (a.params as { sourceId?: unknown } | undefined)?.sourceId;
+    const sourceAt = a.type === 'vclear' && typeof sourceId === 'string' ? job.operations.findIndex((o) => o.id === sourceId) : -1;
+    for (let k = sourceAt < 0 ? 0 : job.operations.length - sourceAt; k > 0; k--) commands.push({ type: 'moveOperation', id, delta: -1 });
     const on = a.geometry.map((g) => (typeof g === 'string' ? g.trim().toUpperCase() : g.kind)).join(', ') || 'the stock';
     const after = await session.apply(commands, `Add ${OPERATION_LABELS[a.type]} on ${on}`);
     const op = after.operations.find((o) => o.id === id)!;

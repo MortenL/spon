@@ -60,6 +60,7 @@ export const operationPatchSchema = z.strictObject({
   strategy: z.enum(['auto', 'toolWidth', 'wider', 'trochoidal']),
   trochoidal: z.strictObject({ stepPct: z.number() }).partial(),
   squareEnds: z.enum(['inside', 'endWall', 'dogbone']).nullable(),
+  depth: z.number(),
   depthMode: z.enum(['depth', 'width']),
   lineWidth: z.number(),
   maxDepth: z.number().nullable(),

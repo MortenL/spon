@@ -165,6 +165,21 @@ describe('editing tools', () => {
     expect(generated.export.errors).toEqual([]);
   });
 
+  it('sets an engraving depth through apply_commands and sees it in the G-code', async () => {
+    const { call } = await dxfJob();
+    const outline = handleOn(data(await call('describe_geometry')), 'OUTLINE');
+    const added = await call('add_operation', { type: 'engrave', tool: 'starter-flat-6', geometry: [outline], params: { depth: 0.7 } });
+    expect(added.isError).toBeFalsy();
+    const id = data(added).operation.id as string;
+    expect(data(added).operation).toMatchObject({ type: 'engrave', depth: 0.7 });
+    const patched = await call('apply_commands', { commands: [{ type: 'updateOperation', id, patch: { depth: 0.45, stepdown: 1 } }] });
+    expect(patched.isError).toBeFalsy();
+    await call('generate');
+    const gcode = data(await call('get_gcode')).text as string;
+    expect(gcode).toMatch(/Z-0\.45/);
+    expect(gcode).not.toMatch(/Z-0\.7/);
+  });
+
   describe('V-carve and clearing', () => {
     async function carveJob(maxDepth: number | null) {
       const t = await dxfJob();
@@ -177,6 +192,12 @@ describe('editing tools', () => {
       expect(data(clear).operation).toMatchObject({ type: 'vclear', sourceId: carveId });
       return t;
     }
+
+    it('places the clearing before its V-carve in the same batch', async () => {
+      const { call } = await carveJob(1);
+      const ops = data(await call('get_job', { section: 'operations' })).operations as { type: string }[];
+      expect(ops.map((o) => o.type)).toEqual(['vclear', 'vcarve']);
+    });
 
     it('generates and exports a V-carve with its clearing', async () => {
       const { call } = await carveJob(1);

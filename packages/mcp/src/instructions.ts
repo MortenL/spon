@@ -23,7 +23,7 @@ Operation parameters (add_operation params, or updateOperation patch)
 - face: area (stock | picked), stepoverPct, overlap, pattern (zigzag | spiral), angleDeg, oneWay, finishStepoverPct, stepdown, finishPass, direction (climb | conventional).
 - chamfer: width, tipOffset, side (outside | inside | auto), openSide (left | right, for open lines), stepdown, direction (climb | conventional); the depth comes from the width and the tool's tip angle (a V-bit or chamfer mill).
 - slot: width (drawn centrelines), strategy (auto | toolWidth | wider | trochoidal), trochoidal { stepPct }, squareEnds (inside | endWall | dogbone), stepdown, direction, stepoverPct, stockRadial, stockAxial, finishWalls, entry.
-- engrave: depthMode (depth | width), lineWidth, stepdown. vcarve: maxDepth (number or null), stepdown (number or null). vclear: sourceId, stepoverPct, stepdown, direction.
+- engrave: depthMode (depth | width), depth (mm, used in depth mode), lineWidth (mm, used in width mode with a V-bit), stepdown. vcarve: maxDepth (number or null), stepdown (number or null). vclear: sourceId, stepoverPct, stepdown, direction.
 - feeds: { rpm, feed, plungeFeed, coolant }.
 
 Facing

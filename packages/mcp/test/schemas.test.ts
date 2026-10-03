@@ -9,6 +9,8 @@ type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 const same = <T extends true>(): T | undefined => undefined;
 same<Same<z.infer<typeof jobCommandSchema>, JobCommand>>();
 same<Same<z.infer<typeof operationPatchSchema>, OperationPatch>>();
+// an optional key missing from the schema passes the check above, so compare the key sets as well
+same<Same<keyof z.infer<typeof operationPatchSchema>, keyof OperationPatch>>();
 same<Same<z.infer<typeof toolSchema>, Tool>>();
 same<Same<z.infer<typeof geometryRefSchema>, GeometryRef>>();
 
