@@ -53,7 +53,7 @@ describe('engrave', () => {
     const cmds: JobCommand[] = [
       { type: 'addTool', tool: vbit60 },
       { type: 'addOperation', opType: 'engrave', toolId: 'v60', id: 'e' },
-      { type: 'updateOperation', id: 'e', patch: { geometry: [top.ref], depthMode: 'depth', depth: 0.3, stepdown: 0.3, heights: { top: { from: 'face', offset: 0, face: top.ref } } } as never },
+      { type: 'updateOperation', id: 'e', patch: { geometry: [top.ref], depthMode: 'depth', depth: 0.3, stepdown: 0.3 } as never },
     ];
     const job = applyCommands(s.job, cmds);
     const { run, toolpaths } = runPipeline(job, s.geometry as never, programContext(job, s.geometry as never), new PipelineCache(), { date: '2026-01-01' });

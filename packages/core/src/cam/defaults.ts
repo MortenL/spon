@@ -23,7 +23,7 @@ export function defaultHeights(type: OperationType, modelKind: ModelKind | null)
     : modelKind === 'drawing' ? { from: 'stockTop' as const, offset: -3 } // a drawing's contours lie at the stock top
     : { from: 'contour' as const, offset: 0 };
   const top = type === 'engrave' || type === 'vcarve' || type === 'vclear'
-    ? (modelKind === 'mesh' ? { from: 'face' as const, offset: 0 } : { from: 'contour' as const, offset: 0 })
+    ? { from: 'contour' as const, offset: 0 } // mesh contours and shapes sit at their face's Z
     : { from: 'stockTop' as const, offset: 0 };
   return {
     clearance: { from: 'retract', offset: 10 },
