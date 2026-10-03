@@ -21,16 +21,17 @@ function words(body: string): Map<string, number> {
 
 /** Tool type from comment keywords; `scale` converts lengths written in the comment (R…) to mm. */
 function guessType(comment: string, diameter: number, scale: number): { type: ToolType; cornerRadius: number; tipAngleDeg: number; matched: boolean } {
-  const c = comment.toLowerCase();
+  // Whitespace runs collapse to one space and numbers only start after a non-digit, so the patterns below run in linear time.
+  const c = comment.toLowerCase().replace(/\s+/g, ' ');
   const angle = (fallback: number) => {
-    const m = /(\d+(?:\.\d+)?)\s*(?:°|deg)/.exec(c) ?? /\bv\s*-?\s*(\d+(?:\.\d+)?)\b/.exec(c);
+    const m = /(?<![\d.])(\d+(?:\.\d+)?) ?(?:°|deg)/.exec(c) ?? /\bv ?-? ?(\d+(?:\.\d+)?)\b/.exec(c);
     return m ? Number(m[1]) : fallback;
   };
   if (/drill|bohr/.test(c)) return { type: 'drill', cornerRadius: 0, tipAngleDeg: 118, matched: true };
   if (/chamfer|fase/.test(c)) return { type: 'chamfer', cornerRadius: 0, tipAngleDeg: angle(90), matched: true };
-  if (/v-?bit|engrav/.test(c) || /\bv\s*-?\s*\d/.test(c) || /\d\s*°/.test(c)) return { type: 'vbit', cornerRadius: 0, tipAngleDeg: angle(60), matched: true };
+  if (/v-?bit|engrav/.test(c) || /\bv ?-? ?\d/.test(c) || /\d ?°/.test(c)) return { type: 'vbit', cornerRadius: 0, tipAngleDeg: angle(60), matched: true };
   if (/ball/.test(c)) return { type: 'ball', cornerRadius: diameter / 2, tipAngleDeg: 0, matched: true };
-  const r = /\br\s*(\d+(?:\.\d+)?)\b/.exec(c);
+  const r = /\br ?(\d+(?:\.\d+)?)\b/.exec(c);
   if (/bull/.test(c) || r) {
     const radius = r ? Math.min(Number(r[1]) * scale, diameter / 2) : diameter / 10;
     return { type: 'bull', cornerRadius: radius, tipAngleDeg: 0, matched: true };

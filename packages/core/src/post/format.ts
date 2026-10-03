@@ -9,7 +9,13 @@ export function fmtNum(v: number, decimals: number, trailingDot = false): string
 
 /** A job name usable in file names. */
 export function sanitizeName(name: string): string {
-  return name.trim().replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '') || 'job';
+  const s = name.trim().replace(/[^A-Za-z0-9_-]+/g, '_');
+  // Trim underscores by index: /_+$/ backtracks quadratically on a long run of inner underscores.
+  let start = 0;
+  let end = s.length;
+  while (start < end && s[start] === '_') start++;
+  while (end > start && s[end - 1] === '_') end--;
+  return s.slice(start, end) || 'job';
 }
 
 /** Text safe inside ( ) comments. */
