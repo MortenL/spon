@@ -18,9 +18,9 @@ export function programFilePath(program: ProgramRef): string {
   return `programs/${program.blobId}.nc`;
 }
 
-/** Every blob the job references: the model (if any) first, then programs in list order. */
+/** Every blob the job references: the model (if any) first, then programs in list order, then uploaded fonts. */
 export function jobBlobIds(job: Job): string[] {
-  return blobPaths(job).map(([blobId]) => blobId);
+  return [...blobPaths(job), ...fontBlobPaths(job)].map(([blobId]) => blobId);
 }
 
 /** Uploaded fonts of the job's texts, deduplicated by blobId. */
@@ -30,11 +30,11 @@ function fontBlobPaths(job: Job): [blobId: string, path: string][] {
   return [...seen];
 }
 
+/** Model and program blobs: a job cannot be written or read without them. Fonts are optional (the text then reports font-missing). */
 function blobPaths(job: Job): [blobId: string, path: string][] {
   return [
     ...(job.model ? [[job.model.blobId, modelFilePath(job.model)] as [string, string]] : []),
     ...job.programs.map((p): [string, string] => [p.blobId, programFilePath(p)]),
-    ...fontBlobPaths(job),
   ];
 }
 
@@ -46,6 +46,8 @@ export function writeSpon(job: Job, blobs: BlobMap): Uint8Array {
     if (!bytes) throw new SponFileError(`Missing data for ${path}`);
     files[path] = bytes;
   }
+  // a font whose bytes are lost stays referenced; its text shows font-missing
+  for (const [blobId, path] of fontBlobPaths(job)) if (blobs[blobId]) files[path] = blobs[blobId];
   return zipSync(files, { level: 6 });
 }
 
@@ -71,5 +73,6 @@ export function readSpon(bytes: Uint8Array): { job: Job; blobs: BlobMap } {
     if (!data) throw new SponFileError(`${path} is missing from the job file`);
     blobs[blobId] = data;
   }
+  for (const [blobId, path] of fontBlobPaths(job)) if (files[path]) blobs[blobId] = files[path];
   return { job, blobs };
 }

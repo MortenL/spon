@@ -4,6 +4,7 @@ import v1Job from './fixtures/job-v1.json';
 import { SponFileError } from '../src/io/errors';
 import { CURRENT_SCHEMA_VERSION, migrateJob } from '../src/io/migrations';
 import { jobBlobIds, modelFilePath, programFilePath, readSpon, writeSpon } from '../src/io/spon';
+import { applyCommands } from '../src/job/commands';
 import { createJob } from '../src/job/defaults';
 import { addProgram } from '../src/job/programs';
 import { setModel, setZSpin } from '../src/job/update';
@@ -18,6 +19,27 @@ function fullJob() {
   job = addProgram(job, { name: 'finish.nc', blobId: 'p2' });
   return job;
 }
+
+describe('.spon files with fonts', () => {
+  const textJob = () => applyCommands(createJob('Sign'), [
+    { type: 'addText', id: 't', patch: { font: { kind: 'file', blobId: 'f1', name: 'X.ttf' } } },
+  ]);
+  it('round-trips an uploaded font', () => {
+    const font = new Uint8Array([7, 7]);
+    const read = readSpon(writeSpon(textJob(), { f1: font }));
+    expect(read.blobs).toEqual({ f1: font });
+  });
+  it('writes and reads a job whose font bytes are missing', () => {
+    const bytes = writeSpon(textJob(), {});
+    expect(Object.keys(unzipSync(bytes))).toEqual(['job.json']);
+    const read = readSpon(bytes);
+    expect(read.job.texts[0].font).toEqual({ kind: 'file', blobId: 'f1', name: 'X.ttf' });
+    expect(read.blobs).toEqual({});
+  });
+  it('keeps model blobs strict', () => {
+    expect(() => writeSpon(fullJob(), {})).toThrow(SponFileError);
+  });
+});
 
 describe('.spon files', () => {
   it('round-trips a job with a model and several programs', () => {

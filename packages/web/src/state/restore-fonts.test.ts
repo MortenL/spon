@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto';
-import { applyCommands, createJob } from '@sponcam/core';
+import { applyCommands, createJob, readSpon } from '@sponcam/core';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../workers/importClient', () => ({ importInWorker: vi.fn(), cadReaderLoaded: () => true, loadCadReaderInWorker: vi.fn(), addFontsInWorker: vi.fn() }));
@@ -7,7 +7,7 @@ vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), warni
 
 const { toast } = await import('sonner');
 const { saveCurrentJob } = await import('./autosave');
-const { restoreAutosave } = await import('./documents');
+const { restoreAutosave, sponBytesForSave } = await import('./documents');
 const { appStore } = await import('./store');
 
 describe('restoreAutosave with a missing font blob', () => {
@@ -20,5 +20,12 @@ describe('restoreAutosave with a missing font blob', () => {
     expect(appStore.getState().job.texts.map((t) => t.name)).toEqual(['Door sign']);
     expect(appStore.getState().fontBytes).toEqual({});
     expect(toast.warning).toHaveBeenCalledWith('The font file for Door sign is missing');
+  });
+
+  it('still saves the job, and the saved file reopens with the text', async () => {
+    const { bytes } = sponBytesForSave();
+    const { job, blobs } = readSpon(bytes);
+    expect(job.texts.map((t) => t.name)).toEqual(['Door sign']);
+    expect(blobs).toEqual({});
   });
 });
