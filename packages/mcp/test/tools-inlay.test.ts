@@ -1,0 +1,128 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { connect, data, text } from './connect';
+
+type Diag = { code: string; severity: string };
+
+async function signJob(tool = 'starter-vbit-60') {
+  const t = await connect();
+  await t.call('new_job', { name: 'Sign' });
+  await t.call('apply_commands', { commands: [{ type: 'setStock', stock: { mode: 'fixed', size: { x: 120, y: 50, z: 10 }, modelOffset: { x: 0, y: 0, z: 0 } } }] });
+  const textId = data(await t.call('add_text', { text: 'SPON', size: 30, position: { x: 10, y: 10 } })).id as string;
+  // a flat tool in the job, to become the clearing tool
+  expect((await t.call('add_operation', { type: 'face', tool: 'starter-flat-6', geometry: [] })).isError).toBeFalsy();
+  const carve = await t.call('add_operation', { type: 'vcarve', tool, geometry: [{ kind: 'text', textId }] });
+  expect(carve.isError).toBeFalsy();
+  const opId = (data(carve).id ?? data(carve).operationId ?? data(carve).operation?.id) as string;
+  return { t, textId, opId };
+}
+
+describe('make_inlay', () => {
+  it('creates the pocket here and writes a plug job that generates cleanly', async () => {
+    const { t, opId } = await signJob();
+    const r = await t.call('make_inlay', { operationId: opId, plugPath: 'plug.spon' });
+    expect(r.isError, text(r)).toBeFalsy();
+    const out = data(r);
+    expect(out.plugPath).toBe(join(t.dir, 'plug.spon'));
+    expect(out.H).toBeCloseTo(5.5);
+    expect(out.baseChanges.length).toBeGreaterThan(0);
+    const job = data(await t.call('get_job')).job as { operations: { id: string; type: string; maxDepth?: number; inlay?: { plugFileName: string } }[] };
+    const carve = job.operations.find((o) => o.id === opId)!;
+    expect(carve.maxDepth).toBe(4);
+    expect(carve.inlay?.plugFileName).toBe('plug.spon');
+    expect(job.operations.some((o) => o.type === 'vclear')).toBe(true);
+    await t.call('save_job', { path: 'base.spon' });
+    expect((await t.call('open_job', { path: 'plug.spon' })).isError).toBeFalsy();
+    const g = data(await t.call('generate'));
+    expect(g.operations.flatMap((o: { diagnostics: Diag[] }) => o.diagnostics).filter((d: Diag) => d.severity === 'error')).toEqual([]);
+  });
+
+  it('refuses an existing plug file without update', async () => {
+    const { t, opId } = await signJob();
+    expect((await t.call('make_inlay', { operationId: opId, plugPath: 'plug.spon' })).isError).toBeFalsy();
+    const again = await t.call('make_inlay', { operationId: opId, plugPath: 'plug.spon' });
+    expect(again.isError).toBe(true);
+    expect(text(again)).toBe(`${join(t.dir, 'plug.spon')} exists; pass update: true to update it`);
+  });
+
+  it('updates the plug job after the base text changes', async () => {
+    const { t, textId, opId } = await signJob();
+    await t.call('make_inlay', { operationId: opId, plugPath: 'plug.spon' });
+    await t.call('update_text', { id: textId, patch: { text: 'SIGN' } });
+    const r = await t.call('make_inlay', { operationId: opId, plugPath: 'plug.spon', update: true });
+    expect(r.isError, text(r)).toBeFalsy();
+    await t.call('save_job', { path: 'base.spon' });
+    await t.call('open_job', { path: 'plug.spon' });
+    const job = data(await t.call('get_job')).job as { texts: { text: string; mirror: boolean }[] };
+    expect(job.texts).toHaveLength(1);
+    expect(job.texts[0]).toMatchObject({ text: 'SIGN', mirror: true });
+  });
+
+  it('refuses a V-carve with a flat tool', async () => {
+    const { t, opId } = await signJob('starter-flat-3');
+    const r = await t.call('make_inlay', { operationId: opId, plugPath: 'plug.spon' });
+    expect(r.isError).toBe(true);
+    expect(text(r)).toBe('Inlays need a V-bit');
+    expect(existsSync(join(t.dir, 'plug.spon'))).toBe(false);
+  });
+
+  it('leaves the base unchanged when the plug file cannot be written', async () => {
+    const { t, opId } = await signJob();
+    const before = JSON.stringify(data(await t.call('get_job')).job);
+    const r = await t.call('make_inlay', { operationId: opId, plugPath: join('missing-dir', 'plug.spon') });
+    expect(r.isError).toBe(true);
+    expect(text(r)).toContain('Could not write');
+    expect(JSON.stringify(data(await t.call('get_job')).job)).toBe(before);
+  });
+
+  it('refuses update on a file that is not a plug job', async () => {
+    const { t, opId } = await signJob();
+    await t.call('save_job', { path: 'other.spon' });
+    const r = await t.call('make_inlay', { operationId: opId, plugPath: 'other.spon', update: true });
+    expect(r.isError).toBe(true);
+    expect(text(r)).toBe('This job is not a plug job');
+  });
+
+  it('refuses update on a missing file', async () => {
+    const { t, opId } = await signJob();
+    const r = await t.call('make_inlay', { operationId: opId, plugPath: 'nope.spon', update: true });
+    expect(r.isError).toBe(true);
+    expect(text(r)).toContain(`Could not read ${join(t.dir, 'nope.spon')}`);
+  });
+
+  it('keeps a custom plug board on update while it holds the plug, and grows it when the shapes outgrow it', async () => {
+    const { t, textId, opId } = await signJob();
+    const board = { x: 140, y: 70, z: 9 };
+    expect((await t.call('make_inlay', { operationId: opId, plugPath: 'plug.spon', plugBoard: board })).isError).toBeFalsy();
+    const kept = await t.call('make_inlay', { operationId: opId, plugPath: 'plug.spon', update: true });
+    expect(kept.isError, text(kept)).toBeFalsy();
+    expect(data(kept).plugBoard).toEqual(board);
+    await t.call('update_text', { id: textId, patch: { text: 'SPONSPON' } });
+    const grown = await t.call('make_inlay', { operationId: opId, plugPath: 'plug.spon', update: true });
+    expect(grown.isError, text(grown)).toBeFalsy();
+    expect(data(grown).plugBoard.x).toBeGreaterThan(board.x);
+  });
+
+  it('refuses a plug board smaller than the shapes', async () => {
+    const { t, opId } = await signJob();
+    const r = await t.call('make_inlay', { operationId: opId, plugPath: 'plug.spon', plugBoard: { x: 20, y: 70, z: 9 } });
+    expect(r.isError).toBe(true);
+    expect(text(r)).toMatch(/^The plug board is smaller than the shapes \(\d+\.\d\d × \d+\.\d\d mm\)$/);
+  });
+
+  it("clears the plug with the V-carve's existing clearing tool", async () => {
+    const { t, opId } = await signJob();
+    const c = await t.call('add_operation', { type: 'vclear', tool: 'starter-flat-3', geometry: [], params: { sourceId: opId } });
+    expect(c.isError, text(c)).toBeFalsy();
+    await t.call('apply_commands', { commands: [{ type: 'updateOperation', id: opId, patch: { maxDepth: 4 } }] });
+    const base = data(await t.call('get_job')).job as { tools: { id: string; diameter: number }[]; operations: { type: string; toolId: string | null }[] };
+    const tool3 = base.operations.find((o) => o.type === 'vclear')!.toolId;
+    expect(base.tools.find((x) => x.id === tool3)!.diameter).toBe(3);
+    expect((await t.call('make_inlay', { operationId: opId, plugPath: 'plug.spon' })).isError).toBeFalsy();
+    await t.call('save_job', { path: 'base.spon' });
+    await t.call('open_job', { path: 'plug.spon' });
+    const plug = data(await t.call('get_job')).job as { operations: { type: string; toolId: string | null }[] };
+    expect(plug.operations.find((o) => o.type === 'vclear')!.toolId).toBe(tool3);
+  });
+});

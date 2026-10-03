@@ -43,11 +43,13 @@ centrelines (each line end is the centre of a round end; set `width`). `strategy
 
 Text: `add_text` puts a text in the job (stock coordinates, mm from the stock's min corner); give an operation `geometry: [{ "kind": "text", "textId": ... }]`. Outline fonts serve profile, pocket, engrave and V-carve; single-line Hershey fonts serve engrave only. `load_font { path }` checks a .ttf, .otf or .woff outline font (.woff2 is refused) and returns a font ref for `add_text` / `update_text` (connected live, the font is loaded into the Spon tab as well).
 
+Inlays: `make_inlay { operationId, plugPath, ... }` turns a V-carve into an inlay: it sets the V-carve's depth `D`, adds its clearing here and writes a mirrored plug job to `plugPath` (open it with `open_job`). `S` is the plug's start depth, `g` the glue gap. `update: true` refreshes an existing plug file after the base changes.
+
 ## Tools
 
 `status`, `new_job`, `open_job`, `use_live_tab`, `save_job`, `import_model`, `get_job`, `import_program`, `describe_geometry`,
 `apply_commands`, `add_operation`, `generate`, `render_preview`, `get_gcode`, `export_gcode`, `list_tools`,
-`add_library_tool`, `import_tool_library`, and for text `list_fonts`, `load_font`, `add_text`, `update_text`, `remove_text`. Resources: `spon://job`, `spon://catalog`, `spon://gcode/{file}`.
+`add_library_tool`, `import_tool_library`, and for text `list_fonts`, `load_font`, `add_text`, `update_text`, `remove_text`, and for inlays `make_inlay`. Resources: `spon://job`, `spon://catalog`, `spon://gcode/{file}`.
 Prompt: `spon-cam-basics`.
 
 ## Live mode

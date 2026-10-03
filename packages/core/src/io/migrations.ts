@@ -3,7 +3,7 @@ import type { Job } from '../job/types';
 import { defaultPostSettings } from '../post/types';
 import { SponFileError } from './errors';
 
-export const CURRENT_SCHEMA_VERSION = 6;
+export const CURRENT_SCHEMA_VERSION = 7;
 
 export type Migration = (job: Record<string, unknown>) => Record<string, unknown>;
 
@@ -30,6 +30,8 @@ export const MIGRATIONS: Readonly<Record<number, Migration>> = {
   4: (job) => job,
   // v5 → v6 (Milestone 4.4b): texts
   5: (job) => ({ ...job, texts: [] }),
+  // v6 → v7 (Milestone 4.4c): inlays; nothing to change in older jobs
+  6: (job) => job,
 };
 
 export function migrateJob(raw: unknown, migrations: Readonly<Record<number, Migration>> = MIGRATIONS, current = CURRENT_SCHEMA_VERSION): Job {

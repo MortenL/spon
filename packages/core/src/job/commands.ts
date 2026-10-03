@@ -54,7 +54,8 @@ const OP_KEYS: Readonly<Record<OperationType, readonly string[]>> = {
   chamfer: [...COMMON_KEYS, 'side', 'openSide', 'direction', 'width', 'tipOffset', 'stepdown'],
   slot: [...COMMON_KEYS, 'strategy', 'width', 'direction', 'stepdown', 'stepoverPct', 'stockRadial', 'stockAxial', 'finishWalls', 'entry', 'trochoidal', 'squareEnds'],
   engrave: [...COMMON_KEYS, 'depthMode', 'depth', 'lineWidth', 'stepdown'],
-  vcarve: [...COMMON_KEYS, 'maxDepth', 'stepdown'],
+  vcarve: [...COMMON_KEYS, 'maxDepth', 'stepdown', 'inlay'],
+  vplug: [...COMMON_KEYS, 'inlayDepth', 'startDepth', 'glueGap', 'stepdown'],
   vclear: [...COMMON_KEYS, 'sourceId', 'stepoverPct', 'stepdown', 'direction', 'entry'],
 };
 const ENUMS: Readonly<Record<string, Partial<Record<OperationType, readonly string[]>>>> = {
@@ -68,7 +69,7 @@ const ENUMS: Readonly<Record<string, Partial<Record<OperationType, readonly stri
   squareEnds: { slot: ['inside', 'endWall', 'dogbone'] },
 };
 const NESTED = new Set(['heights', 'feeds', 'entry', 'leads', 'tabs', 'trochoidal']);
-const POSITIVE = ['stepdown', 'peck', 'width', 'depth', 'lineWidth'];
+const POSITIVE = ['stepdown', 'peck', 'width', 'depth', 'lineWidth', 'inlayDepth', 'startDepth', 'glueGap'];
 const NON_NEGATIVE = ['stockRadial', 'stockAxial', 'dwellSeconds', 'overlap', 'tipOffset'];
 
 function findOp(job: Job, id: string): Operation {
@@ -153,6 +154,16 @@ function checkTabs(t: Partial<TabSettings>): void {
   if ('width' in t && !((t.width as number) > 0 && Number.isFinite(t.width))) throw new CommandError('Tab width must be greater than 0');
 }
 
+function checkInlay(v: unknown): void {
+  if (!isObj(v)) throw new CommandError('inlay must be an object');
+  if (!positive(v.startDepth)) throw new CommandError('inlay.startDepth must be greater than 0');
+  if (!positive(v.glueGap)) throw new CommandError('inlay.glueGap must be greater than 0');
+  if (typeof v.margin !== 'number' || !(v.margin >= 0) || !Number.isFinite(v.margin)) throw new CommandError('inlay.margin must be 0 or more');
+  const b = v.plugBoard;
+  if (!isObj(b) || !positive(b.x) || !positive(b.y) || !positive(b.z)) throw new CommandError('inlay.plugBoard must be greater than 0 in x, y and z');
+  if (typeof v.plugFileName !== 'string') throw new CommandError('inlay.plugFileName must be a string');
+}
+
 function patchOperation(job: Job, op: Operation, patch: OperationPatch): Operation {
   const allowed = OP_KEYS[op.type];
   const next: Record<string, unknown> = { ...op };
@@ -163,7 +174,7 @@ function patchOperation(job: Job, op: Operation, patch: OperationPatch): Operati
     // a chamfer's stepdown may be 0 (one pass)
     if (key === 'stepdown' && op.type === 'chamfer') {
       if (!((value as number) >= 0 && Number.isFinite(value))) throw new CommandError('stepdown must not be negative');
-    } else if (key === 'stepdown' && op.type === 'vcarve' && value === null) {
+    } else if (key === 'stepdown' && (op.type === 'vcarve' || op.type === 'vplug') && value === null) {
       // null = one pass
     } else if (POSITIVE.includes(key) && !((value as number) > 0 && Number.isFinite(value))) throw new CommandError(`${key} must be greater than 0`);
     if (key === 'maxDepth' && value !== null && !((value as number) > 0 && Number.isFinite(value))) throw new CommandError('maxDepth must be greater than 0');
@@ -177,6 +188,11 @@ function patchOperation(job: Job, op: Operation, patch: OperationPatch): Operati
       if ('stepPct' in v && !((v.stepPct as number) > 0 && (v.stepPct as number) <= 100)) throw new CommandError('trochoidal.stepPct must be in (0, 100]');
     }
     if (key === 'tabs') checkTabs(value as Partial<TabSettings>);
+    if (key === 'inlay') {
+      // undefined or null removes the inlay settings
+      if (value === undefined || value === null) { delete next.inlay; continue; }
+      checkInlay(value);
+    }
     next[key] = NESTED.has(key) ? { ...(op as unknown as Record<string, object>)[key], ...(value as object) } : value;
   }
   return next as unknown as Operation;
