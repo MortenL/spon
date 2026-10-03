@@ -1,6 +1,4 @@
 import { polysToRegions } from '../../geometry/offset/clipper';
-import { polyArea } from '../../geometry/offset/pathOps';
-import type { Vec2 } from '../../geometry/path2d';
 import type { Tool } from '../../tools/types';
 import type { CamContext } from '../context';
 import type { ResolvedGeometry } from '../features/resolve';
@@ -9,7 +7,7 @@ import { plugStrokes } from '../inlay/plugStrokes';
 import type { CamCode, CamSeverity, VPlugOp } from '../types';
 import { sampleSpacing } from '../vcarve/sample';
 import { emptyOverlays, type OpOutput } from './output';
-import { emitStrokes, shapePolys } from './vcarve';
+import { emitStrokes, orientPoly, shapePolys } from './vcarve';
 import { MoveWriter } from './writer';
 
 const EPS = 1e-9;
@@ -27,6 +25,10 @@ export function vplugToolpath(op: VPlugOp, tool: Tool, ctx: CamContext, geo: Res
     return out;
   }
   const { inlayDepth: D, startDepth: S, glueGap: g } = op;
+  if (![D, S, g].every((v) => Number.isFinite(v) && v > 0)) {
+    diag('error', 'inlay-settings', 'Set the inlay depth, start depth and glue gap to positive values');
+    return out;
+  }
   if (!(g < D)) {
     diag('error', 'inlay-settings', 'The glue gap must be smaller than the inlay depth');
     return out;
@@ -49,12 +51,12 @@ export function vplugToolpath(op: VPlugOp, tool: Tool, ctx: CamContext, geo: Res
     return out;
   }
   const h = hr.values;
+  if (geo.shapes.some((sh) => Math.abs(sh.z - first.z) > 1e-6)) diag('warning', 'wrong-geometry', "The plug's shapes are at different heights; all are cut at the first one's height");
   out.heights = h;
   const tol = ctx.tolerance;
   const s = sampleSpacing(tol);
   // touching shapes are one M
-  const orient = (poly: Vec2[], ccw: boolean) => ((polyArea(poly) > 0) === ccw ? poly : [...poly].reverse());
-  const M = polysToRegions(geo.shapes.flatMap((sh) => shapePolys(sh.shape, tol))).flatMap((r) => [orient(r.outer, true), ...r.holes.map((x) => orient(x, false))]);
+  const M = polysToRegions(geo.shapes.flatMap((sh) => shapePolys(sh.shape, tol))).flatMap((r) => [orientPoly(r.outer, true), ...r.holes.map((x) => orientPoly(x, false))]);
   const strokes = plugStrokes(M, { top: h.top, t: Math.tan((tool.tipAngleDeg * Math.PI) / 360), D, S, g, spacing: s, tol });
   const w = new MoveWriter();
   emitStrokes(w, strokes, h, H, op.stepdown, 2 * s, op.feeds.feed, op.feeds.plungeFeed);

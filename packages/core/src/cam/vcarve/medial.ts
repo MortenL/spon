@@ -8,8 +8,8 @@ export interface MedialGraph { nodes: MedialNode[]; edges: [number, number][] }
 /**
  * Spec §3.3: the shape's centreline as the circumcentres of the inside Delaunay triangles of its outline samples,
  * joined across shared triangle edges whose two samples are far apart along the outline (or on different outlines),
- * (`outside`: the circumcentres outside the polygons instead, for the plug's walls),
  * plus an edge from every convex corner to the nearest small node, so corners are reached exactly.
+ * With `outside`, the circumcentres outside the polygons are kept instead (the plug's walls).
  */
 export function medialGraph(shape: SampledShape, spacing: number, opts: { outside?: boolean } = {}): MedialGraph {
   const keepInside = !opts.outside;

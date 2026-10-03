@@ -14,11 +14,13 @@ import { emptyOverlays, type OpOutput } from './output';
 import { MoveWriter } from './writer';
 
 /** A shape as flattened polygons (within `tol / 4`): the outline counter-clockwise, the islands clockwise. */
+/** A polygon wound counter-clockwise (`ccw`) or clockwise. */
+export const orientPoly = (poly: Vec2[], ccw: boolean): Vec2[] => ((polyArea(poly) > 0) === ccw ? poly : [...poly].reverse());
+
 export function shapePolys(shape: Shape, tol: number): Vec2[][] {
-  const orient = (poly: Vec2[], ccw: boolean) => ((polyArea(poly) > 0) === ccw ? poly : [...poly].reverse());
   return [
-    orient(flattenPath(orientPath(shape.outer, true), tol / 4), true),
-    ...shape.islands.map((i) => orient(flattenPath(orientPath(i, false), tol / 4), false)),
+    orientPoly(flattenPath(orientPath(shape.outer, true), tol / 4), true),
+    ...shape.islands.map((i) => orientPoly(flattenPath(orientPath(i, false), tol / 4), false)),
   ];
 }
 
