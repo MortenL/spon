@@ -10,6 +10,7 @@ import { emptyOverlays, type OpOutput } from './ops/output';
 import { pocketToolpath } from './ops/pocket';
 import { profileToolpath } from './ops/profile';
 import { slotToolpath } from './ops/slot';
+import { vcarveToolpath } from './ops/vcarve';
 import type { CamDiagnostic, Operation } from './types';
 
 export interface OperationResult extends OpOutput {
@@ -49,7 +50,7 @@ export function generateOperation(op: Operation, ctx: CamContext): OperationResu
     const tool = ctx.job.tools.find((t) => t.id === op.toolId);
     if (!tool) return err('no-tool', 'Choose a tool for this operation');
     if (!op.geometry.length && op.type !== 'vclear' && !(op.type === 'face' && op.area === 'stock')) return err('no-geometry', 'Pick geometry for this operation');
-    if (op.type === 'vcarve' || op.type === 'vclear') return err('internal', 'Not implemented yet');
+    if (op.type === 'vclear') return err('internal', 'Not implemented yet');
     // facing the whole stock top needs no geometry; stale references are ignored
     const geo = resolveGeometry(op.type === 'face' && op.area === 'stock' ? { ...op, geometry: [] } : op, ctx);
     const res =
@@ -59,6 +60,7 @@ export function generateOperation(op: Operation, ctx: CamContext): OperationResu
       : op.type === 'face' ? faceToolpath(op, tool, ctx, geo)
       : op.type === 'slot' ? slotToolpath(op, tool, ctx, geo)
       : op.type === 'engrave' ? engraveToolpath(op, tool, ctx, geo)
+      : op.type === 'vcarve' ? vcarveToolpath(op, tool, ctx, geo)
       : chamferToolpath(op, tool, ctx, geo);
     const diagnostics: CamDiagnostic[] = [...geo.diagnostics, ...res.diagnostics];
     const warn = (code: CamDiagnostic['code'], message: string) => diagnostics.push({ operationId: op.id, severity: 'warning', code, message });

@@ -94,3 +94,5 @@ export * from './cam/ops/slot';
 export * from './cam/ops/engrave';
 export * from './cam/vcarve/sample';
 export * from './cam/vcarve/medial';
+export * from './cam/vcarve/strokes';
+export { flatAreas, shapePolys, vcarveToolpath } from './cam/ops/vcarve';
