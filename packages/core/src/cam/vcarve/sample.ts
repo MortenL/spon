@@ -6,11 +6,12 @@ export interface SampledShape { samples: Sample[]; loopLengths: number[]; corner
 
 /** Spec §3.2: four times the tolerance, kept between 0.02 and 0.25 mm. */
 export const sampleSpacing = (tol: number): number => Math.min(0.25, Math.max(0.02, 4 * tol));
-const TURN = Math.PI / 180; // 1°
+/** A vertex is a corner only at a turn of 30 degrees or more; flattened curves turn far less at each vertex. */
+const TURN = Math.PI / 6 - 1e-9;
 
 /**
  * Evenly spaced samples along closed polygons (outer counter-clockwise, holes clockwise, so the shape is on the left),
- * every vertex kept, each sample tagged with its loop and arc length. Convex corners (left turns over 1°, the shape
+ * every vertex kept, each sample tagged with its loop and arc length. Convex corners (left turns of 30 degrees or more, the shape
  * lying on the left) are listed for the centreline's corner edges.
  */
 export function sampleShape(polys: Vec2[][], spacing: number): SampledShape {
@@ -25,7 +26,7 @@ export function sampleShape(polys: Vec2[][], spacing: number): SampledShape {
       const len = Math.hypot(b.x - a.x, b.y - a.y);
       const ux = a.x - prev.x, uy = a.y - prev.y, vx = b.x - a.x, vy = b.y - a.y;
       const turn = Math.atan2(ux * vy - uy * vx, ux * vx + uy * vy);
-      if (turn > TURN) corners.push({ p: { x: a.x, y: a.y }, loop });
+      if (turn >= TURN) corners.push({ p: { x: a.x, y: a.y }, loop });
       if (len < 1e-12) continue;
       const k = Math.max(1, Math.ceil(len / spacing));
       for (let j = 0; j < k; j++) samples.push({ x: a.x + (vx * j) / k, y: a.y + (vy * j) / k, loop, s: s + (len * j) / k });

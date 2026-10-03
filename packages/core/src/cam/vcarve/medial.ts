@@ -43,13 +43,23 @@ export function medialGraph(shape: SampledShape, spacing: number): MedialGraph {
     const p = triangles[e], q = triangles[e % 3 === 2 ? e - 2 : e + 1];
     if (along(p, q) > 3 * spacing) edges.push([t1, t2]);
   }
+  const cell = 6 * spacing;
+  const grid = new Map<string, number[]>();
+  nodes.forEach((n, i) => {
+    if (n.r > 3 * spacing) return;
+    const key = `${Math.floor(n.x / cell)},${Math.floor(n.y / cell)}`;
+    const list = grid.get(key);
+    if (list) list.push(i); else grid.set(key, [i]);
+  });
   for (const c of shape.corners) {
     let best = -1, bestD = 6 * spacing;
-    nodes.forEach((n, i) => {
-      if (n.r > 3 * spacing) return;
-      const dd = Math.hypot(n.x - c.p.x, n.y - c.p.y);
-      if (dd <= bestD) { best = i; bestD = dd; }
-    });
+    const cx = Math.floor(c.p.x / cell), cy = Math.floor(c.p.y / cell);
+    for (let gx = cx - 1; gx <= cx + 1; gx++) for (let gy = cy - 1; gy <= cy + 1; gy++) {
+      for (const i of grid.get(`${gx},${gy}`) ?? []) {
+        const dd = Math.hypot(nodes[i].x - c.p.x, nodes[i].y - c.p.y);
+        if (dd < bestD || (dd === bestD && i > best)) { best = i; bestD = dd; }
+      }
+    }
     if (best >= 0) edges.push([best, nodes.push({ x: c.p.x, y: c.p.y, r: 0 }) - 1]);
   }
   return { nodes, edges };

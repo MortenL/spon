@@ -61,3 +61,19 @@ describe('centreline', () => {
     }
   });
 });
+
+describe('corners', () => {
+  const cornerNodes = (g: ReturnType<typeof graph>) => g.nodes.filter((n) => n.r === 0).length;
+  const ngon = (n: number, r = 5): Vec2[] => circle(r, n);
+  it('flattened curves make no corner nodes or spokes', () => {
+    for (const polys of [[circle(0.1, 64)], [circle(0.5, 16)], [circle(5)]]) {
+      const sh = sampleShape(polys, s);
+      expect(sh.corners).toHaveLength(0);
+      expect(cornerNodes(medialGraph(sh, s))).toBe(0);
+    }
+  });
+  it('a regular 12-gon (30 degree turns) reaches its corners; a 13-gon (about 27.7) does not', () => {
+    expect(cornerNodes(graph([ngon(12)]))).toBe(12);
+    expect(cornerNodes(graph([ngon(13)]))).toBe(0);
+  });
+});
