@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { applyCommands, BUNDLED_FONTS, createJob, FontFileError, FontStore, loadBundledFont, parseFontFile, parseJhf } from '../src';
+import { applyCommands, BUNDLED_FONTS, createJob, FontFileError, FontStore, loadBundledFont, hersheyFont, parseFontFile, parseJhf } from '../src';
 import { testFontBytes } from './fixtures/testFont';
 
 describe('fonts', () => {
@@ -77,6 +77,27 @@ describe('fonts', () => {
       expect(Object.keys(table.glyphs)).toHaveLength(95);
       expect(generated).toEqual(table);
     }
+  });
+
+  it('keeps every Hershey stroke, including dots', async () => {
+    for (const [id, file] of [['hersheySans', 'rowmans'], ['hersheyDuplex', 'rowmand'], ['hersheyScript', 'scripts']] as const) {
+      const table = parseJhf(readFileSync(new URL(`../assets/hershey/${file}.jhf`, import.meta.url), 'utf8'));
+      const font = await loadBundledFont(id);
+      for (const [ch, g] of Object.entries(table.glyphs)) {
+        expect(font.glyph(ch, 0.1)!.strokes, `${id} ${ch}`).toHaveLength(g.strokes.length);
+      }
+      expect(font.glyph('i', 0.1)!.strokes).toHaveLength(table.glyphs['i'].strokes.length);
+      expect(table.glyphs['i'].strokes.length).toBeGreaterThanOrEqual(2);
+    }
+    // the Simplex 'i' dot is a small diamond, so a one-point dot is checked on a synthetic table
+    const synthetic = hersheyFont('t', parseJhf(['  699  1JZ', '  714  5MWRFRT RRY', ''].join('\n')));
+    expect(synthetic.glyph('!', 1)!.strokes).toEqual([[{ x: 5, y: 21 }, { x: 5, y: 7 }], [{ x: 5, y: 2 }, { x: 5, y: 2 }]]);
+  });
+
+  it('returns frozen glyph data', async () => {
+    const g = (await loadBundledFont('sans')).glyph('H', 1)!;
+    expect(Object.isFrozen(g) && Object.isFrozen(g.loops) && Object.isFrozen(g.loops[0]) && Object.isFrozen(g.loops[0][0])).toBe(true);
+    expect((await loadBundledFont('hersheySans')).glyph('H', 1)!.strokes[0]).toSatisfy(Object.isFrozen);
   });
 
   it('FontStore loads what a job needs and reports missing blobs', async () => {

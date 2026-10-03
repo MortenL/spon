@@ -1,4 +1,5 @@
-// A 1000-unit font: 'H' is a 600x700 box, 'O' a 600x700 box with a 200x300 counter, 'A' and 'V' are plain boxes (kerning A-V is read from the font's kern data)
+// A 1000-unit font: 'H' is a 600x700 box, 'O' a 600x700 box with a 200x300 counter, 'A' and 'V' are plain boxes.
+// It has no kerning: opentype.js 2.0.0 cannot write a kern table.
 import opentype from 'opentype.js';
 const box = (p: opentype.Path, x0: number, y0: number, x1: number, y1: number, ccw: boolean) => {
   p.moveTo(x0, y0);

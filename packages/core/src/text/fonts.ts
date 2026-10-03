@@ -5,9 +5,9 @@ import { hersheyFont } from './hershey';
 import type { BundledFontId, FontRef } from './types';
 
 export interface GlyphData {
-  advance: number; // font units
-  loops: Vec2[][]; // closed outlines, flattened, font units, y up (outline fonts)
-  strokes: Vec2[][]; // open polylines, font units, y up (single-line fonts)
+  readonly advance: number; // font units
+  readonly loops: readonly (readonly Vec2[])[]; // closed outlines, flattened, font units, y up (outline fonts)
+  readonly strokes: readonly (readonly Vec2[])[]; // open polylines, font units, y up (single-line fonts)
 }
 export interface LoadedFont {
   kind: 'outline' | 'singleLine';
@@ -29,6 +29,12 @@ export const BUNDLED_FONTS: readonly { id: BundledFontId; family: string; kind: 
 ];
 
 export class FontFileError extends Error {}
+
+/** Deep-freezes cached glyph data so callers cannot corrupt the cache. */
+export function freezeGlyph(g: GlyphData): GlyphData {
+  const lines = (ls: readonly (readonly Vec2[])[]) => Object.freeze(ls.map((l) => Object.freeze(l.map((p) => Object.freeze({ x: p.x, y: p.y })))));
+  return Object.freeze({ advance: g.advance, loops: lines(g.loops), strokes: lines(g.strokes) });
+}
 
 const MAX_CURVE_STEPS = 256;
 
@@ -87,7 +93,7 @@ function outlineFont(font: opentype.Font, name: string): LoadedFont {
       const key = `${ch}|${tol}`;
       if (cache.has(key)) return cache.get(key)!;
       const g = font.charToGlyph(ch);
-      const data: GlyphData | null = !g || g.index === 0 ? null : { advance: g.advanceWidth ?? 0, loops: flattenPath(g.path, tol), strokes: [] };
+      const data: GlyphData | null = !g || g.index === 0 ? null : freezeGlyph({ advance: g.advanceWidth ?? 0, loops: flattenPath(g.path, tol), strokes: [] });
       cache.set(key, data);
       return data;
     },

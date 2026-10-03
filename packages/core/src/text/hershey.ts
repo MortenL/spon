@@ -1,5 +1,5 @@
 import type { Vec2 } from '../geometry/path2d';
-import type { GlyphData, LoadedFont } from './fonts';
+import { freezeGlyph, type GlyphData, type LoadedFont } from './fonts';
 
 export interface HersheyTable {
   glyphs: Record<string, { left: number; right: number; strokes: [number, number][][] }>;
@@ -47,13 +47,11 @@ export function hersheyFont(name: string, table: HersheyTable): LoadedFont {
   const toStrokes = (ch: string): Vec2[][] | null => {
     const g = table.glyphs[ch];
     if (!g) return null;
-    const mapped = g.strokes.map((s) => {
+    // One-point strokes (dots) become zero-length two-point strokes so they survive.
+    return g.strokes.map((s) => {
       const pts = s.map(([x, y]) => ({ x: x - g.left, y: BASELINE - y }));
       return pts.length === 1 ? [pts[0], { ...pts[0] }] : pts;
     });
-    const degenerate = (s: Vec2[]) => s.every((p) => p.x === s[0].x && p.y === s[0].y);
-    const kept = mapped.filter((s) => !degenerate(s));
-    return kept.length > 0 || mapped.length === 0 ? kept : mapped;
   };
   const h = toStrokes('H');
   const capHeight = h ? Math.max(0, ...h.flat().map((p) => p.y)) : 0.7 * UNITS_PER_EM;
@@ -66,7 +64,7 @@ export function hersheyFont(name: string, table: HersheyTable): LoadedFont {
       const strokes = toStrokes(ch);
       if (!strokes) return null;
       const g = table.glyphs[ch];
-      return { advance: g.right - g.left, loops: [], strokes };
+      return freezeGlyph({ advance: g.right - g.left, loops: [], strokes });
     },
     kerning: () => 0,
   };
