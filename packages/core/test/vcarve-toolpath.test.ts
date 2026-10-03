@@ -173,3 +173,50 @@ describe('V-carve toolpaths', () => {
     expect(Math.min(...cuts.map((m) => m.to.z))).toBeLessThan(-0.5);
   });
 });
+
+const cBand = () => {
+  const pts: Vec2[] = [];
+  for (let a = 0; a <= 270; a += 3) pts.push({ x: 20 * Math.cos((a * Math.PI) / 180), y: 20 * Math.sin((a * Math.PI) / 180) });
+  for (let a = 270; a >= 0; a -= 3) pts.push({ x: 14 * Math.cos((a * Math.PI) / 180), y: 14 * Math.sin((a * Math.PI) / 180) });
+  return pathFromPoints(pts, true);
+};
+
+describe('V-carve at a coarse tolerance', () => {
+  for (const tol of [0.5, 1]) {
+    it(`a C-shaped band at tolerance ${tol}: sampled along every move the cone stays inside the walls`, () => {
+      const base = drawingJob([cBand()], 'vcarve', {}, { ...vbit90, fluteLength: 100 });
+      const job = applyCommands(base.job, [{ type: 'setTolerance', tolerance: tol }]);
+      const { run, toolpaths } = runPipeline(job, base.geometry as never, programContext(job, base.geometry as never), new PipelineCache(), { date: '2026-01-01' });
+      expect(errors(run.results[0].diagnostics)).toEqual([]);
+      const tp = toolpaths[0] as Toolpath;
+      const dist = outlineDistance([flattenPath(base.program(0), 0.001)], 1);
+      let worst = -Infinity, n = 0, prev: { x: number; y: number; z: number } | null = null;
+      for (const m of tp.moves) {
+        if (m.kind === 'cycle') { prev = null; continue; }
+        if (m.kind !== 'rapid' && prev) {
+          for (let k = 0; k <= 10; k++) {
+            const t = k / 10, x = prev.x + (m.to.x - prev.x) * t, y = prev.y + (m.to.y - prev.y) * t, z = prev.z + (m.to.z - prev.z) * t;
+            if (z < 0) { n++; worst = Math.max(worst, -z * tanHalf - dist(x, y)); }
+          }
+        }
+        prev = m.to;
+      }
+      expect(n).toBeGreaterThan(100);
+      expect(worst).toBeLessThanOrEqual(tol / 4 + 0.01);
+    });
+  }
+});
+
+describe('V-carve tip angle and surface-level shapes', () => {
+  it.each([0, 180, Number.NaN])('a V-bit with tip angle %s is refused with a diagnostic and no G-code', (angle) => {
+    const r = drawingJob([rectPath(40, 10)], 'vcarve', {}, { ...vbit90, tipAngleDeg: angle });
+    expect(errors(r.diagnostics)).toEqual(['The tool needs a tip angle between 0 and 180 degrees']);
+    expect(r.tp).toBeUndefined();
+  });
+
+  it.each([null, 1])('a shape whose deepest point is at the surface cuts nothing (stepdown %s)', (stepdown) => {
+    // a degenerate sliver: a bit with max depth 0 would be refused elsewhere, so use a sliver thinner than the sampling noise
+    const r = drawingJob([rectPath(40, 1e-7)], 'vcarve', { stepdown }, vbit90);
+    expect(r.tp).toBeUndefined();
+  });
+});

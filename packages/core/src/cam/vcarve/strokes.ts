@@ -72,8 +72,18 @@ export function vcarveStrokes(g: MedialGraph, o: { top: number; tanHalf: number;
   if (!g.edges.length) for (const n of g.nodes) strokes.push({ points: [{ x: n.x, y: n.y, z: zAt(n.r) }], closed: false });
   // 3. flat-area loops at max depth
   if (o.maxDepth !== null) for (const loop of o.flatLoops) strokes.push({ points: loop.map((p) => ({ x: p.x, y: p.y, z: o.top - o.maxDepth! })), closed: true });
-  // 4. merge points closer than tol
-  return strokes.map((s) => ({ ...s, points: s.points.filter((p, i, a) => i === 0 || Math.hypot(p.x - a[i - 1].x, p.y - a[i - 1].y) >= o.tol || i === a.length - 1) }));
+  // 4. merge points closer than a quarter of tol to the last KEPT point (never to the previous original point, which would collapse
+  // a densely sampled stroke to a chord); the stroke's last point always survives, replacing a too-close tail
+  const minGap = o.tol / 4;
+  return strokes.map((s) => {
+    const kept: StrokePoint[] = [];
+    s.points.forEach((p, i) => {
+      const tail = kept[kept.length - 1];
+      if (!tail || Math.hypot(p.x - tail.x, p.y - tail.y) >= minGap) kept.push(p);
+      else if (i === s.points.length - 1 && kept.length > 1) kept[kept.length - 1] = p;
+    });
+    return { ...s, points: kept };
+  });
 }
 
 /** Distance from a point to the nearest outline segment, through a grid of segments (expanding ring search). */

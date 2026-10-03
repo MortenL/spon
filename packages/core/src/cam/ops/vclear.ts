@@ -31,6 +31,10 @@ export function vclearToolpath(op: VClearOp, tool: Tool, ctx: CamContext): OpOut
   }
   const bit = ctx.job.tools.find((t) => t.id === source.toolId);
   const srcGeo = bit && bit.type === 'vbit' ? resolveGeometry(source, ctx) : null;
+  if (bit && bit.type === 'vbit' && !(bit.tipAngleDeg > 0 && bit.tipAngleDeg < 180)) {
+    diag('error', 'source-incomplete', `${source.name} has errors`);
+    return out;
+  }
   if (!bit || !srcGeo || srcGeo.diagnostics.some((d) => d.severity === 'error')) {
     diag('error', 'source-incomplete', `${source.name} has errors`);
     return out;
@@ -54,7 +58,7 @@ export function vclearToolpath(op: VClearOp, tool: Tool, ctx: CamContext): OpOut
     ...op, type: 'pocket', stockRadial: 0, stockAxial: 0, finishWalls: false, finishFloor: false, geometry: [],
     heights: {
       ...op.heights, top: source.heights.top,
-      bottom: { from: source.heights.top.from, offset: source.heights.top.offset - maxDepth },
+      bottom: { ...source.heights.top, offset: source.heights.top.offset - maxDepth },
     },
   } as PocketOp;
   const geo: ResolvedGeometry = { ...srcGeo, diagnostics: [], shapes: inset };

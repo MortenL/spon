@@ -11,6 +11,7 @@ import { depthLevels, emitLap, MoveWriter } from './writer';
 export function engraveDepth(op: EngraveOp, tool: Tool): { depth: number } | { error: string } {
   if (op.depthMode === 'depth') return { depth: op.depth };
   if (tool.type !== 'vbit') return { error: 'Line width needs a V-bit; set a depth' };
+  if (!(tool.tipAngleDeg > 0 && tool.tipAngleDeg < 180)) return { error: 'The tool needs a tip angle between 0 and 180 degrees' };
   return { depth: op.lineWidth / 2 / Math.tan((tool.tipAngleDeg * Math.PI) / 360) };
 }
 

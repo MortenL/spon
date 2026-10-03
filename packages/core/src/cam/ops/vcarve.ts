@@ -38,6 +38,10 @@ export function vcarveToolpath(op: VCarveOp, tool: Tool, ctx: CamContext, geo: R
     diag('error', 'wrong-tool', 'V-carve needs a V-bit');
     return out;
   }
+  if (!(tool.tipAngleDeg > 0 && tool.tipAngleDeg < 180)) {
+    diag('error', 'wrong-tool', 'The tool needs a tip angle between 0 and 180 degrees');
+    return out;
+  }
   const tanHalf = Math.tan((tool.tipAngleDeg * Math.PI) / 360);
   const tol = ctx.tolerance;
   const s = sampleSpacing(tol);
@@ -65,6 +69,7 @@ export function vcarveToolpath(op: VCarveOp, tool: Tool, ctx: CamContext, geo: R
     let shapeDeepest = 0;
     for (const st of strokes) for (const p of st.points) shapeDeepest = Math.max(shapeDeepest, h.top - p.z);
     deepest = Math.max(deepest, shapeDeepest);
+    if (shapeDeepest <= EPS) continue; // the deepest point is at the surface: nothing to cut
     emitShape(w, strokes, h, shapeDeepest, op.stepdown, 2 * s, feed, plunge);
   }
 

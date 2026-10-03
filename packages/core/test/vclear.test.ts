@@ -3,6 +3,8 @@ import {
   applyCommands, camContext, type JobCommand, type Move, type Path2D, pathFromPoints, PipelineCache, programContext, runPipeline, type Tool, type Toolpath,
 } from '../src';
 import { tool6 } from './fixtures/camSetup';
+import { terracedSetup } from './fixtures/slotSetup';
+import { rectPts } from './fixtures/terraced.mjs';
 import { drawingJob } from './fixtures/vcarveSetup';
 
 const vbit90: Tool = { ...tool6, id: 'v90', number: 8, type: 'vbit', tipAngleDeg: 90, cornerRadius: 0, fluteLength: 6 };
@@ -133,5 +135,64 @@ describe('V-carve clearing cache', () => {
     expect(warn(without)).toBe(true);
     expect(warn(s.job)).toBe(false);
     expect(warn(applyCommands(s.job, [{ type: 'setOperationEnabled', id: 'c', enabled: false }]))).toBe(true);
+  });
+});
+
+describe('V-carve clearing: review fixes', () => {
+  it('a source V-bit without a tip angle gives a clear error and no toolpath', () => {
+    const s = setup();
+    const job = applyCommands(s.job, [{ type: 'updateTool', id: 'v90', patch: { tipAngleDeg: 0 } }]);
+    const { run, toolpaths } = runPipeline(job, s.base.geometry as never, programContext(job, s.base.geometry as never), new PipelineCache(), { date: '2026-01-01' });
+    expect(errs(run.results.find((r) => r.operationId === 'c')!)).toEqual([`${s.job.operations.find((o) => o.id === 'o')!.name} has errors`]);
+    expect(toolpaths.find((t) => t.operationId === 'c')).toBeUndefined();
+  });
+
+  it('keeps the V-carve top reference, so a face-referenced top still clears', () => {
+    const m = terracedSetup(rectPts(0, 0, 100, 60), 10, [{ poly: rectPts(20, 20, 50, 40), z: 7 }]);
+    const face = m.catalog().faces.find((f) => Math.abs(f.z) < 1e-6)!;
+    expect(face).toBeTruthy();
+    const job = applyCommands(m.job, [
+      { type: 'addTool', tool: vbit90 },
+      { type: 'addTool', tool: tool6 },
+      { type: 'addOperation', opType: 'vcarve', toolId: 'v90', id: 'o' },
+      { type: 'updateOperation', id: 'o', patch: { geometry: [face.ref], maxDepth: 2 } as never },
+    ] as JobCommand[]);
+    // keep the default heights, change only the top
+    const withTop = applyCommands(job, [
+      { type: 'updateOperation', id: 'o', patch: { heights: { ...job.operations[0].heights, top: { from: 'face', offset: 0, face: face.ref } } } as never },
+      { type: 'addOperation', opType: 'vclear', toolId: 't6', id: 'c' },
+      { type: 'updateOperation', id: 'c', patch: { sourceId: 'o' } as never },
+    ] as JobCommand[]);
+    const { run, toolpaths } = runPipeline(withTop, m.geometry as never, programContext(withTop, m.geometry as never), new PipelineCache(), { date: '2026-01-01' });
+    const rc = run.results.find((r) => r.operationId === 'c')!;
+    expect(errs(rc)).toEqual([]);
+    const tp = toolpaths.find((t) => t.operationId === 'c') as Toolpath;
+    expect(tp).toBeTruthy();
+    const top = run.results.find((r) => r.operationId === 'o')!.heights!.top;
+    expect(Math.min(...tp.moves.flatMap((mv) => (mv.kind === 'cycle' ? [] : [mv.to.z])))).toBeCloseTo(top - 2, 6);
+  });
+
+  it('a ring: the island inside the counter is never cleared', () => {
+    const circle = (r: number): Path2D => ({ segments: [{ kind: 'arc', center: { x: 0, y: 0 }, radius: r, startAngle: 0, sweep: 2 * Math.PI }], closed: true });
+    const base = drawingJob([circle(30), circle(10)], 'vcarve', { maxDepth: 3 }, vbit90);
+    const job = applyCommands(base.job, [
+      { type: 'addTool', tool: tool6 },
+      { type: 'addOperation', opType: 'vclear', toolId: 't6', id: 'c' },
+      { type: 'updateOperation', id: 'c', patch: { sourceId: 'o' } as never },
+    ]);
+    const { run, toolpaths } = runPipeline(job, base.geometry as never, programContext(job, base.geometry as never), new PipelineCache(), { date: '2026-01-01' });
+    expect(errs(run.results.find((r) => r.operationId === 'c')!)).toEqual([]);
+    const tp = toolpaths.find((t) => t.operationId === 'c') as Toolpath;
+    const c = (base.program(0).segments[0] as unknown as { center: { x: number; y: number } }).center;
+    // floor ring is r 13..27 (R = 3); the 3 mm radius tool centre stays within 16..24
+    let n = 0;
+    for (const mv of tp.moves) {
+      if (mv.kind === 'cycle' || mv.kind === 'rapid' || mv.to.z > -2.99) continue;
+      n++;
+      const r = Math.hypot(mv.to.x - c.x, mv.to.y - c.y);
+      expect(r).toBeGreaterThanOrEqual(16 - 0.02);
+      expect(r).toBeLessThanOrEqual(24 + 0.02);
+    }
+    expect(n).toBeGreaterThan(10);
   });
 });

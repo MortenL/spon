@@ -19,6 +19,12 @@ describe('engrave', () => {
     expect(engraveDepth(op, tool6)).toEqual({ error: 'Line width needs a V-bit; set a depth' });
   });
 
+  it.each([0, 180, Number.NaN])('width mode with a V-bit of tip angle %s gives a clear error and no G-code', (angle) => {
+    const r = drawingJob([line], 'engrave', { depthMode: 'width', lineWidth: 0.5 }, { ...vbit60, tipAngleDeg: angle });
+    expect(errors(r.diagnostics)).toEqual(['The tool needs a tip angle between 0 and 180 degrees']);
+    expect(r.tp).toBeUndefined();
+  });
+
   it('cuts an open line back and forth per level without retracting', () => {
     const { tp, diagnostics, program } = drawingJob([line], 'engrave', { depthMode: 'depth', depth: 1, stepdown: 0.5 }, vbit60);
     expect(errors(diagnostics)).toEqual([]);
