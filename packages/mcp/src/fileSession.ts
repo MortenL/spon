@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import {
-  addProgram, applyCommands, applyMachinePreset, type BlobMap, type Boxes, camContext, createJob, decideImport, defaultPostSettings, type DialectId,
+  addProgram, applyCommands, applyMachinePreset, EMPTY_FONTS, type BlobMap, type Boxes, camContext, createJob, decideImport, defaultPostSettings, type DialectId,
   exportOutcome, type GeometryCatalog, importedOutcome, importModel, importStep, type Job, type JobCommand, type MachinePresetName, type ModelGeometry,
   modelFilePath, modelSummary, newModelRef, type OcctLoader, operationsWithGeometry, PipelineCache, type PipelineResult, type PreviewOptions,
   previewInput, type ProgramRef, programContext, readSpon, renderPreviewSvg, type RunReport, runPipeline, runReport, setModel, toModelGeometry, writeSpon,
@@ -100,7 +100,7 @@ export class FileSession implements JobSession {
   private pipeline(): { result: PipelineResult; report: RunReport } {
     if (this.last && this.last.job === this.current && this.last.geometry === this.geometry) return this.last;
     const opts = this.options.postDate ? { date: this.options.postDate } : {};
-    const result = runPipeline(this.current, this.geometry, programContext(this.current, this.geometry), this.cache, opts);
+    const result = runPipeline(this.current, this.geometry, programContext(this.current, this.geometry), this.cache, opts, EMPTY_FONTS);
     this.last = { job: this.current, geometry: this.geometry, result, report: runReport(this.current, result.run) };
     return this.last;
   }

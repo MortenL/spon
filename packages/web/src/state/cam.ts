@@ -28,7 +28,7 @@ export function toCamOutput(run: CamRun): CamOutput {
   };
 }
 
-export const EMPTY_RUN: CamRun = { results: [], files: [], catalog: null };
+export const EMPTY_RUN: CamRun = { results: [], files: [], catalog: null, texts: [] };
 
 /** True when the change from (a, ga) to (b, gb) can change the toolpaths: what triggers regeneration. */
 export function camInputsChanged(a: Job, b: Job, ga: ModelGeometry | null, gb: ModelGeometry | null): boolean {

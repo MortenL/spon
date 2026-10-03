@@ -6,6 +6,7 @@ import { v3sub, type Vec3, vec3 } from '../geometry/vec3';
 import type { Drawing } from '../import/dxf/dxf';
 import { applyPlacement, computePlacement, type Placement, stockBox, wcsPoint } from '../job/derive';
 import type { Job } from '../job/types';
+import { EMPTY_FONTS, type FontSet } from '../text/fonts';
 
 /** The loaded model as CAM needs it; the web app's ModelGeometry has this shape. */
 export type CamGeometry =
@@ -23,11 +24,12 @@ export interface CamContext {
   /** Placed model box in program coordinates. */
   model: BBox | null;
   tolerance: number;
+  fonts: FontSet;
 }
 
 const shift = (b: BBox, o: Vec3): BBox => ({ min: v3sub(b.min, o), max: v3sub(b.max, o) });
 
-export function camContext(job: Job, geometry: CamGeometry | null): CamContext {
+export function camContext(job: Job, geometry: CamGeometry | null, fonts: FontSet = EMPTY_FONTS): CamContext {
   const placement = job.model && geometry && geometry.kind === job.model.kind ? computePlacement(job.model, geometry.rawPoints) : null;
   const box = stockBox(job, placement);
   const origin = box ? wcsPoint(job.wcs, box) : vec3(0, 0, 0);
@@ -36,6 +38,7 @@ export function camContext(job: Job, geometry: CamGeometry | null): CamContext {
     stock: box ? shift(box, origin) : null,
     model: placement ? shift(placement.bbox, origin) : null,
     tolerance: job.tolerance,
+    fonts,
   };
 }
 

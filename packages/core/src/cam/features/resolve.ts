@@ -10,6 +10,7 @@ import { chainPaths, nestLoops, type Shape } from './chain';
 import { circleOf, drawingPath } from './dxf';
 import { type FaceGeometry, faceGeometry, holeBottom, resolveFaceRef } from './mesh';
 import { closedSlotOf, openSlotOf, resolvedSlotOf } from './slots';
+import { resolveText } from '../../text/resolve';
 
 /** `members` (open chains only): the geometry indices of every reference that makes up the chain; `ref` is its seed. */
 export interface ResolvedContour {
@@ -88,7 +89,32 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
   // DXF references of one operation are chained together
   const dxf: { path: Path2D; ref: number }[] = [];
   const drawingZ = -ctx.origin.z; // a drawing lies at scene Z = 0
+  const texts = new Map<string, ReturnType<typeof resolveText>>();
   op.geometry.forEach((g, i) => {
+    if (g.kind === 'text') {
+      const item = ctx.job.texts.find((t) => t.id === g.textId);
+      if (!item) return fail(i, 'ref-missing', 'The picked text no longer exists');
+      if (!texts.has(item.id)) texts.set(item.id, resolveText(item, ctx));
+      const r = texts.get(item.id)!;
+      for (const d of r.diagnostics) out.diagnostics.push({ ...d, operationId: op.id, ref: i });
+      if (r.diagnostics.some((d) => d.severity === 'error') || r.z === null || r.kind === null) return;
+      if (r.kind === 'singleLine') {
+        if (op.type !== 'engrave') return fail(i, 'text-single-line', `${item.name} uses a single-line font; this operation needs closed outlines`);
+        for (const path of r.strokes) out.contours.push({ path, z: r.z, ref: i });
+        return;
+      }
+      if (op.type === 'engrave') {
+        for (const sh of r.shapes) {
+          out.contours.push({ path: sh.outer, z: r.z, ref: i, kind: 'outer' });
+          for (const isl of sh.islands) out.contours.push({ path: isl, z: r.z, ref: i, kind: 'inner' });
+        }
+      } else if (op.type === 'profile') {
+        for (const sh of r.shapes) for (const path of [sh.outer, ...sh.islands]) out.contours.push({ path, z: r.z, ref: i });
+      } else if (op.type === 'pocket' || op.type === 'vcarve') {
+        for (const shape of r.shapes) out.shapes.push({ shape, z: r.z, ref: i });
+      } else fail(i, 'wrong-geometry', "Text can't be used by this operation");
+      return;
+    }
     if (g.kind === 'dxfPath') {
       const model = ctx.job.model;
       const geo = ctx.geometry;

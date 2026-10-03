@@ -15,7 +15,9 @@ export interface MeshHoleRef { kind: 'meshHole'; face: MeshFaceRef; loop: number
 export type SlotEnd = 'round' | 'square' | 'open';
 /** A recognised slot: with `loop`, inner loop `loop` of the up-facing face around it (a closed slot); without, `face` is its floor (an open slot). */
 export interface MeshSlotRef { kind: 'meshSlot'; face: MeshFaceRef; loop?: number }
-export type GeometryRef = DxfPathRef | MeshFaceRef | MeshLoopRef | MeshHoleRef | MeshSlotRef;
+/** A text item of the job (outline or single-line letters). */
+export interface TextRef { kind: 'text'; textId: string }
+export type GeometryRef = DxfPathRef | MeshFaceRef | MeshLoopRef | MeshHoleRef | MeshSlotRef | TextRef;
 
 export type HeightFrom =
   | 'stockTop' | 'stockBottom' | 'modelTop' | 'modelBottom' | 'contour' | 'face' | 'origin' | 'holeBottom' | 'slotBottom'
@@ -202,7 +204,8 @@ export type CamCode =
   | 'heights-invalid' | 'offset-collapsed' | 'tool-too-large' | 'tool-undersize' | 'entry-plunge' | 'unmachined-area'
   | 'tab-skipped' | 'stepdown-exceeds-flute' | 'feed-exceeds-machine' | 'tool-number-duplicate' | 'bend-rounded' | 'gouge' | 'facing-depth' | 'wrong-tool'
   | 'slot-width-mismatch' | 'slot-too-narrow' | 'slot-ends-unset' | 'slot-overcut' | 'wrong-geometry'
-  | 'flute-exceeded' | 'vcarve-uncleared' | 'source-missing' | 'source-incomplete' | 'internal';
+  | 'flute-exceeded' | 'vcarve-uncleared' | 'source-missing' | 'source-incomplete' | 'internal'
+  | 'font-unreadable' | 'font-missing' | 'text-empty' | 'text-missing-glyphs' | 'text-fit' | 'text-arc' | 'text-no-stock' | 'text-single-line';
 export interface CamDiagnostic {
   operationId: string;
   severity: CamSeverity;

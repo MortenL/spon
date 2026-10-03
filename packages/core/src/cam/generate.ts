@@ -1,4 +1,5 @@
 import type { Job } from '../job/types';
+import { EMPTY_FONTS, type FontSet } from '../text/fonts';
 import { camContext, type CamContext, type CamGeometry } from './context';
 import { resolveGeometry, type ResolvedGeometry } from './features/resolve';
 import { gougeCheck } from './gouge/check';
@@ -36,14 +37,20 @@ export class GenerationCache {
   }
 }
 
-export function operationKey(op: Operation, job: Job): string {
+export function operationKey(op: Operation, job: Job, fonts: FontSet = EMPTY_FONTS): string {
   // a clearing depends on its source operation and that operation's tool; a V-carve's warning on whether an enabled clearing exists
   let extra: unknown = null;
   if (op.type === 'vclear') {
     const src = job.operations.find((o) => o.id === op.sourceId) ?? null;
     extra = [src, src ? job.tools.find((t) => t.id === src.toolId) ?? null : null];
   } else if (op.type === 'vcarve') extra = job.operations.some((o) => o.enabled && o.type === 'vclear' && o.sourceId === op.id);
-  return JSON.stringify([op, job.tools.find((t) => t.id === op.toolId) ?? null, job.tolerance, job.model, job.stock, job.wcs, job.machine.maxFeed, extra]);
+  // a picked text (and the state of its font) changes the geometry
+  const texts = op.geometry.flatMap((g) => {
+    if (g.kind !== 'text') return [];
+    const t = job.texts.find((x) => x.id === g.textId) ?? null;
+    return [[t, t ? fonts.status(t.font) : null]];
+  });
+  return JSON.stringify([op, job.tools.find((t) => t.id === op.toolId) ?? null, job.tolerance, job.model, job.stock, job.wcs, job.machine.maxFeed, extra, texts]);
 }
 
 const emptyGeometry = (): ResolvedGeometry => ({ contours: [], shapes: [], holes: [], slots: [], diagnostics: [], sagitta: 0, faceZ: () => null });
@@ -55,7 +62,7 @@ export function generateOperation(op: Operation, ctx: CamContext): OperationResu
     ...base, diagnostics: [{ operationId: op.id, severity: 'error', code, message }],
   });
   try {
-    base.key = operationKey(op, ctx.job);
+    base.key = operationKey(op, ctx.job, ctx.fonts);
     const tool = ctx.job.tools.find((t) => t.id === op.toolId);
     if (!tool) return err('no-tool', 'Choose a tool for this operation');
     if (!op.geometry.length && op.type !== 'vclear' && !(op.type === 'face' && op.area === 'stock')) return err('no-geometry', 'Pick geometry for this operation');
@@ -99,17 +106,17 @@ export function generateOperation(op: Operation, ctx: CamContext): OperationResu
   }
 }
 
-export function generateJob(job: Job, geometry: CamGeometry | null, cache?: GenerationCache): OperationResult[] {
+export function generateJob(job: Job, geometry: CamGeometry | null, cache?: GenerationCache, fonts: FontSet = EMPTY_FONTS): OperationResult[] {
   let ctx: CamContext | null = null;
   const results = job.operations.map((op) => {
     try {
-      const key = operationKey(op, job);
+      const key = operationKey(op, job, fonts);
       const hit = cache?.get(op.id, key, geometry);
       if (hit) return hit;
     } catch (e) {
       // Key computation failed; fall through to generateOperation which will also fail with internal error
     }
-    ctx ??= camContext(job, geometry);
+    ctx ??= camContext(job, geometry, fonts);
     const result = generateOperation(op, ctx);
     try {
       cache?.set(op.id, geometry, result);

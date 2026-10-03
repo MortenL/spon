@@ -1,7 +1,7 @@
 import {
   type AnalysisContext, type AnalysisResult, analyzeTable, type CamGeometry, type CamRun, type GeometryCatalog, type ImportOptions, type ImportResult, importModel, importResultTransferables, type Job,
   type MotionTable, type ParsedProgram, parsedProgramTransferables, parseProgram, PipelineCache, type PreviewOptions, previewInput, type ProgramContext,
-  renderPreviewSvg, runPipeline,
+  EMPTY_FONTS, renderPreviewSvg, runPipeline,
 } from '@sponcam/core';
 import * as Comlink from 'comlink';
 import { loadOcct } from './occtReader';
@@ -34,7 +34,7 @@ const api = {
   },
   /** Generates, posts, parses and analyses every operation; returns summaries, files and the geometry catalog. */
   generate(job: Job, ctx: ProgramContext): CamRun {
-    const { run } = runPipeline(job, camGeometry, ctx, pipeline);
+    const { run } = runPipeline(job, camGeometry, ctx, pipeline, {}, EMPTY_FONTS);
     return Comlink.transfer(run, run.files.flatMap((f) => parsedProgramTransferables(f.parsed)));
   },
   /** The geometry catalog for `job` and the model set with setCamModel (the live bridge's describe_geometry). */
@@ -43,7 +43,7 @@ const api = {
   },
   /** The preview drawing of `job` (the live bridge's render_preview); cached operations make this cheap after a generate. */
   previewSvg(job: Job, ctx: ProgramContext, options: PreviewOptions): string {
-    return renderPreviewSvg(previewInput(job, camGeometry, runPipeline(job, camGeometry, ctx, pipeline)), options);
+    return renderPreviewSvg(previewInput(job, camGeometry, runPipeline(job, camGeometry, ctx, pipeline, {}, EMPTY_FONTS)), options);
   },
 };
 

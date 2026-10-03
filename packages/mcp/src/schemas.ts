@@ -15,6 +15,7 @@ export const geometryRefSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('meshLoop'), face: meshFaceRef, loop: z.number().int() }),
   z.strictObject({ kind: z.literal('meshHole'), face: meshFaceRef, loop: z.number().int() }),
   z.strictObject({ kind: z.literal('meshSlot'), face: meshFaceRef, loop: z.number().int().optional() }),
+  z.strictObject({ kind: z.literal('text'), textId: z.string() }),
 ]);
 
 const heightFrom = z.enum(['stockTop', 'stockBottom', 'modelTop', 'modelBottom', 'contour', 'face', 'origin', 'holeBottom', 'slotBottom', 'retract', 'feed', 'top']);

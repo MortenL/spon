@@ -53,6 +53,7 @@ export * from './text/types';
 export * from './text/fonts';
 export * from './text/hershey';
 export * from './text/layout';
+export * from './text/resolve';
 export * from './geometry/offset/pathOps';
 export * from './geometry/offset/clipper';
 export * from './geometry/offset/arcFit';

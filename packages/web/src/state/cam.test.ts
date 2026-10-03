@@ -20,7 +20,7 @@ const parsed = { table: { count: 0 }, analysis: { summary: { totalSeconds: 3 }, 
 const run = (names: string[]): CamRun => ({
   results: [{ operationId: 'o1', diagnostics: [], heights: null, overlays: { tabs: [], laps: [], unmachined: [], gouges: [] }, hasToolpath: true }],
   files: names.map((name) => ({ name, text: `(${name})\n`, operationIds: ['o1'], tools: [1], sections: [{ operationId: 'o1', firstLine: 0, lastLine: 0 }], parsed, postErrors: [] })),
-  catalog: null,
+  catalog: null, texts: [],
 });
 const withOp = () => applyCommand(createJob(), { type: 'addOperation', opType: 'drill', toolId: null, id: 'o1' } as JobCommand);
 
@@ -170,7 +170,7 @@ describe('CAM pipeline', () => {
     appStore.setState({ job: createJob('Empty'), camStatus: 'generating' });
     const waiting = waitForCamRun();
     await regenerate();
-    expect((await waiting).run).toEqual({ results: [], files: [], catalog: null });
+    expect((await waiting).run).toEqual({ results: [], files: [], catalog: null, texts: [] });
   });
 
   it('sends the model before asking the worker for the catalog and the preview', async () => {
