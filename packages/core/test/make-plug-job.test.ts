@@ -58,6 +58,7 @@ describe('makePlugJob, texts', () => {
     const base = textBase();
     const fonts = await fontsFor(base);
     const r = makePlugJob(base, null, fonts, {}, 'v', input);
+    expect(r.warnings).toEqual([]); // the letters of SPON don't overlap
     expect(r.H).toBeCloseTo(H, 9);
 
     const nb = applyCommands(base, r.base);
@@ -219,8 +220,34 @@ describe('makePlugJob, texts', () => {
     }
     expect(go({}, applyCommands(base, [{ type: 'updateOperation', id: 'v', patch: { geometry: [] } }]))).toThrow('V-carve 1 has no closed outlines to inlay');
     expect(go({ plugBoard: { x: 100, y: 100, z: 5 } })).toThrow('The plug board is thinner than the plug (5.50 mm)');
+    expect(go({ plugBoard: { x: 20, y: 100, z: 10 } })).toThrow(/^The plug board is smaller than the shapes \(\d+\.\d\d × \d+\.\d\d mm\)$/);
+    expect(go({ plugBoard: { x: 100, y: 10, z: 10 } })).toThrow(/^The plug board is smaller than the shapes/);
     expect(go({ clearingToolId: 'nope' })).toThrow('The clearing tool is not in the job');
     expect(go({}, base, { job: base, blobs: {} })).toThrow('This job is not a plug job');
+  });
+});
+
+describe('makePlugJob, the clearing tool and warnings', () => {
+  it("clears the plug with the base clearing's tool when no tool is given", () => {
+    const { d, base: b0 } = drawnBase();
+    const base = applyCommands(b0, [
+      { type: 'addOperation', opType: 'vclear', toolId: 't6', id: 'bc' },
+      { type: 'updateOperation', id: 'bc', patch: { sourceId: 'o' } },
+    ]);
+    const r = makePlugJob(base, d.geometry, new FontStore(), {}, 'o', { ...input, clearingToolId: null });
+    expect(r.base.some((c) => c.type === 'addOperation')).toBe(false);
+    const clear = r.plug.job.operations.find((o) => o.type === 'vclear')!;
+    expect(clear.toolId).toBe('t6');
+    expect(r.plug.job.tools.map((t) => t.id).sort()).toEqual(['t6', 'v60']);
+    expect(r.warnings).toEqual([]);
+  });
+
+  it('warns when the V-carve shapes overlap', () => {
+    const over: Vec2[] = [{ x: 45, y: 25 }, { x: 65, y: 25 }, { x: 65, y: 45 }, { x: 45, y: 45 }]; // overlaps the L's foot
+    const { d, base } = drawnBase([L, over]);
+    expect(makePlugJob(base, d.geometry, new FontStore(), {}, 'o', input).warnings).toEqual(['Shapes of V-carve 1 overlap; the plug follows their union, so it will not fit where they overlap']);
+    const apart = drawnBase([L, SQ]);
+    expect(makePlugJob(apart.base, apart.d.geometry, new FontStore(), {}, 'o', input).warnings).toEqual([]);
   });
 });
 

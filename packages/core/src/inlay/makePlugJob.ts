@@ -1,7 +1,9 @@
 import { camContext, type CamGeometry } from '../cam/context';
 import { resolveGeometry } from '../cam/features/resolve';
+import { shapePolys } from '../cam/ops/vcarve';
 import { plugShapeLoops } from '../cam/ops/vplug';
 import type { GeometryRef, VCarveOp, VPlugOp } from '../cam/types';
+import { differencePolys, polysArea, unionPolys } from '../geometry/offset/clipper';
 import type { Vec2 } from '../geometry/path2d';
 import { importFile } from '../import/importFile';
 import { shapesToSvg } from '../import/svg/write';
@@ -33,6 +35,8 @@ export interface PlugJobResult {
   plug: { job: Job; blobs: BlobMap };
   H: number;
   plugBoard: { x: number; y: number; z: number };
+  /** Things the user should know that don't stop the plug job (shown by the web and MCP). */
+  warnings: string[];
 }
 
 const SVG_NAME = 'inlay shapes.svg';
@@ -54,14 +58,28 @@ const boundsOf = (loops: readonly Vec2[][]) => {
   return { minX, minY, maxX, maxY, w: maxX - minX, h: maxY - minY, cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 };
 };
 
+/** mm²: shapes overlapping by less (flattening noise where they only touch) are not reported. */
+const OVERLAP_AREA = 0.01;
+
 /** The V-carve's merged shapes (all references) and those of its non-text references, in program coordinates. */
 function carveShapes(base: Job, geometry: CamGeometry | null, fonts: FontSet, op: VCarveOp) {
   const ctx = camContext(base, geometry, fonts);
-  const all = plugShapeLoops(resolveGeometry(op, ctx), ctx.tolerance);
+  const geo = resolveGeometry(op, ctx);
+  const all = plugShapeLoops(geo, ctx.tolerance);
   if (!all.length) throw new InlayError(`${op.name} has no closed outlines to inlay`);
   const others = op.geometry.filter((g) => g.kind !== 'text');
   const drawn = others.length ? plugShapeLoops(resolveGeometry({ ...op, geometry: others }, ctx), ctx.tolerance) : [];
-  return { ctx, all, drawn };
+  // the V-carve cuts each shape on its own, but the plug follows their union: where shapes overlap, the pocket is smaller than the plug
+  // (an island that crosses its outline, which is how overlapping drawn paths can resolve, counts as an overlap too)
+  let overlap = false;
+  const regions = geo.shapes.map((sh) => {
+    const [outer, ...islands] = shapePolys(sh.shape, ctx.tolerance);
+    const region = differencePolys([outer], islands);
+    if (Math.abs(polysArea([outer, ...islands]) - polysArea(region)) > OVERLAP_AREA) overlap = true;
+    return region;
+  });
+  if (regions.reduce((sum, r) => sum + polysArea(r), 0) - polysArea(unionPolys(regions.flat())) > OVERLAP_AREA) overlap = true;
+  return { ctx, all, drawn, overlap };
 }
 
 const boardFor = (b: { w: number; h: number }, margin: number, H: number) => ({ x: b.w + 2 * margin, y: b.h + 2 * margin, z: H + 2 });
@@ -70,6 +88,22 @@ const boardFor = (b: { w: number; h: number }, margin: number, H: number) => ({ 
 export function defaultPlugBoard(base: Job, geometry: CamGeometry | null, vcarveId: string, fonts: FontSet, margin: number, H: number): { x: number; y: number; z: number } {
   const b = boundsOf(carveShapes(base, geometry, fonts, findCarve(base, vcarveId)).all);
   return boardFor(b, margin, H);
+}
+
+/**
+ * Whether a plug board (a stored one, say) still holds the plug: its X and Y hold the walls M ⊕ S·tan(α) of the V-carve's
+ * current shapes, and it is at least H thick. Throws an InlayError when the V-carve has no closed outlines.
+ */
+export function plugBoardFits(
+  base: Job, geometry: CamGeometry | null, vcarveId: string, fonts: FontSet, board: { x: number; y: number; z: number },
+  settings: Pick<MakeInlayInput, 'inlayDepth' | 'startDepth' | 'glueGap'>,
+): boolean {
+  const carve = findCarve(base, vcarveId);
+  const vbit = base.tools.find((t) => t.id === carve.toolId);
+  const R = vbit?.type === 'vbit' ? settings.startDepth * Math.tan((vbit.tipAngleDeg * Math.PI) / 360) : 0;
+  const b = boundsOf(carveShapes(base, geometry, fonts, carve).all);
+  const H = settings.inlayDepth - settings.glueGap + settings.startDepth;
+  return board.x >= b.w + 2 * R - 1e-9 && board.y >= b.h + 2 * R - 1e-9 && board.z >= H - 1e-9;
 }
 
 function checkSettings(tool: Tool | undefined, input: MakeInlayInput): void {
@@ -93,13 +127,18 @@ export function makePlugJob(
   const { inlayDepth: D, startDepth: S, glueGap: g } = input;
   const H = D - g + S;
   if (existing && !existing.job.operations.some((o) => o.type === 'vplug')) throw new InlayError('This job is not a plug job');
-  const clearTool = input.clearingToolId === null ? null : base.tools.find((t) => t.id === input.clearingToolId) ?? null;
-  if (input.clearingToolId !== null && !clearTool) throw new InlayError('The clearing tool is not in the job');
+  if (input.clearingToolId !== null && !base.tools.some((t) => t.id === input.clearingToolId)) throw new InlayError('The clearing tool is not in the job');
+  // spec §4: the plug is cleared with the base clearing's tool when no tool is given
+  const baseClearing = base.operations.find((o) => o.enabled && o.type === 'vclear' && o.sourceId === vcarveId);
+  const clearToolId = input.clearingToolId ?? baseClearing?.toolId ?? null;
+  const clearTool = clearToolId === null ? null : base.tools.find((t) => t.id === clearToolId) ?? null;
 
-  const { ctx, all, drawn } = carveShapes(base, geometry, fonts, carve);
+  const { ctx, all, drawn, overlap } = carveShapes(base, geometry, fonts, carve);
   const box = boundsOf(all);
   const plugBoard = input.plugBoard ?? boardFor(box, input.margin, H);
   if (plugBoard.z < H) throw new InlayError(`The plug board is thinner than the plug (${H.toFixed(2)} mm)`);
+  if (plugBoard.x < box.w - 1e-9 || plugBoard.y < box.h - 1e-9) throw new InlayError(`The plug board is smaller than the shapes (${box.w.toFixed(2)} × ${box.h.toFixed(2)} mm)`);
+  const warnings = overlap ? [`Shapes of ${carve.name} overlap; the plug follows their union, so it will not fit where they overlap`] : [];
 
   // base commands
   const baseCmds: JobCommand[] = [{
@@ -214,5 +253,5 @@ export function makePlugJob(
     ]);
     job = applyCommands(job, addClearingCommands(job, PLUG_ID, clearTool?.id ?? null, PLUG_CLEAR_ID));
   }
-  return { base: baseCmds, plug: { job, blobs: outBlobs }, H, plugBoard };
+  return { base: baseCmds, plug: { job, blobs: outBlobs }, H, plugBoard, warnings };
 }
