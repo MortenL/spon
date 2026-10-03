@@ -92,6 +92,8 @@ test('make an inlay from a V-carve, open the plug job, then update it', async ({
   const baseStatuses = await generatedStatuses(page);
   // the clearing is the first row: a 3 mm flat mill cannot reach the letters' narrow corners, which is a warning, not an error
   expect(baseStatuses).toEqual(['warning', 'ok']);
+  await openPanel(page, 'operations');
+  await expect(opRows(page).first().getByTestId('op-problem')).toHaveText(/^The tool cannot reach \d+ area\(s\) of this pocket$/);
 
   // open the plug job (the base job is replaced after accepting the discard confirmation)
   await page.getByTestId('open-input').setInputFiles({ name: plug.suggestedFilename(), mimeType: 'application/octet-stream', buffer: plugBytes });
@@ -111,6 +113,7 @@ test('make an inlay from a V-carve, open the plug job, then update it', async ({
   await openPanel(page, 'operations');
   await expect(opRows(page).first()).toContainText('clearing');
   await expect(opRows(page).last()).toContainText('V-carve plug');
+  await expect(opRows(page).first().getByTestId('op-problem')).toHaveText(/^The tool cannot reach \d+ area\(s\) of this pocket$/);
   const gcode = page.waitForEvent('download');
   await openPanel(page, 'programs');
   await page.getByTestId('export-gcode').click();
@@ -161,4 +164,8 @@ test('update an inlay after the text changes: the plug file is replaced with one
   await openPanel(page, 'text');
   await expect(textRows(page)).toHaveCount(1);
   await expect(textRows(page).first()).toContainText('SIGN');
+  await openPanel(page, 'operations');
+  await expect(opRows(page)).toHaveCount(2);
+  await expect(opRows(page).filter({ hasText: /clearing/i })).toHaveCount(1);
+  await expect(opRows(page).filter({ hasText: 'V-carve plug' })).toHaveCount(1);
 });
