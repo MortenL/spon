@@ -50,6 +50,8 @@ export * from './cam/features/resolve';
 export * from './cam/features/describe';
 export * from './job/commands';
 export * from './text/types';
+export * from './text/fonts';
+export * from './text/hershey';
 export * from './geometry/offset/pathOps';
 export * from './geometry/offset/clipper';
 export * from './geometry/offset/arcFit';
