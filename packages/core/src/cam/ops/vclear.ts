@@ -5,7 +5,7 @@ import type { CamContext } from '../context';
 import type { ResolvedShape } from '../features/resolve';
 import { resolveGeometry } from '../features/resolve';
 import { resolveHeights } from '../heights';
-import { plugFloor } from '../inlay/plugStrokes';
+import { plugFloor, plugWallRegions } from '../inlay/plugStrokes';
 import type { CamCode, CamSeverity, PocketOp, VClearOp } from '../types';
 import { emptyOverlays, type OpOutput } from './output';
 import { pocketToolpath } from './pocket';
@@ -81,7 +81,7 @@ export function vclearToolpath(op: VClearOp, tool: Tool, ctx: CamContext): OpOut
     }
     const { min, max } = ctx.stock;
     // the walls' footprint M ⊕ R is what stays; everything else of the stock is floor
-    const floor = plugFloor({ minX: min.x, minY: min.y, maxX: max.x, maxY: max.y }, plugShapeLoops(srcGeo, tol), S * tanHalf, tol);
+    const floor = plugFloor({ minX: min.x, minY: min.y, maxX: max.x, maxY: max.y }, plugWallRegions(plugShapeLoops(srcGeo, tol), S * tanHalf, tol));
     for (const reg of polysToRegions(floor)) {
       if (Math.abs(polyArea(reg.outer)) > 0) inset.push(regionShape(reg, first.z, first.ref));
     }

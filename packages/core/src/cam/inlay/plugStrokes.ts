@@ -9,10 +9,10 @@ export function plugWallRegions(polys: Vec2[][], R: number, tol: number): Region
   return polysToRegions(offsetPolys(polys, R, tol / 8));
 }
 
-/** Clarification 2: the plug's floor, the board rectangle (program coordinates) minus the walls' footprint M ⊕ R. */
-export function plugFloor(board: { minX: number; minY: number; maxX: number; maxY: number }, polys: Vec2[][], R: number, tol: number): Poly[] {
+/** Clarification 2: the plug's floor, the board rectangle (program coordinates) minus the walls' footprint M ⊕ R (`walls`, from plugWallRegions). */
+export function plugFloor(board: { minX: number; minY: number; maxX: number; maxY: number }, walls: readonly Region[]): Poly[] {
   const rect = [{ x: board.minX, y: board.minY }, { x: board.maxX, y: board.minY }, { x: board.maxX, y: board.maxY }, { x: board.minX, y: board.maxY }];
-  return differencePolys([rect], plugWallRegions(polys, R, tol).flatMap((r) => [r.outer, ...r.holes]));
+  return differencePolys([rect], walls.flatMap((r) => [r.outer, ...r.holes]));
 }
 
 /**

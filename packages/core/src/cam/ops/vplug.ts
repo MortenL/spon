@@ -64,14 +64,15 @@ export function vplugToolpath(op: VPlugOp, tool: Tool, ctx: CamContext, geo: Res
   const strokes = plugStrokes(M, { top: h.top, t, D, S, g, spacing: s, tol });
   if (ctx.stock) {
     const board = { minX: ctx.stock.min.x, minY: ctx.stock.min.y, maxX: ctx.stock.max.x, maxY: ctx.stock.max.y };
-    const off = plugWallRegions(M, R, tol).some((r) => r.outer.some((p) => p.x < board.minX - tol || p.x > board.maxX + tol || p.y < board.minY - tol || p.y > board.maxY + tol));
+    const walls = plugWallRegions(M, R, tol);
+    const off = walls.some((r) => r.outer.some((p) => p.x < board.minX - tol || p.x > board.maxX + tol || p.y < board.minY - tol || p.y > board.maxY + tol));
     if (off) diag('warning', 'plug-board-small', 'The plug walls run off the plug board');
     // the floor the clearing tools can't reach (narrow wedges and tips between the walls): any point within R of a pass at H is
     // cut at least D − g deep, which keeps it clear of the base board around the pocket
     const tools = linkedClearingTools(ctx.job, op.id);
     if (tools.length) {
       const corner = Math.max(...tools.map((x) => x.diameter / 2)) + 0.05;
-      const residue = dropBoardCorners(floorResidue(plugFloor(board, M, R, tol), tools, tol), board, corner);
+      const residue = dropBoardCorners(floorResidue(plugFloor(board, walls), tools, tol), board, corner);
       strokes.push(...residuePasses(residue, h.top - H, R, tol));
     }
   }
