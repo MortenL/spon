@@ -1,8 +1,8 @@
 import { differencePolys, polysToRegions, type Region } from '../../geometry/offset/clipper';
-import { orientPath, pathFromPoints, polyArea } from '../../geometry/offset/pathOps';
+import { flattenPath, orientPath, pathFromPoints, polyArea } from '../../geometry/offset/pathOps';
 import type { Tool } from '../../tools/types';
 import type { CamContext } from '../context';
-import type { ResolvedGeometry, ResolvedShape } from '../features/resolve';
+import type { ResolvedShape } from '../features/resolve';
 import { resolveGeometry } from '../features/resolve';
 import { resolveHeights } from '../heights';
 import { plugWallRegions } from '../inlay/plugStrokes';
@@ -98,7 +98,30 @@ export function vclearToolpath(op: VClearOp, tool: Tool, ctx: CamContext): OpOut
       bottom: { ...source.heights.top, offset: source.heights.top.offset - depth },
     },
   } as PocketOp;
-  const geo: ResolvedGeometry = { ...srcGeo, diagnostics: [], shapes: inset };
-  const res = pocketToolpath(pocket, tool, ctx, geo);
-  return { ...res, diagnostics: res.diagnostics.map((d) => ({ ...d, operationId: op.id })) };
+  // The floor areas are cut one by one: an area the tool does not fit in is left (a warning) as long as another area is cleared.
+  const cut: OpOutput[] = [];
+  const tooSmall: { shape: ResolvedShape; res: OpOutput }[] = [];
+  for (const shape of inset) {
+    const res = pocketToolpath(pocket, tool, ctx, { ...srcGeo, diagnostics: [], shapes: [shape] });
+    if (res.diagnostics.length === 1 && res.diagnostics[0].code === 'offset-collapsed') tooSmall.push({ shape, res });
+    else cut.push(res);
+  }
+  if (!cut.length) return { ...tooSmall[0].res, diagnostics: tooSmall.flatMap((x) => x.res.diagnostics).map((d) => ({ ...d, operationId: op.id })) };
+  const first = cut[0];
+  const moves = cut.flatMap((r) => r.toolpath?.moves ?? []);
+  const merged: OpOutput = {
+    ...first,
+    toolpath: first.toolpath && moves.length ? { ...first.toolpath, moves } : null,
+    diagnostics: cut.flatMap((r) => r.diagnostics),
+    overlays: {
+      ...first.overlays,
+      tabs: cut.flatMap((r) => r.overlays.tabs), laps: cut.flatMap((r) => r.overlays.laps), gouges: cut.flatMap((r) => r.overlays.gouges),
+      unmachined: [
+        ...cut.flatMap((r) => r.overlays.unmachined),
+        ...tooSmall.map(({ shape }) => ({ regions: [{ outer: flattenPath(shape.shape.outer, tol), holes: shape.shape.islands.map((i) => flattenPath(i, tol)) }], z: first.heights?.bottom ?? 0 })),
+      ],
+    },
+  };
+  if (tooSmall.length) merged.diagnostics.push({ operationId: op.id, severity: 'warning', code: 'unmachined-area', message: `The tool does not fit in ${tooSmall.length} area(s) of the floor` });
+  return { ...merged, diagnostics: merged.diagnostics.map((d) => ({ ...d, operationId: op.id })) };
 }

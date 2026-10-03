@@ -292,6 +292,21 @@ describe('V-carve clearing of a plug', () => {
     }
   });
 
+  it('leaves a floor area the tool does not fit in with a warning while clearing the rest', () => {
+    const square = (x0: number, y0: number, w: number): Path2D => pathFromPoints([{ x: x0, y: y0 }, { x: x0 + w, y: y0 }, { x: x0 + w, y: y0 + w }, { x: x0, y: y0 + w }], true);
+    const base = drawingJob([square(0, 0, 30), square(11.5, 11.5, 7)], 'vplug', { inlayDepth: D, startDepth: S, glueGap: g }, v60, stock);
+    const job = applyCommands(base.job, [
+      { type: 'addTool', tool: tool6 },
+      { type: 'addOperation', opType: 'vclear', toolId: 't6', id: 'c' },
+      { type: 'updateOperation', id: 'c', patch: { sourceId: 'o' } as never },
+    ]);
+    const { run, toolpaths } = runPipeline(job, base.geometry as never, programContext(job, base.geometry as never), new PipelineCache(), { date: '2026-01-01' });
+    const c = run.results.find((r) => r.operationId === 'c')!;
+    expect(errs(c)).toEqual([]);
+    expect(c.diagnostics.map((d) => d.message)).toContain('The tool does not fit in 1 area(s) of the floor');
+    expect(toolpaths.find((x) => x.operationId === 'c')).toBeDefined();
+  });
+
   it('reports no-stock when there is no model, leaving the plug alone', () => {
     let job = setStock(createJob(), { mode: 'auto', margin: { xy: 20, zTop: 0, zBottom: 40 } });
     job = applyCommands(job, [
