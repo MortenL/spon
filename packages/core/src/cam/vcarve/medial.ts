@@ -8,9 +8,11 @@ export interface MedialGraph { nodes: MedialNode[]; edges: [number, number][] }
 /**
  * Spec §3.3: the shape's centreline as the circumcentres of the inside Delaunay triangles of its outline samples,
  * joined across shared triangle edges whose two samples are far apart along the outline (or on different outlines),
+ * (`outside`: the circumcentres outside the polygons instead, for the plug's walls),
  * plus an edge from every convex corner to the nearest small node, so corners are reached exactly.
  */
-export function medialGraph(shape: SampledShape, spacing: number): MedialGraph {
+export function medialGraph(shape: SampledShape, spacing: number, opts: { outside?: boolean } = {}): MedialGraph {
+  const keepInside = !opts.outside;
   const { samples, loopLengths } = shape;
   const nodes: MedialNode[] = [];
   const edges: [number, number][] = [];
@@ -26,7 +28,7 @@ export function medialGraph(shape: SampledShape, spacing: number): MedialGraph {
     const x = (a2 * (b.y - c.y) + b2 * (c.y - a.y) + c2 * (a.y - b.y)) / dd;
     const y = (a2 * (c.x - b.x) + b2 * (a.x - c.x) + c2 * (b.x - a.x)) / dd;
     const r = Math.hypot(a.x - x, a.y - y);
-    if (!Number.isFinite(x + y + r) || r <= 0 || !pointInPolys({ x, y }, shape.polys)) continue;
+    if (!Number.isFinite(x + y + r) || r <= 0 || pointInPolys({ x, y }, shape.polys) !== keepInside) continue;
     triNode[t] = nodes.push({ x, y, r }) - 1;
   }
   const along = (i: number, j: number) => {

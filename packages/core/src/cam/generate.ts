@@ -12,6 +12,7 @@ import { pocketToolpath } from './ops/pocket';
 import { profileToolpath } from './ops/profile';
 import { slotToolpath } from './ops/slot';
 import { vcarveToolpath } from './ops/vcarve';
+import { vplugToolpath } from './ops/vplug';
 import { vclearToolpath } from './ops/vclear';
 import type { CamDiagnostic, Operation } from './types';
 
@@ -51,7 +52,7 @@ export function operationKey(op: Operation, job: Job, fonts: FontSet = EMPTY_FON
   if (op.type === 'vclear') {
     const src = job.operations.find((o) => o.id === op.sourceId) ?? null;
     extra = [src, src ? job.tools.find((t) => t.id === src.toolId) ?? null : null];
-  } else if (op.type === 'vcarve') extra = job.operations.some((o) => o.enabled && o.type === 'vclear' && o.sourceId === op.id);
+  } else if (op.type === 'vcarve' || op.type === 'vplug') extra = job.operations.some((o) => o.enabled && o.type === 'vclear' && o.sourceId === op.id);
   // a picked text (and the state of its font) changes the geometry; a clearing also depends on its source's texts
   const texts = textKeys(op, job, fonts);
   if (op.type === 'vclear') {
@@ -78,7 +79,7 @@ export function generateOperation(op: Operation, ctx: CamContext): OperationResu
     // a V-carve clearing builds its own geometry from its source operation
     const geo = op.type === 'vclear' ? emptyGeometry() : resolveGeometry(op.type === 'face' && op.area === 'stock' ? { ...op, geometry: [] } : op, ctx);
     const res =
-      op.type === 'vplug' ? { toolpath: null, diagnostics: [{ operationId: op.id, severity: 'error' as const, code: 'internal' as const, message: 'Not implemented yet' }], heights: null, overlays: emptyOverlays() } satisfies Omit<OperationResult, 'operationId' | 'key'>
+      op.type === 'vplug' ? vplugToolpath(op, tool, ctx, geo)
       : op.type === 'vclear' ? vclearToolpath(op, tool, ctx)
       : op.type === 'profile' ? profileToolpath(op, tool, ctx, geo)
       : op.type === 'pocket' ? pocketToolpath(op, tool, ctx, geo)

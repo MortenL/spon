@@ -1,15 +1,15 @@
 import {
   applyCommands, camContext, type CamGeometry, createJob, drawingPathToProgram, flattenPath, type OperationType, type Path2D, pathsToPoints, PipelineCache,
   type Poly, unionPolys,
-  programContext, runPipeline, setModel, setStock, type Tool, type Toolpath,
+  programContext, runPipeline, setModel, setStock, type Stock, type Tool, type Toolpath,
 } from '../../src';
 import { tool6 } from './camSetup';
 
 /** A drawing job with one operation of `opType` over every path of layer 0 (each path picked once). */
-export function drawingJob(paths: Path2D[], opType: OperationType, patch: Record<string, unknown>, tool: Tool = tool6) {
+export function drawingJob(paths: Path2D[], opType: OperationType, patch: Record<string, unknown>, tool: Tool = tool6, stock?: Stock) {
   const geometry: CamGeometry = { kind: 'drawing', drawing: { layers: [{ name: 'S', color: 0xffffff, paths }] }, rawPoints: pathsToPoints(paths) };
   let job = setModel(createJob(), { sourceName: 's.dxf', blobId: 'd1', kind: 'drawing', importUnits: 'mm' });
-  job = setStock(job, { mode: 'auto', margin: { xy: 20, zTop: 0, zBottom: 40 } });
+  job = setStock(job, stock ?? { mode: 'auto', margin: { xy: 20, zTop: 0, zBottom: 40 } });
   job = applyCommands(job, [
     { type: 'addTool', tool },
     { type: 'addOperation', opType, toolId: tool.id, id: 'o' },

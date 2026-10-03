@@ -70,7 +70,7 @@ export function vcarveToolpath(op: VCarveOp, tool: Tool, ctx: CamContext, geo: R
     for (const st of strokes) for (const p of st.points) shapeDeepest = Math.max(shapeDeepest, h.top - p.z);
     deepest = Math.max(deepest, shapeDeepest);
     if (shapeDeepest <= EPS) continue; // the deepest point is at the surface: nothing to cut
-    emitShape(w, strokes, h, shapeDeepest, op.stepdown, 2 * s, feed, plunge);
+    emitStrokes(w, strokes, h, shapeDeepest, op.stepdown, 2 * s, feed, plunge);
   }
 
   if (deepest > tool.fluteLength + EPS) diag('warning', 'flute-exceeded', `V-carve depth reaches ${deepest.toFixed(2)} mm, beyond the bit's ${tool.fluteLength.toFixed(2)} mm cutting length`);
@@ -83,8 +83,8 @@ export function vcarveToolpath(op: VCarveOp, tool: Tool, ctx: CamContext, geo: R
   return out;
 }
 
-/** One shape's strokes, in depth passes of at most `stepdown` each, each pass visiting the strokes nearest-first. */
-function emitShape(w: MoveWriter, strokes: Stroke[], h: ResolvedHeights, deepest: number, stepdown: number | null, link: number, feed: number, plunge: number): void {
+/** One shape's (or plug's) strokes, in depth passes of at most `stepdown` each, each pass visiting the strokes nearest-first. */
+export function emitStrokes(w: MoveWriter, strokes: Stroke[], h: ResolvedHeights, deepest: number, stepdown: number | null, link: number, feed: number, plunge: number): void {
   if (!strokes.length) return;
   const limits: number[] = [];
   if (stepdown === null || !(stepdown > 0)) limits.push(deepest);
