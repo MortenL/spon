@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { updateText } from '@/state/texts';
 import { appStore, useApp } from '@/state/store';
-import { distanceToLoops, dragPosition, planeHit } from './textDrag';
+import { type DragState, distanceToLoops, dragBegin, dragStep, dragStillValid, loopsBox, nearBox, planeHit, type Box2 } from './textDrag';
 import { noRaycast, type OrbitLike } from './SceneObjects';
 
 const NORMAL_COLOR = '#e7e5e4';
@@ -18,8 +18,6 @@ const CLICK_PX = 4;
 
 type Point3 = readonly [number, number, number];
 
-interface Drag { id: string; start: { x: number; y: number }; hit0: { x: number; y: number }; z: number; offset: { x: number; y: number } | null }
-
 /** Texts from the last generation, drawn at their surface; click selects, dragging the selected one moves it. */
 export function TextObjects() {
   const job = useApp((s) => s.job);
@@ -30,8 +28,8 @@ export function TextObjects() {
   const origin = useMemo(() => programOrigin(job, geometry), [job, geometry]);
   const { gl, camera, controls } = useThree();
   const [hoverId, setHoverId] = useState<string | null>(null);
-  const [drag, setDrag] = useState<Drag | null>(null);
-  const dragRef = useRef<Drag | null>(null);
+  const [drag, setDrag] = useState<DragState | null>(null);
+  const dragRef = useRef<DragState | null>(null);
   const live = useRef({ camTexts, origin, selectedTextId, playing, hoverId });
   live.current = { camTexts, origin, selectedTextId, playing, hoverId };
 
@@ -39,6 +37,7 @@ export function TextObjects() {
     const el = gl.domElement;
     const orbit = () => controls as unknown as OrbitLike | null;
     const raycaster = new THREE.Raycaster();
+    const boxes = new WeakMap<TextSummary, Box2>();
     let down: { x: number; y: number; id: string | null } | null = null;
 
     const rayAt = (e: PointerEvent) => {
@@ -65,6 +64,9 @@ export function TextObjects() {
           ? (2 * camera.position.distanceTo(new THREE.Vector3(hit.x, hit.y, hit.z)) * Math.tan((camera.fov * Math.PI) / 360)) / rect.height
           : 1 / Math.max((camera as THREE.OrthographicCamera).zoom, 1e-6);
         const threshold = Math.max(PICK_MM, PICK_PX * perPx);
+        let box = boxes.get(t);
+        if (!box) boxes.set(t, (box = loopsBox(t.loops)));
+        if (!nearBox(box, p, threshold)) continue;
         const d = distanceToLoops(t.loops, p);
         if (d <= threshold && d < bestD) { bestD = d; best = { id: t.textId, z, point: { x: hit.x, y: hit.y } }; }
       }
@@ -74,11 +76,18 @@ export function TextObjects() {
       const s = appStore.getState();
       return s.pickMode !== 'none' || s.camPick !== null || s.textPick !== null;
     };
-    const endDrag = () => {
-      dragRef.current = null;
-      setDrag(null);
+    const apply = (step: ReturnType<typeof dragStep>) => {
+      dragRef.current = step.state;
+      setDrag(step.state);
       const o = orbit();
-      if (o) o.enabled = true;
+      if (o) o.enabled = step.orbitEnabled;
+    };
+    const releaseCapture = (id: number) => {
+      try { if (el.hasPointerCapture(id)) el.releasePointerCapture(id); } catch { /* already released */ }
+    };
+    const cancel = () => {
+      down = null;
+      apply(dragStep(dragRef.current, { type: 'cancel' }, MIN_MOVE_MM));
     };
 
     const onDown = (e: PointerEvent) => {
@@ -87,19 +96,21 @@ export function TextObjects() {
       down = { x: e.clientX, y: e.clientY, id: hit?.id ?? null };
       const item = hit && hit.id === live.current.selectedTextId ? appStore.getState().job.texts.find((t) => t.id === hit.id) : null;
       if (hit && item) {
-        const o = orbit();
-        if (o) o.enabled = false;
-        dragRef.current = { id: hit.id, start: { x: item.position.x, y: item.position.y }, hit0: hit.point, z: hit.z, offset: null };
-        setDrag(dragRef.current);
+        try { el.setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ }
+        apply(dragBegin(hit.id, { x: item.position.x, y: item.position.y }, hit.point, hit.z));
       }
     };
     const onMove = (e: PointerEvent) => {
       const d = dragRef.current;
       if (d) {
+        const s = appStore.getState();
+        if (!dragStillValid(d, s.job.texts.map((t) => t.id), s.selectedTextId)) {
+          releaseCapture(e.pointerId);
+          cancel();
+          return;
+        }
         const hit = planeHit(rayAt(e), d.z);
-        if (!hit) return;
-        const pos = dragPosition(d.start, d.hit0, hit, MIN_MOVE_MM);
-        setDrag({ ...d, offset: pos ? { x: pos.x - d.start.x, y: pos.y - d.start.y } : null });
+        apply(dragStep(d, { type: 'move', hit }, MIN_MOVE_MM));
         return;
       }
       if (e.buttons !== 0 || picking() || live.current.playing) {
@@ -114,27 +125,37 @@ export function TextObjects() {
       const was = down;
       down = null;
       if (d) {
-        const hit = planeHit(rayAt(e), d.z);
-        const pos = hit ? dragPosition(d.start, d.hit0, hit, MIN_MOVE_MM) : null;
-        endDrag();
-        if (pos) updateText(d.id, { position: pos });
+        releaseCapture(e.pointerId);
+        const s = appStore.getState();
+        const valid = dragStillValid(d, s.job.texts.map((t) => t.id), s.selectedTextId);
+        const step = dragStep(d, valid ? { type: 'up', hit: planeHit(rayAt(e), d.z) } : { type: 'cancel' }, MIN_MOVE_MM);
+        apply(step);
+        if (step.commit) updateText(d.id, { position: step.commit });
         return;
       }
       if (!was || was.id === null || picking() || live.current.playing) return;
       if (Math.hypot(e.clientX - was.x, e.clientY - was.y) > CLICK_PX) return;
       appStore.getState().selectText(was.id);
     };
+    const onCancel = (e: PointerEvent) => {
+      releaseCapture(e.pointerId);
+      cancel();
+    };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && dragRef.current) endDrag();
+      if (e.key === 'Escape') cancel();
     };
     el.addEventListener('pointerdown', onDown, { capture: true });
     el.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onCancel);
+    window.addEventListener('blur', cancel);
     window.addEventListener('keydown', onKey);
     return () => {
       el.removeEventListener('pointerdown', onDown, { capture: true });
       el.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onCancel);
+      window.removeEventListener('blur', cancel);
       window.removeEventListener('keydown', onKey);
       const o = orbit();
       if (o) o.enabled = true;

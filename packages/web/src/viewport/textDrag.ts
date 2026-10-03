@@ -36,3 +36,42 @@ export function distanceToLoops(loops: readonly { points: readonly Vec2[]; close
   }
   return best;
 }
+
+export interface DragState { id: string; start: Vec2; hit0: Vec2; z: number; offset: Vec2 | null }
+export type DragEvent = { type: 'move' | 'up'; hit: Vec2 | null } | { type: 'cancel' };
+export interface DragStep { state: DragState | null; /** the position to commit (stock coordinates), when the drag ended with a move */ commit: Vec2 | null; orbitEnabled: boolean }
+
+export function dragBegin(id: string, start: Vec2, hit0: Vec2, z: number): DragStep {
+  return { state: { id, start, hit0, z, offset: null }, commit: null, orbitEnabled: false };
+}
+
+/** The drag state machine: move updates the shown offset, up commits once, cancel (Escape, pointercancel, blur, lost text) never commits. No drag: nothing happens. */
+export function dragStep(state: DragState | null, event: DragEvent, minMove: number): DragStep {
+  if (!state) return { state: null, commit: null, orbitEnabled: true };
+  if (event.type === 'cancel') return { state: null, commit: null, orbitEnabled: true };
+  const pos = event.hit ? dragPosition(state.start, state.hit0, event.hit, minMove) : null;
+  if (event.type === 'up') return { state: null, commit: pos, orbitEnabled: true };
+  if (!event.hit) return { state, commit: null, orbitEnabled: false };
+  return { state: { ...state, offset: pos ? { x: pos.x - state.start.x, y: pos.y - state.start.y } : null }, commit: null, orbitEnabled: false };
+}
+
+/** Whether a drag's text still exists and is still the selected one. */
+export const dragStillValid = (state: DragState, textIds: readonly string[], selectedId: string | null): boolean =>
+  selectedId === state.id && textIds.includes(state.id);
+
+export interface Box2 { minX: number; minY: number; maxX: number; maxY: number }
+
+export function loopsBox(loops: readonly { points: readonly Vec2[] }[]): Box2 {
+  const b = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+  for (const l of loops) for (const q of l.points) {
+    if (q.x < b.minX) b.minX = q.x;
+    if (q.x > b.maxX) b.maxX = q.x;
+    if (q.y < b.minY) b.minY = q.y;
+    if (q.y > b.maxY) b.maxY = q.y;
+  }
+  return b;
+}
+
+/** Does the point lie inside the box grown by margin? */
+export const nearBox = (b: Box2, p: Vec2, margin: number): boolean =>
+  p.x >= b.minX - margin && p.x <= b.maxX + margin && p.y >= b.minY - margin && p.y <= b.maxY + margin;
