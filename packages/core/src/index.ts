@@ -91,3 +91,4 @@ export * from './cam/features/slots';
 export * from './cam/ops/slotEnds';
 export * from './cam/ops/slotPaths';
 export * from './cam/ops/slot';
+export * from './cam/ops/engrave';

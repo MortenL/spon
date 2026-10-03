@@ -78,6 +78,7 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
     const r = face(faceRef);
     if (!r.ok) return fail(i, r.code, r.message);
     const f = r.face;
+    if (g.kind === 'meshSlot' && op.type === 'engrave') return fail(i, 'wrong-geometry', 'Engraving needs lines or outlines');
     if (g.kind === 'meshSlot' || op.type === 'slot') {
       if (g.kind !== 'meshSlot') return fail(i, 'wrong-geometry', 'Slots need a centreline or a recognised slot');
       if (op.type !== 'slot') return fail(i, 'wrong-geometry', 'A recognised slot can only be cut by a Slot operation');
@@ -88,9 +89,10 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
       return;
     }
     if (g.kind === 'meshFace') {
-      if (op.type !== 'drill' && op.type !== 'pocket') usesLoops(f, [0]);
-      if (op.type === 'pocket') usesLoops(f, f.loops.keys());
-      if (op.type === 'profile') out.contours.push({ path: f.loops[0], z: f.z, ref: i });
+      if (op.type !== 'drill' && op.type !== 'pocket' && op.type !== 'engrave') usesLoops(f, [0]);
+      if (op.type === 'pocket' || op.type === 'engrave') usesLoops(f, f.loops.keys());
+      if (op.type === 'engrave') f.loops.forEach((path, k) => out.contours.push({ path, z: f.z, ref: i, kind: k === 0 ? 'outer' : 'inner' }));
+      else if (op.type === 'profile') out.contours.push({ path: f.loops[0], z: f.z, ref: i });
       else if (op.type === 'chamfer') out.contours.push({ path: f.loops[0], z: f.z, ref: i, kind: 'outer' });
       else if (op.type === 'face') out.shapes.push({ shape: { outer: f.loops[0], islands: [] }, z: f.z, ref: i });
       else if (op.type === 'pocket') out.shapes.push({ shape: { outer: f.loops[0], islands: f.loops.slice(1) }, z: f.z, ref: i });
@@ -99,13 +101,14 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
     }
     const path = f.loops[g.loop];
     if (!path) return fail(i, 'ref-missing', 'The picked edge loop no longer exists');
+    if (op.type === 'engrave' && g.kind === 'meshHole') return fail(i, 'wrong-geometry', 'Engraving needs lines or outlines');
     if (g.kind === 'meshHole' && op.type === 'face') return fail(i, 'open-contour', 'Facing needs closed areas');
     if (g.kind === 'meshHole' || op.type === 'drill') {
       if (!holeFromLoop(f, g.loop, i)) fail(i, 'ref-changed', 'The picked loop is not a round hole');
       return;
     }
     usesLoops(f, [g.loop]);
-    if (op.type === 'profile') out.contours.push({ path, z: f.z, ref: i });
+    if (op.type === 'profile' || op.type === 'engrave') out.contours.push({ path, z: f.z, ref: i });
     else if (op.type === 'chamfer') out.contours.push({ path, z: f.z, ref: i, kind: g.loop === 0 ? 'outer' : 'inner' });
     else out.shapes.push({ shape: { outer: orientPath(path, true), islands: [] }, z: f.z, ref: i });
   });
@@ -132,7 +135,7 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
           });
           out.slots.push(slot(reversed ? reversePath(path) : path, dxf[openSeeds[k]].ref, openMembers[k].map((m) => dxf[m].ref)));
         });
-      } else if (op.type === 'profile' || op.type === 'chamfer') {
+      } else if (op.type === 'profile' || op.type === 'chamfer' || op.type === 'engrave') {
         const chamfer = op.type === 'chamfer';
         for (const path of closed) {
           const c = chamfer ? circleOf(path) : null;
