@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { camContext, createJob, flattenPath, newOperation, pathFromPoints, setStock, vplugToolpath, type Path2D, type VPlugOp } from '../src';
+import {
+  applyCommands, camContext, createJob, flattenPath, newOperation, pathFromPoints, PipelineCache, programContext, runPipeline, setStock, vplugToolpath, type Path2D, type VPlugOp,
+} from '../src';
 import { cutMoves, geoOf, rectPath, tool6 } from './fixtures/camSetup';
 import { drawingJob } from './fixtures/vcarveSetup';
 
@@ -155,5 +157,24 @@ describe('V-carve plug', () => {
     const run = (z2: number) => vplugToolpath(op, v60, ctx, geoOf({ shapes: [{ shape: shape(0), z: 0, ref: 0 }, { shape: shape(20), z: z2, ref: 1 }] }));
     expect(run(-1).diagnostics).toContainEqual(expect.objectContaining({ severity: 'warning', code: 'wrong-geometry', message: "The plug's shapes are at different heights; all are cut at the first one's height" }));
     expect(run(0).diagnostics.filter((d) => d.code === 'wrong-geometry')).toEqual([]);
+  });
+});
+
+describe('V-carve plug golden G-code', () => {
+  it('posts a 20 x 10 rectangle plug with its clearing (spec §9)', async () => {
+    const stock = { mode: 'fixed' as const, size: { x: 40, y: 30, z: 8 }, modelOffset: { x: 10, y: 10, z: 0 } };
+    const base = drawingJob([rectPath(0, 0, 20, 10)], 'vplug', { inlayDepth: D, startDepth: S, glueGap: g }, { ...v60, name: '60 degree V-bit' }, stock);
+    const job = applyCommands(base.job, [
+      { type: 'addTool', tool: tool6 },
+      { type: 'addOperation', opType: 'vclear', toolId: 't6', id: 'c' },
+      { type: 'updateOperation', id: 'c', patch: { sourceId: 'o' } },
+      { type: 'moveOperation', id: 'c', delta: -1 },
+    ]);
+    const { run } = runPipeline(job, base.geometry as never, programContext(job, base.geometry as never), new PipelineCache(), { date: '2026-01-01' });
+    expect(run.results.flatMap((r) => r.diagnostics.filter((d) => d.severity === 'error'))).toEqual([]);
+    // one file per tool (clearing, then plug), joined for one golden file
+    expect(run.files).toHaveLength(2);
+    await expect(run.files.map((f) => `(file ${f.name})
+${f.text}`).join('')).toMatchFileSnapshot('./fixtures/vplug-rectangle.nc');
   });
 });
