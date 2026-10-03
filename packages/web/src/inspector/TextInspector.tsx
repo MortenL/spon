@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { LengthField, NumericField } from '@/panels/NumericField';
 import { appStore, useApp } from '@/state/store';
-import { FONT_EXTENSIONS, registerFontFile, stockCentre, updateText } from '@/state/texts';
+import { FONT_EXTENSIONS, registerFontFile, stockCentre, straightInkWidth, updateText } from '@/state/texts';
 import { fontFromValue, fontGroups, fontValue, LOAD_FONT_VALUE } from './textFonts';
 
 const SELECT = 'h-8 rounded-md border bg-transparent px-2 text-sm';
@@ -74,10 +74,6 @@ function TextInspectorBody({ text }: { text: TextItem }) {
     if (draftText !== text.text) patch({ text: draftText });
   };
 
-  const inkWidth = (() => {
-    const xs = (summary?.loops ?? []).flatMap((l) => l.points.map((p) => p.x));
-    return xs.length ? Math.max(...xs) - Math.min(...xs) : 0;
-  })();
 
   const centreOnStock = () => {
     const centre = stockCentre(job, geometry);
@@ -179,7 +175,14 @@ function TextInspectorBody({ text }: { text: TextItem }) {
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox" data-testid="text-fit-on" className="accent-primary" checked={text.fit !== null}
-              onChange={(e) => patch({ fit: e.target.checked ? { width: inkWidth > 0 ? inkWidth : 100, height: null } : null })}
+              onChange={(e) => {
+                if (!e.target.checked) {
+                  patch({ fit: null });
+                  return;
+                }
+                // the width of the straight layout, so rotation and arc do not inflate it; 100 when unknown
+                void straightInkWidth(text).then((w) => patch({ fit: { width: w !== null && w > 0 ? w : 100, height: null } }));
+              }}
             />
             Fit to box
           </label>

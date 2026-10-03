@@ -350,8 +350,10 @@ export async function restoreAutosave(): Promise<void> {
     try {
       const data = await getBlob(t.font.blobId);
       if (data) fontBytes[t.font.blobId] = data;
+      else toast.warning(`The font file for ${t.name} is missing`);
     } catch (err) {
       console.error('Could not read an autosaved font', err);
+      toast.warning(`The font file for ${t.name} is missing`);
     }
   }
   if (missing.length) {

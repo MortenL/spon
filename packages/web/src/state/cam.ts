@@ -84,7 +84,7 @@ export async function regenerate(): Promise<void> {
   const { job, geometry } = s;
   if (!job.operations.length && !job.texts.length) {
     latest = { job, geometry, run: EMPTY_RUN };
-    if (s.generatedPrograms.length || Object.keys(s.camResults).length) s.setCamOutput(EMPTY_CAM_OUTPUT);
+    if (s.generatedPrograms.length || Object.keys(s.camResults).length || s.camTexts.length) s.setCamOutput(EMPTY_CAM_OUTPUT);
     else s.setCamStatus('idle');
     return;
   }

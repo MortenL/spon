@@ -6,7 +6,7 @@ vi.mock('../workers/importClient', () => ({ importInWorker: vi.fn(), cadReaderLo
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), warning: vi.fn(), success: vi.fn(), info: vi.fn() }) }));
 
 const { clearAutosave, getBlob } = await import('./autosave');
-const { addTextCentred, addTextOperation, duplicateText, registerFontFile } = await import('./texts');
+const { addTextCentred, addTextOperation, duplicateText, registerFontFile, removeText, straightInkWidth } = await import('./texts');
 const { pruneBlobs } = await import('./programs');
 const { sponBytesForSave } = await import('./documents');
 const { appStore } = await import('./store');
@@ -25,6 +25,8 @@ function fresh() {
 }
 
 describe('texts in the store', () => {
+  vi.stubGlobal('requestAnimationFrame', (cb: () => void) => { cb(); return 0; });
+  vi.stubGlobal('document', { querySelectorAll: () => [], querySelector: () => null });
   beforeEach(async () => {
     await clearAutosave();
     fresh();
@@ -110,5 +112,57 @@ describe('texts in the store', () => {
     expect(s().job.texts[0].font).toEqual(font);
     expect(s().fontBytes[font.blobId]).toEqual(testFontBytes());
     expect(await getBlob(font.blobId)).toEqual(testFontBytes());
+  });
+
+  it('keeps a registered font until a text uses it, even across a prune', async () => {
+    const font = await registerFontFile('Test.ttf', testFontBytes());
+    const t = addTextCentred()!;
+    await pruneBlobs();
+    expect(s().fontBytes[font.blobId]).toBeDefined();
+    expect(await getBlob(font.blobId)).toBeDefined();
+    s().dispatch({ type: 'updateText', id: t, patch: { font } });
+    await pruneBlobs();
+    expect(s().fontBytes[font.blobId]).toBeDefined();
+    expect(s().pendingFontIds).toEqual([]);
+  });
+
+  it('a no-op prune keeps the fontBytes object', async () => {
+    const font = await registerFontFile('Test.ttf', testFontBytes());
+    const t = addTextCentred()!;
+    s().dispatch({ type: 'updateText', id: t, patch: { font } });
+    const before = s().fontBytes;
+    await pruneBlobs();
+    expect(s().fontBytes).toBe(before);
+  });
+
+  it('removing a text only deselects it when it is the selected one', () => {
+    const a = addTextCentred()!;
+    const b = addTextCentred()!;
+    s().selectText(b);
+    removeText(a);
+    expect(s().selectedTextId).toBe(b);
+    removeText(b);
+    expect(s().selectedTextId).toBeNull();
+  });
+
+  it('clears the selection and face pick when the text is gone (undo of an add, removal by Claude)', () => {
+    const a = addTextCentred()!;
+    s().setTextPick(a);
+    s().undo();
+    expect(s().selectedTextId).toBeNull();
+    expect(s().textPick).toBeNull();
+    const b = addTextCentred()!;
+    s().dispatch({ type: 'removeText', id: b }); // as the live bridge does
+    expect(s().selectedTextId).toBeNull();
+  });
+
+  it('measures the straight ink width, unaffected by rotation, arc and fit', async () => {
+    const plain = addTextCentred()!;
+    const item = s().job.texts.find((x) => x.id === plain)!;
+    const w = (await straightInkWidth(item))!;
+    expect(w).toBeGreaterThan(5);
+    const twisted = { ...item, angle: 45, arc: { radius: 20, side: 'outside' as const }, mirror: true, fit: { width: 3, height: null } };
+    expect(await straightInkWidth(twisted)).toBeCloseTo(w, 6);
+    expect(await straightInkWidth({ ...item, font: { kind: 'file', blobId: 'nope', name: 'x.ttf' } })).toBeNull();
   });
 });

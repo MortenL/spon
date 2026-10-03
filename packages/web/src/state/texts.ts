@@ -1,5 +1,5 @@
 import {
-  BUNDLED_FONTS, CommandError, type FontRef, type Job, type JobCommand, type OperationType, parseFontFile, placementFor, stockBox, type TextItem, type Tool, type Vec2,
+  BUNDLED_FONTS, CommandError, type FontRef, type Job, type JobCommand, layoutText, loadBundledFont, type LoadedFont, type OperationType, parseFontFile, placementFor, stockBox, type TextItem, type Tool, type Vec2,
 } from '@sponcam/core';
 import { toast } from 'sonner';
 import { storeBlob } from './programs';
@@ -65,7 +65,7 @@ export function moveText(id: string, delta: -1 | 1): void {
 export function removeText(id: string): void {
   const index = state().job.texts.findIndex((t) => t.id === id);
   if (!run([{ type: 'removeText', id }])) return;
-  state().selectText(null);
+  if (state().selectedTextId === id) state().selectText(null);
   requestAnimationFrame(() => {
     const next = document.querySelectorAll<HTMLElement>('[data-testid="text-menu"]')[index];
     (next ?? document.querySelector<HTMLElement>('[data-testid="text-add"]'))?.focus();
@@ -85,6 +85,26 @@ export function suitableJobTool(type: TextOperationType, tools: readonly Tool[])
   if (type === 'vcarve') return tools.find((t) => t.type === 'vbit') ?? null;
   if (type === 'engrave') return tools.find((t) => t.type === 'vbit') ?? tools.find(flat) ?? null;
   return tools.find(flat) ?? null;
+}
+
+/**
+ * The ink width of a text's straight layout (no rotation, arc, mirror or fit), laid out on the main thread;
+ * null when its font can't be loaded or nothing is drawn.
+ */
+export async function straightInkWidth(item: TextItem, fontBytes: Readonly<Record<string, Uint8Array>> = state().fontBytes): Promise<number | null> {
+  let font: LoadedFont;
+  try {
+    if (item.font.kind === 'bundled') font = await loadBundledFont(item.font.id);
+    else {
+      const bytes = fontBytes[item.font.blobId];
+      if (!bytes) return null;
+      font = parseFontFile(bytes, item.font.name);
+    }
+  } catch {
+    return null;
+  }
+  const layout = layoutText({ ...item, angle: 0, arc: null, mirror: false, fit: null }, font, 0.05);
+  return layout.bounds ? layout.bounds.max.x - layout.bounds.min.x : null;
 }
 
 /** Adds a V-carve, engrave or pocket operation picking this text, as one undo step, and selects it. */

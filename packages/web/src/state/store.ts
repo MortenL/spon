@@ -85,6 +85,8 @@ export interface AppState {
   programData: Record<string, ProgramData>;
   /** Original bytes of uploaded fonts by blobId (saved into .spon files). */
   fontBytes: Record<string, Uint8Array>;
+  /** Font blob ids registered but not yet used by any text; pruning keeps them until a text references them. */
+  pendingFontIds: string[];
   activeProgramId: string | null;
   selectedLine: number | null;
   /** Global timeline position, seconds. */
@@ -129,7 +131,9 @@ export interface AppState {
   setBusy(message: string | null): void;
   setProgramBytes(blobId: string, bytes: Uint8Array): void;
   setProgramData(blobId: string, data: ProgramData): void;
+  /** Stores uploaded font bytes; the blob stays safe from pruning until a text references it or the document is replaced. */
   addFontBytes(blobId: string, bytes: Uint8Array): void;
+  setPendingFontIds(ids: string[]): void;
   /** Drops programBytes/programData entries for blobs no longer referenced (see referencedBlobIds). */
   pruneProgramData(keepIds: readonly string[]): void;
   setActiveProgram(id: string | null): void;
@@ -155,6 +159,15 @@ function activeProgramIdFor(programs: readonly ProgramRef[], activeProgramId: st
   return programs[0]?.id ?? null;
 }
 
+/** Clears the text selection and face pick when the text they name is no longer in the job (undo of an add, a removal by Claude). */
+function textSelectionFor(job: Job, s: Pick<AppState, 'selectedTextId' | 'textPick'>): Partial<Pick<AppState, 'selectedTextId' | 'textPick'>> {
+  const gone = (id: string | null) => id !== null && !job.texts.some((t) => t.id === id);
+  return {
+    ...(gone(s.selectedTextId) ? { selectedTextId: null } : {}),
+    ...(gone(s.textPick) ? { textPick: null } : {}),
+  };
+}
+
 export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState> {
   return createStore<AppState>()((set, get) => ({
     job: initialJob,
@@ -177,6 +190,7 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
     programBytes: {},
     programData: {},
     fontBytes: {},
+    pendingFontIds: [],
     activeProgramId: null,
     selectedLine: null,
     playhead: 0,
@@ -200,7 +214,7 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
       const { job, past } = get();
       const next = update(job);
       if (next === job) return;
-      set({ job: next, past: [...past, job].slice(-UNDO_LIMIT), future: [], dirty: true });
+      set({ job: next, past: [...past, job].slice(-UNDO_LIMIT), future: [], dirty: true, ...textSelectionFor(next, get()) });
     },
     dispatch(command) {
       get().commit((job) => applyCommand(job, command));
@@ -213,7 +227,7 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
       const previous = past.at(-1);
       if (!previous) return;
       set({
-        job: previous, past: past.slice(0, -1), future: [job, ...future], dirty: true,
+        job: previous, past: past.slice(0, -1), future: [job, ...future], dirty: true, ...textSelectionFor(previous, get()),
         activeProgramId: activeProgramIdFor(allPrograms({ job: previous, generatedPrograms }), activeProgramId),
       });
     },
@@ -222,14 +236,14 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
       const [next, ...rest] = future;
       if (!next) return;
       set({
-        job: next, past: [...past, job].slice(-UNDO_LIMIT), future: rest, dirty: true,
+        job: next, past: [...past, job].slice(-UNDO_LIMIT), future: rest, dirty: true, ...textSelectionFor(next, get()),
         activeProgramId: activeProgramIdFor(allPrograms({ job: next, generatedPrograms }), activeProgramId),
       });
     },
     loadDocument(doc) {
       set({
         ...doc, past: [], future: [], pickMode: 'none', hiddenLayers: [], pendingImport: null, pendingBodies: null, pendingScale: null,
-        programData: {}, activeProgramId: doc.job.programs[0]?.id ?? null, selectedLine: null, playhead: 0, playing: false,
+        programData: {}, pendingFontIds: [], activeProgramId: doc.job.programs[0]?.id ?? null, selectedLine: null, playhead: 0, playing: false,
         generatedPrograms: [], camFiles: [], camResults: {}, catalog: null, camTexts: [], selectedOperationId: null, selectedTextId: null, textPick: null, camPick: null,
       });
     },
@@ -272,7 +286,11 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
       set({ programBytes: { ...get().programBytes, [blobId]: bytes } });
     },
     addFontBytes(blobId, bytes) {
-      set({ fontBytes: { ...get().fontBytes, [blobId]: bytes } });
+      const { fontBytes, pendingFontIds } = get();
+      set({ fontBytes: { ...fontBytes, [blobId]: bytes }, pendingFontIds: pendingFontIds.includes(blobId) ? pendingFontIds : [...pendingFontIds, blobId] });
+    },
+    setPendingFontIds(pendingFontIds) {
+      set({ pendingFontIds });
     },
     setProgramData(blobId, data) {
       set({ programData: { ...get().programData, [blobId]: data } });
@@ -280,11 +298,14 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
     pruneProgramData(keepIds) {
       const keep = new Set(keepIds);
       const { programBytes, programData, fontBytes } = get();
-      set({
-        fontBytes: Object.fromEntries(Object.entries(fontBytes).filter(([id]) => keep.has(id))),
-        programBytes: Object.fromEntries(Object.entries(programBytes).filter(([id]) => keep.has(id))),
-        programData: Object.fromEntries(Object.entries(programData).filter(([id]) => keep.has(id))),
-      });
+      // an object is replaced only when an entry is dropped, so a no-op prune does not wake subscribers
+      const kept = <T,>(record: Record<string, T>): Record<string, T> => {
+        const entries = Object.entries(record);
+        const filtered = entries.filter(([id]) => keep.has(id));
+        return filtered.length === entries.length ? record : Object.fromEntries(filtered);
+      };
+      const next = { fontBytes: kept(fontBytes), programBytes: kept(programBytes), programData: kept(programData) };
+      if (next.fontBytes !== fontBytes || next.programBytes !== programBytes || next.programData !== programData) set(next);
     },
     setActiveProgram(activeProgramId) {
       set({ activeProgramId, selectedLine: null });

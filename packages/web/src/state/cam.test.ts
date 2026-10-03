@@ -15,6 +15,7 @@ vi.mock('../workers/importClient', () => worker);
 
 const { camCatalog, camInputsChanged, camPreviewSvg, currentCamRun, regenerate, startCamPipeline, toCamOutput, waitForCamRun } = await import('./cam');
 const { appStore } = await import('./store');
+const { textStatus } = await import('../layout/setupStatus');
 const { allPrograms } = await import('./programList');
 
 const parsed = { table: { count: 0 }, analysis: { summary: { totalSeconds: 3 }, diagnostics: [] }, interpretDiagnostics: [] } as never;
@@ -151,6 +152,19 @@ describe('CAM pipeline', () => {
       stop();
       vi.useRealTimers();
     }
+  });
+
+  it('clears the laid-out texts when the last text is deleted from a job without operations', async () => {
+    const withText = applyCommand(createJob(), { type: 'addText', id: 't' } as JobCommand);
+    appStore.setState({ job: withText });
+    const texts = [{ textId: 't', diagnostics: [{ operationId: '', severity: 'error', code: 'text-empty', message: 'Text 1 has no text' }], z: 0, loops: [] }];
+    worker.generateInWorker.mockResolvedValue({ ...run([]), results: [], texts });
+    await regenerate();
+    expect(textStatus(appStore.getState().camTexts)).toMatchObject({ state: 'attention' });
+    appStore.setState({ job: applyCommand(withText, { type: 'removeText', id: 't' } as JobCommand) });
+    await regenerate();
+    expect(appStore.getState().camTexts).toEqual([]);
+    expect(textStatus(appStore.getState().camTexts)).toEqual({ state: 'ok' });
   });
 
   it('settles to idle when there is nothing to generate', async () => {

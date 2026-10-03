@@ -39,7 +39,11 @@ export async function storeBlob(id: string, bytes: Uint8Array): Promise<void> {
 
 export async function pruneBlobs(): Promise<void> {
   const { job, past, future, generatedPrograms } = state();
-  const keep = [...referencedBlobIds(job, past, future), ...generatedPrograms.map((p) => p.blobId)];
+  const referenced = referencedBlobIds(job, past, future);
+  // a font that was just registered stays until a text uses it (it is then protected as a referenced blob)
+  const pendingFonts = state().pendingFontIds.filter((id) => !referenced.includes(id));
+  if (pendingFonts.length !== state().pendingFontIds.length) state().setPendingFontIds(pendingFonts);
+  const keep = [...referenced, ...pendingFonts, ...generatedPrograms.map((p) => p.blobId)];
   state().pruneProgramData(keep);
   const keepSet = new Set(keep);
   for (const id of [...parseTokens.keys()]) if (!keepSet.has(id)) parseTokens.delete(id);
