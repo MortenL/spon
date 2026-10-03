@@ -38,9 +38,20 @@ export function GeometryTab({ op }: { op: Operation }) {
 
   const setGeometry = (geo: typeof op.geometry) => runCommand({ type: 'updateOperation', id: op.id, patch: { geometry: geo } });
 
-  const contours = op.type === 'drill' ? (catalog?.contours ?? []).filter((c) => c.circle) : (catalog?.contours ?? []);
+  const contours = op.type === 'drill' ? (catalog?.contours ?? []).filter((c) => c.circle)
+    : op.type === 'vcarve' ? (catalog?.contours ?? []).filter((c) => c.closed)
+    : (catalog?.contours ?? []);
   const byLayer = new Map<string, typeof contours>();
   for (const c of contours) byLayer.set(c.layer, [...(byLayer.get(c.layer) ?? []), c]);
+
+  if (op.type === 'vclear') {
+    const source = job.operations.find((o) => o.id === op.sourceId);
+    return (
+      <p data-testid="vclear-geometry" className="text-sm text-muted-foreground">
+        {source ? `Uses the shapes of ${source.name}` : 'The V-carve this clears was deleted'}
+      </p>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -110,7 +121,7 @@ export function GeometryTab({ op }: { op: Operation }) {
               </div>
             ))}
 
-          {geometry?.kind === 'mesh' && (op.type === 'profile' || op.type === 'pocket' || op.type === 'chamfer' || op.type === 'face') &&
+          {geometry?.kind === 'mesh' && (op.type === 'profile' || op.type === 'pocket' || op.type === 'chamfer' || op.type === 'face' || op.type === 'engrave' || op.type === 'vcarve') &&
             (catalog?.faces ?? []).map((f, i) => {
               const checked = op.geometry.some((r) => sameRef(r, f.ref));
               return (
