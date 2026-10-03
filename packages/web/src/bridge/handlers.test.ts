@@ -84,3 +84,16 @@ describe('bridge handlers', () => {
     expect((await handlers['tools.list']({})).some((t) => t.id === 'via-bridge')).toBe(true);
   });
 });
+
+describe('loadFont', () => {
+  it('keeps a valid font under a fresh font- blob id and refuses a bad file with the exact message', async () => {
+    const { testFontBytes } = await import('../../../core/test/fixtures/testFont');
+    const { toBase64 } = await import('@sponcam/core');
+    const result = await handlers.loadFont({ fileName: 'Test.ttf', bytes: toBase64(testFontBytes()) });
+    expect(result.font).toMatchObject({ kind: 'file', name: 'Test.ttf' });
+    expect(result.font.blobId).toMatch(/^font-/);
+    expect(appStore.getState().fontBytes[result.font.blobId]).toEqual(testFontBytes());
+    await expect(handlers.loadFont({ fileName: 'bad.ttf', bytes: toBase64(new Uint8Array([1, 2, 3])) })).rejects.toThrow("This font file can't be read");
+    await expect(handlers.loadFont({ fileName: 'f.woff2', bytes: toBase64(new Uint8Array([1])) })).rejects.toThrow('WOFF2 fonts are not supported; use TTF, OTF or WOFF');
+  });
+});

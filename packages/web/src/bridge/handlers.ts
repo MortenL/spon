@@ -4,6 +4,7 @@ import {
 import { toast } from 'sonner';
 import { camCatalog, camPreviewSvg, waitForCamRun } from '../state/cam';
 import { importModelOutcome, markSavedIfCurrent, saveToCurrentHandle, sponBytesForSave } from '../state/documents';
+import { registerFontFile } from '../state/texts';
 import { importProgramBytes } from '../state/programs';
 import { appStore } from '../state/store';
 import { importLibraryBytes, listLibraryTools, saveLibraryTool } from '../state/toolLibrary';
@@ -33,6 +34,7 @@ export const handlers: Handlers = {
     return s().job;
   },
   importModel: ({ fileName, bytes, units, body, svgScale }) => importModelOutcome(fileName, fromBase64(bytes), { units, body, svgScale }),
+  loadFont: async ({ fileName, bytes }) => ({ font: await registerFontFile(fileName, fromBase64(bytes)) }),
   run: () => currentReport(),
   catalog: () => camCatalog(),
   boxes: async () => {

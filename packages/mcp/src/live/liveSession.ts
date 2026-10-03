@@ -3,7 +3,7 @@ import {
   type RunReport, type SessionInfo, toBase64,
 } from '@sponcam/core';
 import { withSponExtension, writeFileAtomic } from '../files';
-import { type JobSession, type ModelInput, SessionError, type ToolLibraryAccess } from '../session';
+import { type JobSession, type ModelInput, SessionError, type ToolLibraryAccess, type UploadedFontRef } from '../session';
 import { debugLog } from '../log';
 import type { TabConnection } from './connection';
 
@@ -87,8 +87,7 @@ export class LiveSession implements JobSession {
     return this.tab.request('importProgram', { fileName, bytes: toBase64(bytes) });
   }
 
-  /** The bridge has no font upload yet (the tab has no font blob store), so uploads happen in the Spon window. */
-  async loadFont(): Promise<never> {
-    throw new SessionError('Load fonts in the Spon window while connected live');
+  async loadFont(fileName: string, bytes: Uint8Array): Promise<UploadedFontRef> {
+    return (await this.tab.request('loadFont', { fileName, bytes: toBase64(bytes) })).font;
   }
 }

@@ -6,6 +6,7 @@ import type { CadBodySummary, ModelFormat, ModelKind } from '../import/importFil
 import type { SvgScale } from '../import/svg/svg';
 import type { JobCommand } from '../job/commands';
 import type { Job, ModelRef, ProgramRef } from '../job/types';
+import type { FontRef } from '../text/types';
 import type { RunReport } from '../pipeline/report';
 import type { PreviewOptions } from '../preview/svg';
 import type { Tool } from '../tools/types';
@@ -66,6 +67,8 @@ export interface BridgeMethods {
   /** Atomic, one undo step. */
   apply: { params: { commands: JobCommand[]; label: string }; result: Job };
   importModel: { params: { fileName: string; bytes: string; units?: LengthUnit; body?: number; svgScale?: SvgScale }; result: ImportOutcome };
+  /** Checks a font file and keeps its bytes in the tab under a fresh `font-<uuid>` blob id; a bad file is an error with the FontFileError message. */
+  loadFont: { params: { fileName: string; bytes: string }; result: { font: Extract<FontRef, { kind: 'file' }> } };
   run: { params: NoParams; result: RunReport };
   catalog: { params: NoParams; result: GeometryCatalog | null };
   boxes: { params: NoParams; result: Boxes };

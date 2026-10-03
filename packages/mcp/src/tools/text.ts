@@ -4,10 +4,8 @@ import { BUNDLED_FONTS } from '@sponcam/core';
 import { z } from 'zod';
 import type { ToolContext } from '../context';
 import { textPatchSchema } from '../schemas';
-import { SessionError } from '../session';
 import { type Args, guarded, ok } from './result';
 
-const LIVE_FONT_MESSAGE = 'Load fonts in the Spon window while connected live';
 const addTextShape = { id: z.string().optional().describe('Text id (default: generated)'), ...textPatchSchema.shape };
 const updateTextShape = { id: z.string(), patch: textPatchSchema };
 const removeTextShape = { id: z.string() };
@@ -46,7 +44,6 @@ export function registerTextTools(server: McpServer, ctx: ToolContext): void {
     inputSchema: loadFontShape,
   }, guarded('load_font', async (a: Args<typeof loadFontShape>) => {
     const session = state.requireSession();
-    if (session.kind === 'live') throw new SessionError(LIVE_FONT_MESSAGE);
     const input = await ctx.readInput(a.path);
     const font = await session.loadFont(basename(input.path), input.bytes);
     return ok(`Loaded ${font.name} as ${font.blobId}. Use this ref as a text's font.`, { font });
