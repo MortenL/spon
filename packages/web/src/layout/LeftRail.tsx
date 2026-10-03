@@ -86,7 +86,8 @@ function PanelHost(): JSX.Element {
 /** The icon rail, the one open panel (resizable, hideable) and the rest of the workspace as `children`. */
 export function LeftRail({ children }: { children: ReactNode }): JSX.Element {
   const hidden = useRail((s) => s.hidden);
-  const width = useRail((s) => s.width);
+  // Read again only when the panel is shown or hidden: feeding every drag step back as `defaultSize` makes the panel group restart the drag.
+  const width = useMemo(() => railStore.getState().width, [hidden]);
   return (
     <div className="flex min-h-0 flex-1">
       <Rail />
