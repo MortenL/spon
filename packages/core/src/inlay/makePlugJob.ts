@@ -64,10 +64,12 @@ function carveShapes(base: Job, geometry: CamGeometry | null, fonts: FontSet, op
   return { ctx, all, drawn };
 }
 
+const boardFor = (b: { w: number; h: number }, margin: number, H: number) => ({ x: b.w + 2 * margin, y: b.h + 2 * margin, z: H + 2 });
+
 /** The plug board: the mirrored shapes' bounds grown by `margin` on each side in X and Y, and `H + 2` thick. */
 export function defaultPlugBoard(base: Job, geometry: CamGeometry | null, vcarveId: string, fonts: FontSet, margin: number, H: number): { x: number; y: number; z: number } {
   const b = boundsOf(carveShapes(base, geometry, fonts, findCarve(base, vcarveId)).all);
-  return { x: b.w + 2 * margin, y: b.h + 2 * margin, z: H + 2 };
+  return boardFor(b, margin, H);
 }
 
 function checkSettings(tool: Tool | undefined, input: MakeInlayInput): void {
@@ -96,7 +98,7 @@ export function makePlugJob(
 
   const { ctx, all, drawn } = carveShapes(base, geometry, fonts, carve);
   const box = boundsOf(all);
-  const plugBoard = input.plugBoard ?? { x: box.w + 2 * input.margin, y: box.h + 2 * input.margin, z: H + 2 };
+  const plugBoard = input.plugBoard ?? boardFor(box, input.margin, H);
   if (plugBoard.z < H) throw new InlayError(`The plug board is thinner than the plug (${H.toFixed(2)} mm)`);
 
   // base commands
@@ -169,13 +171,26 @@ export function makePlugJob(
     const id = newId();
     const { id: _id, ...rest } = structuredClone(t) as TextItem;
     // positions are stock coordinates; the arc centre is the position, so it is mirrored the same way
-    textCmds.push({ type: 'addText', id, patch: { ...rest, mirror: !t.mirror, angle: 0 - t.angle, position: toPlug(baseStock(t.position)) } });
+    textCmds.push({ type: 'addText', id, patch: { ...rest, mirror: !t.mirror, surface: { from: 'stockTop' }, angle: 0 - t.angle, position: toPlug(baseStock(t.position)) } });
     refs.push({ kind: 'text', textId: id });
     if (t.font.kind === 'file' && blobs[t.font.blobId]) outBlobs[t.font.blobId] = blobs[t.font.blobId];
   }
 
   const tools = [vbit!, ...(clearTool ? [clearTool] : [])].filter((t, i, a) => a.findIndex((u) => u.id === t.id) === i);
-  const toolCmds: JobCommand[] = tools.filter((t) => !job.tools.some((u) => u.id === t.id)).map((tool) => ({ type: 'addTool' as const, tool: structuredClone(tool) }));
+  // tools: the same id is updated in place (keeping the plug's own number); a new one takes its number unless another tool has it
+  const toolCmds: JobCommand[] = [];
+  const numbers = new Set(job.tools.map((t) => t.number));
+  for (const t of tools) {
+    const { id, number, ...rest } = structuredClone(t);
+    if (job.tools.some((u) => u.id === id)) {
+      toolCmds.push({ type: 'updateTool', id, patch: rest });
+    } else {
+      let n = number;
+      while (numbers.has(n)) n++;
+      numbers.add(n);
+      toolCmds.push({ type: 'addTool', tool: { ...rest, id, number: n } });
+    }
+  }
   const plugFields = { inlayDepth: D, startDepth: S, glueGap: g };
   job = applyCommands(job, [
     { type: 'setStock', stock: { mode: 'fixed', size: { ...plugBoard }, modelOffset } },
@@ -184,8 +199,14 @@ export function makePlugJob(
   ]);
   if (existing) {
     job = applyCommands(job, job.operations.filter((o) => o.type === 'vplug').map((o) => ({
-      type: 'updateOperation' as const, id: o.id, patch: { ...plugFields, geometry: refs },
+      type: 'updateOperation' as const, id: o.id, patch: { ...plugFields, toolId: vbit!.id, geometry: refs },
     })));
+    const first = job.operations.find((o) => o.type === 'vplug')!;
+    if (!job.operations.some((o) => o.enabled && o.type === 'vclear' && o.sourceId === first.id)) {
+      let clearId = PLUG_CLEAR_ID;
+      for (let n = 2; job.operations.some((o) => o.id === clearId); n++) clearId = `${PLUG_CLEAR_ID}-${n}`;
+      job = applyCommands(job, addClearingCommands(job, first.id, clearTool?.id ?? null, clearId));
+    }
   } else {
     job = applyCommands(job, [
       { type: 'addOperation', opType: 'vplug', toolId: vbit!.id, id: PLUG_ID },
