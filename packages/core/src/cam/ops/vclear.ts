@@ -1,11 +1,11 @@
-import { differencePolys, polysToRegions, type Region } from '../../geometry/offset/clipper';
+import { polysToRegions, type Region } from '../../geometry/offset/clipper';
 import { flattenPath, orientPath, pathFromPoints, polyArea } from '../../geometry/offset/pathOps';
 import type { Tool } from '../../tools/types';
 import type { CamContext } from '../context';
 import type { ResolvedShape } from '../features/resolve';
 import { resolveGeometry } from '../features/resolve';
 import { resolveHeights } from '../heights';
-import { plugWallRegions } from '../inlay/plugStrokes';
+import { plugFloor } from '../inlay/plugStrokes';
 import type { CamCode, CamSeverity, PocketOp, VClearOp } from '../types';
 import { emptyOverlays, type OpOutput } from './output';
 import { pocketToolpath } from './pocket';
@@ -80,10 +80,9 @@ export function vclearToolpath(op: VClearOp, tool: Tool, ctx: CamContext): OpOut
       return out;
     }
     const { min, max } = ctx.stock;
-    const board = [{ x: min.x, y: min.y }, { x: max.x, y: min.y }, { x: max.x, y: max.y }, { x: min.x, y: max.y }];
-    // the walls' footprint M ⊕ R (outers counter-clockwise, holes clockwise) is what stays; everything else of the stock is floor
-    const walls = plugWallRegions(plugShapeLoops(srcGeo, tol), S * tanHalf, tol).flatMap((r) => [r.outer, ...r.holes]);
-    for (const reg of polysToRegions(differencePolys([board], walls))) {
+    // the walls' footprint M ⊕ R is what stays; everything else of the stock is floor
+    const floor = plugFloor({ minX: min.x, minY: min.y, maxX: max.x, maxY: max.y }, plugShapeLoops(srcGeo, tol), S * tanHalf, tol);
+    for (const reg of polysToRegions(floor)) {
       if (Math.abs(polyArea(reg.outer)) > 0) inset.push(regionShape(reg, first.z, first.ref));
     }
   }
@@ -98,30 +97,46 @@ export function vclearToolpath(op: VClearOp, tool: Tool, ctx: CamContext): OpOut
       bottom: { ...source.heights.top, offset: source.heights.top.offset - depth },
     },
   } as PocketOp;
+  // An inlay's floor must be cut everywhere, or the plug can't seat. Its V-bit (the plug, or a V-carve with inlay settings) cleans
+  // the floor this tool can't reach, so for an enabled inlay source the unreached corners and areas need no warning.
+  const inlay = source.type === 'vplug' || !!source.inlay;
+  const covered = inlay && source.enabled && (source.type === 'vplug' || (source.inlay?.glueGap ?? 0) > 0);
   // The floor areas are cut one by one: an area the tool does not fit in is left (a warning) as long as another area is cleared.
   const cut: OpOutput[] = [];
   const tooSmall: { shape: ResolvedShape; res: OpOutput }[] = [];
   for (const shape of inset) {
     const res = pocketToolpath(pocket, tool, ctx, { ...srcGeo, diagnostics: [], shapes: [shape] });
     if (res.diagnostics.length === 1 && res.diagnostics[0].code === 'offset-collapsed') tooSmall.push({ shape, res });
-    else cut.push(res);
+    else cut.push(covered ? { ...res, diagnostics: res.diagnostics.filter((d) => d.code !== 'unmachined-area'), overlays: { ...res.overlays, unmachined: [] } } : res);
   }
-  if (!cut.length) return { ...tooSmall[0].res, diagnostics: tooSmall.flatMap((x) => x.res.diagnostics).map((d) => ({ ...d, operationId: op.id })) };
+  if (!cut.length) {
+    if (inlay) {
+      diag('error', 'offset-collapsed', 'The clearing tool is wider than the pocket floor; choose a smaller one, or a smaller inlay depth');
+      return out;
+    }
+    return { ...tooSmall[0].res, diagnostics: tooSmall.flatMap((x) => x.res.diagnostics).map((d) => ({ ...d, operationId: op.id })) };
+  }
   const first = cut[0];
   const moves = cut.flatMap((r) => r.toolpath?.moves ?? []);
+  const tp = cut.find((r) => r.toolpath)?.toolpath ?? null;
+  const left = covered ? [] : tooSmall;
   const merged: OpOutput = {
     ...first,
-    toolpath: first.toolpath && moves.length ? { ...first.toolpath, moves } : null,
+    toolpath: tp && moves.length ? { ...tp, moves } : null,
     diagnostics: cut.flatMap((r) => r.diagnostics),
     overlays: {
       ...first.overlays,
       tabs: cut.flatMap((r) => r.overlays.tabs), laps: cut.flatMap((r) => r.overlays.laps), gouges: cut.flatMap((r) => r.overlays.gouges),
       unmachined: [
         ...cut.flatMap((r) => r.overlays.unmachined),
-        ...tooSmall.map(({ shape }) => ({ regions: [{ outer: flattenPath(shape.shape.outer, tol), holes: shape.shape.islands.map((i) => flattenPath(i, tol)) }], z: first.heights?.bottom ?? 0 })),
+        ...left.map(({ shape }) => ({ regions: [{ outer: flattenPath(shape.shape.outer, tol), holes: shape.shape.islands.map((i) => flattenPath(i, tol)) }], z: first.heights?.bottom ?? 0 })),
       ],
     },
   };
-  if (tooSmall.length) merged.diagnostics.push({ operationId: op.id, severity: 'warning', code: 'unmachined-area', message: `The tool does not fit in ${tooSmall.length} area(s) of the floor` });
+  if (left.length) {
+    merged.diagnostics.push(inlay
+      ? { operationId: op.id, severity: 'error', code: 'unmachined-area', message: `The tool does not fit in ${left.length} area(s) of the floor, so the plug will not fit; choose a smaller clearing tool` }
+      : { operationId: op.id, severity: 'warning', code: 'unmachined-area', message: `The tool does not fit in ${left.length} area(s) of the floor` });
+  }
   return { ...merged, diagnostics: merged.diagnostics.map((d) => ({ ...d, operationId: op.id })) };
 }

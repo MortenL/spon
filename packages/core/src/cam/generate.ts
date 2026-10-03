@@ -47,12 +47,15 @@ function textKeys(op: Operation, job: Job, fonts: FontSet): unknown[] {
 }
 
 export function operationKey(op: Operation, job: Job, fonts: FontSet = EMPTY_FONTS): string {
-  // a clearing depends on its source operation and that operation's tool; a V-carve's warning on whether an enabled clearing exists
+  // a clearing depends on its source operation and that operation's tool; a V-carve or plug on its enabled clearings and their tools
   let extra: unknown = null;
   if (op.type === 'vclear') {
     const src = job.operations.find((o) => o.id === op.sourceId) ?? null;
     extra = [src, src ? job.tools.find((t) => t.id === src.toolId) ?? null : null];
-  } else if (op.type === 'vcarve' || op.type === 'vplug') extra = job.operations.some((o) => o.enabled && o.type === 'vclear' && o.sourceId === op.id);
+  } else if (op.type === 'vcarve' || op.type === 'vplug') {
+    // whether an enabled clearing exists, and its tool: an inlay's V-bit cleans the floor that tool can't reach
+    extra = job.operations.filter((o) => o.enabled && o.type === 'vclear' && o.sourceId === op.id).map((o) => job.tools.find((t) => t.id === o.toolId) ?? null);
+  }
   // a picked text (and the state of its font) changes the geometry; a clearing also depends on its source's texts
   const texts = textKeys(op, job, fonts);
   if (op.type === 'vclear') {

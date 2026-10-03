@@ -39,7 +39,15 @@ describe('V-carve plug', () => {
     expect(gap.diagnostics).toContainEqual(expect.objectContaining({ code: 'inlay-settings', message: 'The glue gap must be smaller than the inlay depth' }));
     const short = drawingJob([rectPath(0, 0, 40, 20)], 'vplug', {}, { ...v60, fluteLength: 3 });
     expect(short.diagnostics).toContainEqual(expect.objectContaining({ severity: 'warning', code: 'flute-exceeded', message: 'The plug needs 5.50 mm of V-bit; its cutting length is 3.00 mm' }));
-    expect(short.diagnostics).toContainEqual(expect.objectContaining({ severity: 'warning', code: 'vcarve-uncleared' }));
+    expect(short.diagnostics).toContainEqual(expect.objectContaining({ severity: 'warning', code: 'vcarve-uncleared', message: "The plug's floor is not cleared; it will not fit. Add a clearing operation" }));
+  });
+
+  it('warns when the walls run off the plug board', () => {
+    const fits = { mode: 'fixed' as const, size: { x: 44, y: 24, z: 8 }, modelOffset: { x: 2, y: 2, z: 0 } };
+    const off = { mode: 'fixed' as const, size: { x: 41, y: 21, z: 8 }, modelOffset: { x: 0.5, y: 0.5, z: 0 } }; // 0.5 mm < R = 1.15 mm
+    const msg = expect.objectContaining({ severity: 'warning', code: 'plug-board-small', message: 'The plug walls run off the plug board' });
+    expect(drawingJob([rectPath(0, 0, 40, 20)], 'vplug', {}, v60, fits).diagnostics).not.toContainEqual(msg);
+    expect(drawingJob([rectPath(0, 0, 40, 20)], 'vplug', {}, v60, off).diagnostics).toContainEqual(msg);
   });
 
   it('refuses a plug board thinner than H', () => {

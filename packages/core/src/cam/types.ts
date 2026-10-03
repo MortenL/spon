@@ -224,7 +224,7 @@ export type CamCode =
   | 'slot-width-mismatch' | 'slot-too-narrow' | 'slot-ends-unset' | 'slot-overcut' | 'wrong-geometry'
   | 'flute-exceeded' | 'vcarve-uncleared' | 'source-missing' | 'source-incomplete' | 'internal'
   | 'font-unreadable' | 'font-missing' | 'text-empty' | 'text-missing-glyphs' | 'text-fit' | 'text-arc' | 'text-no-stock' | 'text-single-line'
-  | 'inlay-settings' | 'plug-board-thin';
+  | 'inlay-settings' | 'plug-board-thin' | 'plug-board-small';
 export interface CamDiagnostic {
   operationId: string;
   severity: CamSeverity;

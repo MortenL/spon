@@ -1,4 +1,4 @@
-import { offsetPolys, polysToRegions, type Region } from '../../geometry/offset/clipper';
+import { differencePolys, offsetPolys, type Poly, polysToRegions, type Region } from '../../geometry/offset/clipper';
 import type { Vec2 } from '../../geometry/path2d';
 import { medialGraph } from '../vcarve/medial';
 import { sampleShape } from '../vcarve/sample';
@@ -7,6 +7,12 @@ import { type Stroke, vcarveStrokes } from '../vcarve/strokes';
 /** M ⊕ R as regions (outer + holes), program coordinates. */
 export function plugWallRegions(polys: Vec2[][], R: number, tol: number): Region[] {
   return polysToRegions(offsetPolys(polys, R, tol / 8));
+}
+
+/** Clarification 2: the plug's floor, the board rectangle (program coordinates) minus the walls' footprint M ⊕ R. */
+export function plugFloor(board: { minX: number; minY: number; maxX: number; maxY: number }, polys: Vec2[][], R: number, tol: number): Poly[] {
+  const rect = [{ x: board.minX, y: board.minY }, { x: board.maxX, y: board.minY }, { x: board.maxX, y: board.maxY }, { x: board.minX, y: board.maxY }];
+  return differencePolys([rect], plugWallRegions(polys, R, tol).flatMap((r) => [r.outer, ...r.holes]));
 }
 
 /**

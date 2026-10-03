@@ -4,7 +4,8 @@ import type { Tool } from '../../tools/types';
 import type { CamContext } from '../context';
 import type { ResolvedGeometry } from '../features/resolve';
 import { resolveHeights } from '../heights';
-import { plugStrokes } from '../inlay/plugStrokes';
+import { plugFloor, plugStrokes, plugWallRegions } from '../inlay/plugStrokes';
+import { dropBoardCorners, floorResidue, linkedClearingTools, residuePasses } from '../inlay/residue';
 import type { CamCode, CamDiagnostic, CamSeverity, VPlugOp } from '../types';
 import { sampleSpacing } from '../vcarve/sample';
 import { emptyOverlays, type OpOutput } from './output';
@@ -43,7 +44,7 @@ export function vplugToolpath(op: VPlugOp, tool: Tool, ctx: CamContext, geo: Res
   const H = D - g + S;
   if (H > tool.fluteLength + EPS) diag('warning', 'flute-exceeded', `The plug needs ${H.toFixed(2)} mm of V-bit; its cutting length is ${tool.fluteLength.toFixed(2)} mm`);
   if (!ctx.job.operations.some((o) => o.enabled && o.type === 'vclear' && o.sourceId === op.id)) {
-    diag('warning', 'vcarve-uncleared', 'Wide areas stop at the max depth; add a clearing operation');
+    diag('warning', 'vcarve-uncleared', "The plug's floor is not cleared; it will not fit. Add a clearing operation");
   }
   const first = geo.shapes[0];
   if (!first) return out;
@@ -58,7 +59,22 @@ export function vplugToolpath(op: VPlugOp, tool: Tool, ctx: CamContext, geo: Res
   const tol = ctx.tolerance;
   const s = sampleSpacing(tol);
   const M = plugShapeLoops(geo, tol);
-  const strokes = plugStrokes(M, { top: h.top, t: Math.tan((tool.tipAngleDeg * Math.PI) / 360), D, S, g, spacing: s, tol });
+  const t = Math.tan((tool.tipAngleDeg * Math.PI) / 360);
+  const R = S * t;
+  const strokes = plugStrokes(M, { top: h.top, t, D, S, g, spacing: s, tol });
+  if (ctx.stock) {
+    const board = { minX: ctx.stock.min.x, minY: ctx.stock.min.y, maxX: ctx.stock.max.x, maxY: ctx.stock.max.y };
+    const off = plugWallRegions(M, R, tol).some((r) => r.outer.some((p) => p.x < board.minX - tol || p.x > board.maxX + tol || p.y < board.minY - tol || p.y > board.maxY + tol));
+    if (off) diag('warning', 'plug-board-small', 'The plug walls run off the plug board');
+    // the floor the clearing tools can't reach (narrow wedges and tips between the walls): any point within R of a pass at H is
+    // cut at least D − g deep, which keeps it clear of the base board around the pocket
+    const tools = linkedClearingTools(ctx.job, op.id);
+    if (tools.length) {
+      const corner = Math.max(...tools.map((x) => x.diameter / 2)) + 0.05;
+      const residue = dropBoardCorners(floorResidue(plugFloor(board, M, R, tol), tools, tol), board, corner);
+      strokes.push(...residuePasses(residue, h.top - H, R, tol));
+    }
+  }
   const w = new MoveWriter();
   emitStrokes(w, strokes, h, H, op.stepdown, 2 * s, op.feeds.feed, op.feeds.plungeFeed);
   if (!w.moves.length) return out;

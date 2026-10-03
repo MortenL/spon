@@ -3,6 +3,7 @@ import { flattenPath, orientPath, polyArea } from '../../geometry/offset/pathOps
 import type { Vec2 } from '../../geometry/path2d';
 import type { Tool } from '../../tools/types';
 import type { CamContext } from '../context';
+import { floorResidue, linkedClearingTools, residuePasses } from '../inlay/residue';
 import type { Shape } from '../features/chain';
 import type { ResolvedGeometry } from '../features/resolve';
 import { resolveHeights, type ResolvedHeights } from '../heights';
@@ -52,6 +53,8 @@ export function vcarveToolpath(op: VCarveOp, tool: Tool, ctx: CamContext, geo: R
   let clearance = -Infinity;
   let deepest = 0;
   let hasFlat = false;
+  // an inlay pocket's floor must be flat to within the glue gap: the V-bit cleans what its clearing tools can't reach
+  const cleanup = op.inlay && op.maxDepth !== null && op.inlay.glueGap > 0 ? linkedClearingTools(ctx.job, op.id) : [];
 
   for (const sh of geo.shapes) {
     const hr = resolveHeights(op.heights, ctx, { contourZ: sh.z, holeBottom: null, faceZ: geo.faceZ });
@@ -68,6 +71,10 @@ export function vcarveToolpath(op: VCarveOp, tool: Tool, ctx: CamContext, geo: R
     const flat = op.maxDepth === null ? [] : flatAreas(polys, R, tol);
     if (flat.length) hasFlat = true;
     const strokes = vcarveStrokes(g, { top: h.top, tanHalf, maxDepth: op.maxDepth, spacing: s, tol, flatLoops: flat, outline: polys });
+    if (cleanup.length && flat.length) {
+      // every floor point the clearing leaves is within g·t of a pass at max depth, so it is cut at least D − g deep
+      strokes.push(...residuePasses(floorResidue(flat, cleanup, tol), h.top - (op.maxDepth as number), op.inlay!.glueGap * tanHalf, tol));
+    }
     let shapeDeepest = 0;
     for (const st of strokes) for (const p of st.points) shapeDeepest = Math.max(shapeDeepest, h.top - p.z);
     deepest = Math.max(deepest, shapeDeepest);
