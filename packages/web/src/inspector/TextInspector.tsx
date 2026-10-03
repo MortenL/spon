@@ -201,12 +201,12 @@ function TextInspectorBody({ text }: { text: TextItem }) {
           <LengthField label="Position X" valueMm={text.position.x} testId="text-x" onCommit={(v) => patch({ position: { x: v, y: text.position.y } })} />
           <LengthField label="Position Y" valueMm={text.position.y} testId="text-y" onCommit={(v) => patch({ position: { x: text.position.x, y: v } })} />
           <div className="grid grid-cols-[1fr_auto] items-center gap-2 text-sm">
-            <span className="text-muted-foreground">Anchor</span>
-            <div role="radiogroup" aria-label="Anchor" className="grid grid-cols-3 gap-0.5">
+            <span className="text-muted-foreground">{text.arc ? 'Anchor (not used on an arc)' : 'Anchor'}</span>
+            <div role="radiogroup" aria-label="Anchor" aria-disabled={text.arc !== null} className={cn('grid grid-cols-3 gap-0.5', text.arc && 'opacity-50')}>
               {TEXT_ANCHORS.map((a) => (
                 <button
                   key={a} type="button" role="radio" aria-checked={text.anchor === a} aria-label={ANCHOR_LABEL[a]} title={ANCHOR_LABEL[a]}
-                  data-testid={`text-anchor-${a}`} data-selected={text.anchor === a} onClick={() => patch({ anchor: a })}
+                  data-testid={`text-anchor-${a}`} data-selected={text.anchor === a} disabled={text.arc !== null} onClick={() => patch({ anchor: a })}
                   className={cn('size-6 rounded-sm border', text.anchor === a ? 'border-primary bg-primary' : 'hover:bg-accent')}
                 />
               ))}

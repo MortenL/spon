@@ -35,11 +35,14 @@ describe('text and font tools', () => {
     expect((await t.call('render_preview')).isError).toBeFalsy();
   });
 
-  it('centres a text without a position on the stock', async () => {
-    const t = await signJob();
+  it('centres a text without a position on the auto stock of a model', async () => {
+    const t = await connect({}, ['box-20x10x5.stl']);
+    await t.call('new_job');
+    await t.call('import_model', { path: 'box-20x10x5.stl', units: 'mm' });
     const id = data(await t.call('add_text', { text: 'A' })).id as string;
-    const texts = data(await t.call('get_job', { section: 'texts' })).texts as { id: string; position: { x: number; y: number } }[];
-    expect(texts.find((x) => x.id === id)!.position).toEqual({ x: 60, y: 25 });
+    const job = data(await t.call('get_job')).job as { stock: { margin: { xy: number } }; texts: { id: string; position: { x: number; y: number } }[] };
+    const m = job.stock.margin.xy;
+    expect(job.texts.find((x) => x.id === id)!.position).toEqual({ x: (20 + 2 * m) / 2, y: (10 + 2 * m) / 2 });
   });
 
   it('loads an uploaded font under a fresh blob id and uses it', async () => {

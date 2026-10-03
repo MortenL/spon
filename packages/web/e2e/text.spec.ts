@@ -144,7 +144,11 @@ test('sign without a model: drag, undo, V-carve with clearing, generate and expo
   const downloadPromise = page.waitForEvent('download');
   await page.getByTestId('export-gcode').click();
   if (await page.getByTestId('export-dialog').isVisible()) await page.getByTestId('export-confirm').click();
-  expect((await downloadPromise).suggestedFilename()).toMatch(/\.(zip|nc)$/);
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/\.(zip|nc)$/);
+  const exportedPath = await download.path();
+  if (!exportedPath) throw new Error('the exported G-code has no local path');
+  expect((await fs.stat(exportedPath)).size).toBeGreaterThan(0);
 });
 
 test('an uploaded font survives saving and opening in a fresh browser', async ({ page, browser }) => {
@@ -178,6 +182,17 @@ test('an uploaded font survives saving and opening in a fresh browser', async ({
   } finally {
     await context.close();
   }
+});
+
+test('the anchor picker is disabled while the text is on an arc', async ({ page }) => {
+  await setStock(page, 200, 100, 18);
+  await addText(page);
+  await expect(page.getByTestId('text-anchor-topLeft')).toBeEnabled();
+  await page.getByTestId('text-arc-on').check();
+  await expect(page.getByTestId('text-anchor-topLeft')).toBeDisabled();
+  await expect(page.getByText('Anchor (not used on an arc)')).toBeVisible();
+  await page.getByTestId('text-arc-on').uncheck();
+  await expect(page.getByTestId('text-anchor-topLeft')).toBeEnabled();
 });
 
 test('single-line text on a model face: centre on the boss top and engrave', async ({ page }) => {

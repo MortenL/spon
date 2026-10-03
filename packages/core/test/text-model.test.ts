@@ -65,7 +65,7 @@ describe('texts in the job', () => {
     expect(back.job.texts[0].font).toEqual({ kind: 'file', blobId: 'f1', name: 'Sign.TTF' });
     expect(back.blobs.f1).toEqual(new Uint8Array([1, 2, 3]));
     expect(back.blobs.unused).toBeUndefined();
-    expect(() => writeSpon(job, {})).toThrow('Missing data for fonts/f1.ttf');
+    expect(readSpon(writeSpon(job, {})).blobs).toEqual({}); // a lost font file no longer blocks saving
   });
 
   it('names font blob paths by extension', () => {
