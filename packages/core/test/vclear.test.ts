@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  applyCommands, camContext, type JobCommand, type Move, type Path2D, pathFromPoints, PipelineCache, programContext, runPipeline, type Tool, type Toolpath,
+  applyCommands, camContext, createJob, setStock, type JobCommand, type Move, type Path2D, pathFromPoints, PipelineCache, programContext, runPipeline, type Tool, type Toolpath,
 } from '../src';
 import { tool6 } from './fixtures/camSetup';
 import { terracedSetup } from './fixtures/slotSetup';
@@ -251,5 +251,60 @@ describe('V-carve clearing of a plug', () => {
     const s = plugSetup([{ type: 'updateOperation', id: 'o', patch: { glueGap: 9 } }]);
     expect(errs(s.res('c'))).toEqual(['V-carve plug 1 has errors']);
     expect(s.tp).toBeUndefined();
+  });
+
+  it('errors when the plug board is thinner than the plug (the plug reports it too)', () => {
+    const thin = { ...stock, size: { x: 80, y: 60, z: 4 } };
+    const base = drawingJob([rect(40, 20)], 'vplug', { inlayDepth: D, startDepth: S, glueGap: g }, v60, thin);
+    const job = applyCommands(base.job, [
+      { type: 'addTool', tool: tool6 },
+      { type: 'addOperation', opType: 'vclear', toolId: 't6', id: 'c' },
+      { type: 'updateOperation', id: 'c', patch: { sourceId: 'o' } as never },
+    ]);
+    const { run, toolpaths } = runPipeline(job, base.geometry as never, programContext(job, base.geometry as never), new PipelineCache(), { date: '2026-01-01' });
+    const res = (id: string) => run.results.find((r) => r.operationId === id)!;
+    expect(res('o').diagnostics).toContainEqual(expect.objectContaining({ code: 'plug-board-thin' }));
+    expect(errs(res('c'))).toEqual(['V-carve plug 1 has errors']);
+    expect(toolpaths.find((x) => x.operationId === 'c')).toBeUndefined();
+  });
+
+  it('clears inside a wide ring hole as well as outside', () => {
+    const circle = (r: number, cx: number, cy: number): Path2D => ({ segments: [{ kind: 'arc', center: { x: cx, y: cy }, radius: r, startAngle: 0, sweep: 2 * Math.PI }], closed: true });
+    const big = { ...stock, size: { x: 100, y: 100, z: 8 }, modelOffset: { x: 50, y: 50, z: 0 } };
+    const base = drawingJob([circle(30, 0, 0), circle(15, 0, 0)], 'vplug', { inlayDepth: D, startDepth: S, glueGap: g }, v60, big);
+    const job = applyCommands(base.job, [
+      { type: 'addTool', tool: tool6 },
+      { type: 'addOperation', opType: 'vclear', toolId: 't6', id: 'c' },
+      { type: 'updateOperation', id: 'c', patch: { sourceId: 'o' } as never },
+    ]);
+    const { run, toolpaths } = runPipeline(job, base.geometry as never, programContext(job, base.geometry as never), new PipelineCache(), { date: '2026-01-01' });
+    expect(errs(run.results.find((r) => r.operationId === 'c')!)).toEqual([]);
+    const tp = toolpaths.find((x) => x.operationId === 'c') as Toolpath;
+    const top = run.results.find((r) => r.operationId === 'o')!.heights!.top;
+    const c = (base.program(0).segments[0] as unknown as { center: { x: number; y: number } }).center;
+    const rad = (p: { x: number; y: number }) => Math.hypot(p.x - c.x, p.y - c.y);
+    const pts = cutPts(tp);
+    const floor = pts.filter((p) => Math.abs(p.z - (top - H)) < 1e-6);
+    expect(floor.filter((p) => rad(p) < 15).length).toBeGreaterThan(5); // inside the hole
+    for (const p of pts) {
+      const d = rad(p) <= 22.5 ? 15 - rad(p) : rad(p) - 30; // distance to the ring material (hole side or outer side)
+      if (rad(p) < 15 || rad(p) > 30) expect(d).toBeGreaterThanOrEqual(R + 3 - 0.01);
+    }
+  });
+
+  it('reports no-stock when there is no model, leaving the plug alone', () => {
+    let job = setStock(createJob(), { mode: 'auto', margin: { xy: 20, zTop: 0, zBottom: 40 } });
+    job = applyCommands(job, [
+      { type: 'addTool', tool: v60 },
+      { type: 'addTool', tool: tool6 },
+      { type: 'addOperation', opType: 'vplug', toolId: 'v60', id: 'o' },
+      { type: 'addOperation', opType: 'vclear', toolId: 't6', id: 'c' },
+      { type: 'updateOperation', id: 'c', patch: { sourceId: 'o' } as never },
+    ]);
+    const { run, toolpaths } = runPipeline(job, null as never, programContext(job, null as never), new PipelineCache(), { date: '2026-01-01' });
+    const c = run.results.find((r) => r.operationId === 'c')!;
+    expect(c.diagnostics.map((d) => d.code)).toEqual(['no-stock']);
+    expect(toolpaths.find((x) => x.operationId === 'c')).toBeUndefined();
+    expect(run.results.find((r) => r.operationId === 'o')!.diagnostics.map((d) => d.code)).not.toContain('no-stock');
   });
 });

@@ -5,7 +5,7 @@ import type { CamContext } from '../context';
 import type { ResolvedGeometry } from '../features/resolve';
 import { resolveHeights } from '../heights';
 import { plugStrokes } from '../inlay/plugStrokes';
-import type { CamCode, CamSeverity, VPlugOp } from '../types';
+import type { CamCode, CamDiagnostic, CamSeverity, VPlugOp } from '../types';
 import { sampleSpacing } from '../vcarve/sample';
 import { emptyOverlays, type OpOutput } from './output';
 import { emitStrokes, orientPoly, shapePolys } from './vcarve';
@@ -17,32 +17,30 @@ const EPS = 1e-9;
 export const plugShapeLoops = (geo: ResolvedGeometry, tol: number): Vec2[][] =>
   polysToRegions(geo.shapes.flatMap((sh) => shapePolys(sh.shape, tol))).flatMap((r) => [orientPoly(r.outer, true), ...r.holes.map((x) => orientPoly(x, false))]);
 
+/** The first reason a plug can't be cut with `tool`: not a V-bit, a bad tip angle, bad inlay settings, or a board thinner than the plug. */
+export function plugSettingsError(op: VPlugOp, tool: Tool, ctx: CamContext): CamDiagnostic | null {
+  const err = (code: CamCode, message: string): CamDiagnostic => ({ operationId: op.id, severity: 'error', code, message });
+  if (tool.type !== 'vbit') return err('wrong-tool', 'Inlays need a V-bit');
+  if (!(tool.tipAngleDeg > 0 && tool.tipAngleDeg < 180)) return err('wrong-tool', 'The tool needs a tip angle between 0 and 180 degrees');
+  const { inlayDepth: D, startDepth: S, glueGap: g } = op;
+  if (![D, S, g].every((v) => Number.isFinite(v) && v > 0)) return err('inlay-settings', 'Set the inlay depth, start depth and glue gap to positive values');
+  if (!(g < D)) return err('inlay-settings', 'The glue gap must be smaller than the inlay depth');
+  const H = D - g + S;
+  if (ctx.stock && ctx.stock.max.z - ctx.stock.min.z < H - EPS) return err('plug-board-thin', `The plug board is thinner than the plug (${H.toFixed(2)} mm)`);
+  return null;
+}
+
 /** Spec §2: the V-carve plug: walls around the mirrored shapes M, cut from D − g at M out to the flat floor H. */
 export function vplugToolpath(op: VPlugOp, tool: Tool, ctx: CamContext, geo: ResolvedGeometry): OpOutput {
   const out: OpOutput = { toolpath: null, diagnostics: [], heights: null, overlays: emptyOverlays(), intended: [] };
   const diag = (severity: CamSeverity, code: CamCode, message: string) => out.diagnostics.push({ operationId: op.id, severity, code, message });
-  if (tool.type !== 'vbit') {
-    diag('error', 'wrong-tool', 'Inlays need a V-bit');
-    return out;
-  }
-  if (!(tool.tipAngleDeg > 0 && tool.tipAngleDeg < 180)) {
-    diag('error', 'wrong-tool', 'The tool needs a tip angle between 0 and 180 degrees');
+  const bad = plugSettingsError(op, tool, ctx);
+  if (bad) {
+    out.diagnostics.push(bad);
     return out;
   }
   const { inlayDepth: D, startDepth: S, glueGap: g } = op;
-  if (![D, S, g].every((v) => Number.isFinite(v) && v > 0)) {
-    diag('error', 'inlay-settings', 'Set the inlay depth, start depth and glue gap to positive values');
-    return out;
-  }
-  if (!(g < D)) {
-    diag('error', 'inlay-settings', 'The glue gap must be smaller than the inlay depth');
-    return out;
-  }
   const H = D - g + S;
-  if (ctx.stock && ctx.stock.max.z - ctx.stock.min.z < H - EPS) {
-    diag('error', 'plug-board-thin', `The plug board is thinner than the plug (${H.toFixed(2)} mm)`);
-    return out;
-  }
   if (H > tool.fluteLength + EPS) diag('warning', 'flute-exceeded', `The plug needs ${H.toFixed(2)} mm of V-bit; its cutting length is ${tool.fluteLength.toFixed(2)} mm`);
   if (!ctx.job.operations.some((o) => o.enabled && o.type === 'vclear' && o.sourceId === op.id)) {
     diag('warning', 'vcarve-uncleared', 'Wide areas stop at the max depth; add a clearing operation');

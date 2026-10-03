@@ -4,12 +4,13 @@ import type { Tool } from '../../tools/types';
 import type { CamContext } from '../context';
 import type { ResolvedGeometry, ResolvedShape } from '../features/resolve';
 import { resolveGeometry } from '../features/resolve';
+import { resolveHeights } from '../heights';
 import { plugWallRegions } from '../inlay/plugStrokes';
 import type { CamCode, CamSeverity, PocketOp, VClearOp } from '../types';
 import { emptyOverlays, type OpOutput } from './output';
 import { pocketToolpath } from './pocket';
 import { flatAreas, shapePolys } from './vcarve';
-import { plugShapeLoops } from './vplug';
+import { plugSettingsError, plugShapeLoops } from './vplug';
 
 const regionShape = (reg: Region, z: number, ref: ResolvedShape['ref']): ResolvedShape => ({
   shape: {
@@ -60,18 +61,22 @@ export function vclearToolpath(op: VClearOp, tool: Tool, ctx: CamContext): OpOut
     }
   } else {
     const { inlayDepth: D, startDepth: S, glueGap: g } = source;
-    if (![D, S, g].every((v) => Number.isFinite(v) && v > 0) || !(g < D)) {
+    if (plugSettingsError(source, bit, ctx)) {
       diag('error', 'source-incomplete', `${source.name} has errors`);
       return out;
     }
     depth = D - g + S;
+    if (!ctx.stock) {
+      diag('error', 'no-stock', 'Clearing a plug needs a stock');
+      return out;
+    }
     const first = srcGeo.shapes[0];
     if (!first) {
       diag('warning', 'unmachined-area', 'Nothing to clear: the plug has no shapes');
       return out;
     }
-    if (!ctx.stock) {
-      diag('error', 'no-stock', 'Clearing a plug needs a stock');
+    if (!resolveHeights(source.heights, ctx, { contourZ: first.z, holeBottom: null, faceZ: srcGeo.faceZ }).values) {
+      diag('error', 'source-incomplete', `${source.name} has errors`);
       return out;
     }
     const { min, max } = ctx.stock;
