@@ -27,10 +27,10 @@ export function MachineSettings() {
 
   return (
     <>
-      <label className="mb-3 grid grid-cols-[1fr_10rem] items-center gap-2 text-sm">
+      <label className="mb-3 grid grid-cols-[auto_minmax(0,1fr)] items-center gap-4 text-sm">
         <span className="text-muted-foreground">Profile</span>
         <select
-          data-testid="machine-preset" value={isPreset ? machine.name : 'Custom'} className="h-8 rounded-md border bg-transparent px-2 text-sm"
+          data-testid="machine-preset" value={isPreset ? machine.name : 'Custom'} className="h-8 w-full min-w-0 rounded-md border bg-transparent px-2 text-sm"
           onChange={(e) => commit((j) => applyMachinePreset(j, e.target.value as MachinePresetName))}
         >
           {MACHINE_PRESET_NAMES.map((n) => <option key={n} value={n} className="bg-background">{n}</option>)}

@@ -1,6 +1,7 @@
 import { formatLength, parseLength } from '@sponcam/core';
 import { useEffect, useRef, useState } from 'react';
 import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 import { useApp } from '@/state/store';
 import { resolveNumericEdit } from './numericEdit';
 
@@ -40,7 +41,9 @@ export function NumericField({ label, value, format, parse, suffix, onCommit, te
       <span className="relative">
         <Input
           data-testid={testId} value={text} disabled={disabled} inputMode="decimal"
-          className="h-8 pr-9 text-right font-mono text-xs"
+          className={cn('h-8 text-right font-mono text-xs', !suffix && 'pr-2.5')}
+          // room for the unit label on the right, sized to its length so a long unit (mm/min) never covers the number
+          style={suffix ? { paddingRight: `calc(${suffix.length}ch + 0.875rem)` } : undefined}
           onFocus={(e) => {
             setEditing(true);
             e.currentTarget.select();
