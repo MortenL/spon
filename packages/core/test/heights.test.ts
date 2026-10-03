@@ -26,6 +26,12 @@ describe('resolveHeights', () => {
     expect(resolveHeights(abs, ctx, none).values).toMatchObject({ top: 1, bottom: -1, feed: 3 });
   });
 
+  it('measures the bottom from the slot bottom, and needs a recognised slot for it', () => {
+    const h = { ...defaultHeights('slot', 'mesh') };
+    expect(resolveHeights(h, ctx, { contourZ: 0, holeBottom: null, slotBottom: -4 }).values?.bottom).toBe(-4);
+    expect(resolveHeights(h, ctx, { contourZ: 0, holeBottom: null, slotBottom: null }).errors).toContain('Bottom height needs a recognised slot');
+  });
+
   it('reports invalid combinations and missing references', () => {
     const base = defaultHeights('profile', 'drawing');
     expect(resolveHeights({ ...base, bottom: { from: 'origin', offset: 1 } }, ctx, none).errors).toEqual(['Bottom height must be below top height']);

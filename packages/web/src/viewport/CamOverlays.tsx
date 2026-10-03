@@ -1,6 +1,6 @@
 import {
   camContext, type CamContext, type DxfPathRef, drawingPath, drawingPathToProgram, flattenPath, type GeometryRef,
-  HEIGHT_NAMES, type HeightName, type Job, offsetOpenPath, pathLength, pointAt, type LapPosition, type Operation, type OpOverlays, type Path2D, type ResolvedHeights,
+  HEIGHT_NAMES, type HeightName, type Job, meshSlots, offsetOpenPath, pathLength, pointAt, type LapPosition, type Operation, type OpOverlays, type Path2D, type ResolvedHeights,
   programContext, programOrigin, resolveFaceRef, type Vec2, type Vec3,
 } from '@sponcam/core';
 import { Line } from '@react-three/drei';
@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from 'react';
 import * as THREE from 'three';
 import { runCommand } from '@/state/camView';
 import { type ModelGeometry, useApp } from '@/state/store';
+import { sameRef } from '@/inspector/geometryLabels';
 import { chamferRunsAsDrawn, openChains } from '@/inspector/openChains';
 import { regionShape } from './convert';
 import { noRaycast } from './SceneObjects';
@@ -36,7 +37,7 @@ export function CamOverlays() {
   return (
     <group position={[origin.x, origin.y, origin.z]}>
       <PickedGeometry job={job} geometry={geometry} op={op} />
-      {(op.type === 'profile' || op.type === 'chamfer') && <OpenChainArrows job={job} geometry={geometry} op={op} />}
+      {(op.type === 'profile' || op.type === 'chamfer' || op.type === 'slot') && <OpenChainArrows job={job} geometry={geometry} op={op} />}
       {inspectorTab === 'heights' && summary?.heights && <HeightsPlanes job={job} geometry={geometry} heights={summary.heights} />}
       {op.type === 'profile' && summary && <TabHandles op={op} overlays={summary.overlays} origin={origin} />}
       {summary && <UnmachinedAreas overlays={summary.overlays} />}
@@ -53,8 +54,18 @@ function PickedGeometry({ job, geometry, op }: { job: Job; geometry: ModelGeomet
     () => op.geometry.flatMap((ref, i) => refLoops(ctx, ref).map((points, j) => ({ key: `${i}-${j}`, points }))).filter((l) => l.points.length >= 2),
     [ctx, op.geometry],
   );
+  // every recognised slot, faintly, while a slot operation is open on a model
+  const pickable = useMemo(
+    () => op.type === 'slot' && geometry?.kind === 'mesh'
+      ? meshSlots(ctx).filter((s) => !op.geometry.some((r) => sameRef(r, s.ref))).map((s, i) => ({ key: `p${i}`, points: outlinePoints(s.outline, s.top) }))
+      : [],
+    [ctx, op.type, op.geometry, geometry],
+  );
   return (
     <>
+      {pickable.map((l) => (
+        <Line key={l.key} name="slot-pickable" points={l.points as Point3[]} color={PICK_COLOR} lineWidth={2} transparent opacity={0.4} raycast={noRaycast} />
+      ))}
       {loops.map((l) => (
         <Line key={l.key} points={l.points as Point3[]} color={PICK_COLOR} lineWidth={3} raycast={noRaycast} />
       ))}
@@ -122,6 +133,10 @@ function OpenChainArrows({ job, geometry, op }: { job: Job; geometry: ModelGeome
 /** Polylines (program coordinates) for one picked reference, following spec §8's picked-geometry conventions. */
 function refLoops(ctx: CamContext, ref: GeometryRef): Point3[][] {
   if (ref.kind === 'dxfPath') return [dxfPathPoints(ctx, ref)].filter((p): p is Point3[] => p !== null);
+  if (ref.kind === 'meshSlot') {
+    const slot = meshSlots(ctx).find((s) => sameRef(s.ref, ref));
+    return slot ? [outlinePoints(slot.outline, slot.top)] : [];
+  }
   const faceRef = ref.kind === 'meshFace' ? ref : ref.face;
   const res = resolveFaceRef(ctx, faceRef);
   if (!res.ok) return [];
@@ -143,6 +158,12 @@ function dxfPathPoints(ctx: CamContext, ref: DxfPathRef): Point3[] | null {
   if (!raw) return null;
   const z = -ctx.origin.z; // a drawing lies at scene Z = 0
   return flattenPath(drawingPathToProgram(ctx, raw), 0.05).map((p): Point3 => [p.x, p.y, z]);
+}
+
+function outlinePoints(outline: readonly Vec2[], z: number): Point3[] {
+  const pts = outline.map((p): Point3 => [p.x, p.y, z]);
+  if (pts.length) pts.push(pts[0]);
+  return pts;
 }
 
 function closedLoopPoints(loop: Path2D, z: number): Point3[] {

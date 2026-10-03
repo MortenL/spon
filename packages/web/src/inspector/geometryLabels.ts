@@ -7,6 +7,7 @@ export function sameRef(a: GeometryRef, b: GeometryRef): boolean {
   if (a.kind === 'dxfPath' && b.kind === 'dxfPath') return a.blobId === b.blobId && a.layer === b.layer && a.path === b.path;
   if (a.kind === 'meshFace' && b.kind === 'meshFace') return sameFace(a, b);
   if ((a.kind === 'meshLoop' || a.kind === 'meshHole') && (b.kind === 'meshLoop' || b.kind === 'meshHole')) return sameFace(a.face, b.face) && a.loop === b.loop;
+  if (a.kind === 'meshSlot' && b.kind === 'meshSlot') return sameFace(a.face, b.face) && a.loop === b.loop;
   return false;
 }
 
@@ -18,6 +19,10 @@ export function toggleRef(list: readonly GeometryRef[], ref: GeometryRef): Geome
 export function refLabel(ref: GeometryRef, catalog: GeometryCatalog | null, layers: string[] | null, units: LengthUnit): string {
   const L = (mm: number) => formatLength(mm, units);
   if (ref.kind === 'dxfPath') return `${layers?.[ref.layer] ?? `Layer ${ref.layer + 1}`} · path ${ref.path + 1}`;
+  if (ref.kind === 'meshSlot') {
+    const slot = catalog?.slots.find((s) => sameRef(s.ref, ref));
+    return slot ? `Slot ${L(slot.width)} × ${L(slot.length)}` : 'Slot (not found)';
+  }
   const faceRef = ref.kind === 'meshFace' ? ref : ref.face;
   const face = catalog?.faces.find((f) => sameFace(f.ref, faceRef));
   if (!face) return ref.kind === 'meshFace' ? 'Face (not found)' : ref.kind === 'meshHole' ? 'Hole (not found)' : 'Edge loop (not found)';

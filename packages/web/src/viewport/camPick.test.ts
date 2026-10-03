@@ -1,7 +1,8 @@
-import { applyCommand, camContext, type JobCommand, type Operation } from '@sponcam/core';
+import { applyCommand, camContext, type CamGeometry, createJob, describeGeometry, importFile, type JobCommand, type Operation, setModel, setStock } from '@sponcam/core';
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { camPartSetup, faceAt, plateSetup } from '../../../core/test/fixtures/camSetup';
-import { applyPick, connectedDxfRefs, pickDxf, pickMesh } from './camPick';
+import { applyPick, connectedDxfRefs, pickDxf, pickMesh, pickSlot } from './camPick';
 
 const op = (job: Parameters<typeof applyCommand>[0], type: Operation['type']) =>
   applyCommand(job, { type: 'addOperation', opType: type, toolId: null, id: 'o' } as JobCommand).operations[0];
@@ -59,5 +60,32 @@ describe('facing and chamfer picking rules', () => {
     expect('refs' in hole && hole.refs[0]).toMatchObject({ kind: 'meshHole' });
     const loop = pickMesh(op(job, 'chamfer'), ctx, top.seed, { x: 5.2, y: 30 }, true);
     expect('refs' in loop && loop.refs[0]).toMatchObject({ kind: 'meshLoop', loop: 0 });
+  });
+});
+
+describe('slot picking', () => {
+  const r = importFile('slot-plate.stl', readFileSync(new URL('../../../core/test/fixtures/slot-plate.stl', import.meta.url)));
+  if (!r.ok || r.kind !== 'mesh') throw new Error('fixture did not import');
+  const geometry: CamGeometry = { kind: 'mesh', mesh: r.mesh, adjacency: r.adjacency, rawPoints: r.mesh.positions };
+  const job = setStock(setModel(createJob(), { sourceName: 'slot-plate.stl', blobId: 'm1', kind: 'mesh', importUnits: 'mm' }), { mode: 'auto', margin: { xy: 5, zTop: 0, zBottom: 0 } });
+  const ctx = camContext(job, geometry);
+  const slot = describeGeometry(job, geometry).slots.find((s) => s.through)!; // the obround, centres (20,30)/(33.5,30)
+  const top = faceAt(geometry as never, 5, 5, 10);
+  // program XY: model corner at the origin plus the 5 mm margin is not applied to program X/Y of raw points, see slot start
+  const inside = { x: (slot.start.x + slot.end.x) / 2, y: (slot.start.y + slot.end.y) / 2 };
+  const slotOp = op(job, 'slot');
+
+  it('picks the slot under the click, with or without Alt', () => {
+    expect(slot.ref.kind).toBe('meshSlot');
+    for (const alt of [false, true]) expect(pickMesh(slotOp, ctx, top.seed, inside, alt)).toEqual({ refs: [slot.ref] });
+    expect(pickSlot(ctx, inside)).toEqual(slot.ref);
+  });
+  it('picks within 1 mm of the outline but not beyond', () => {
+    expect(pickSlot(ctx, { x: inside.x, y: inside.y + slot.width / 2 + 0.5 })).toEqual(slot.ref);
+    expect(pickSlot(ctx, { x: inside.x, y: inside.y + slot.width / 2 + 3 })).toBeNull();
+  });
+  it('refuses a click away from any slot', () => {
+    const far = { x: inside.x, y: inside.y + 20 };
+    expect(pickMesh(slotOp, ctx, top.seed, far, false)).toEqual({ error: 'Click a slot, or pick drawn centrelines' });
   });
 });

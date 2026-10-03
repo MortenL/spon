@@ -33,10 +33,11 @@ async function resolveTool(job: Job, session: JobSession, tool: string | number,
 const EMPTY = {
   faces: 'No up-facing horizontal faces in this orientation.',
   holes: 'No holes found.',
+  slots: 'No slots found.',
   contours: 'No contours (only drawings, DXF or SVG, have contours).',
   all: 'Nothing to pick here (faces must be horizontal and face up).',
 };
-const describeShape = { filter: z.enum(['faces', 'holes', 'contours']).optional().describe('Only list one kind of geometry') };
+const describeShape = { filter: z.enum(['faces', 'holes', 'slots', 'contours']).optional().describe('Only list one kind of geometry') };
 const applyShape = {
   commands: z.array(jobCommandSchema).min(1).describe('Job commands, applied in order, all or nothing'),
   label: z.string().optional().describe('A short description of the change'),
@@ -44,7 +45,7 @@ const applyShape = {
 const addOperationShape = {
   type: operationTypeSchema,
   tool: z.union([z.string(), z.number().int()]).describe('A job tool id, a T number, or a library tool id (see list_tools). Library tools are copied into the job.'),
-  geometry: z.array(z.union([z.string(), geometryRefSchema])).describe('Handles from describe_geometry (F1, F1.L0, H2, C3) or full geometry refs. Required for every type except face, where an empty list faces the whole stock'),
+  geometry: z.array(z.union([z.string(), geometryRefSchema])).describe('Handles from describe_geometry (F1, F1.L0, H2, C3, S1) or full geometry refs. Required for every type except face, where an empty list faces the whole stock'),
   params: operationPatchSchema.omit({ geometry: true, toolId: true }).optional().describe('Operation parameters, e.g. { "side": "outside", "tabs": { "enabled": true } }'),
   name: z.string().optional(),
 };
@@ -54,14 +55,14 @@ export function registerEditTools(server: McpServer, ctx: ToolContext): void {
 
   server.registerTool('describe_geometry', {
     title: 'Describe geometry',
-    description: 'What can be machined in the current orientation, with handles: faces F1… (top down), face loops F1.L0…, holes H1…, DXF contours C1…. Program coordinates in mm.',
+    description: 'What can be machined in the current orientation, with handles: faces F1… (top down), face loops F1.L0…, holes H1…, slots S1…, DXF contours C1…. Program coordinates in mm.',
     inputSchema: describeShape,
   }, guarded('describe_geometry', async (a: Args<typeof describeShape>) => {
     const session = state.requireSession();
     const catalog = await session.catalog();
     if (!catalog) throw new SessionError('The job has no model yet. Use import_model first.');
     const handled = state.handles.assign(catalog);
-    const shown: HandledCatalog = a.filter ? { faces: [], holes: [], contours: [], [a.filter]: handled[a.filter] } : handled;
+    const shown: HandledCatalog = a.filter ? { faces: [], holes: [], contours: [], slots: [], [a.filter]: handled[a.filter] } : handled;
     const { model, stock } = await session.boxes();
     const listing = catalogText(shown) || EMPTY[a.filter ?? 'all'];
     return ok(`Model box: ${box(model)}. Stock box: ${box(stock)}.\n${listing}`, { ...shown, modelBox: model, stockBox: stock });
@@ -83,7 +84,7 @@ export function registerEditTools(server: McpServer, ctx: ToolContext): void {
 
   server.registerTool('add_operation', {
     title: 'Add operation',
-    description: 'Add a profile, pocket, drill, face or chamfer operation with its tool, geometry and parameters in one step. Nothing changes if any part fails.',
+    description: 'Add a profile, pocket, drill, face, chamfer or slot operation with its tool, geometry and parameters in one step. Nothing changes if any part fails.',
     inputSchema: addOperationShape,
   }, guarded('add_operation', async (a: Args<typeof addOperationShape>) => {
     const session = state.requireSession();

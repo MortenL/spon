@@ -1,11 +1,13 @@
-import { camContext, type ChamferOp, type DrillCycle, type DrillOp, type EntrySettings, type FaceOp, formatLength, type Operation, type PocketOp, type ProfileOp, resolveGeometry } from '@sponcam/core';
+import { camContext, type ChamferOp, type DrillCycle, type DrillOp, type EntrySettings, type FaceOp, formatLength, type Operation, type PocketOp, type ProfileOp, resolveGeometry, type SlotOp } from '@sponcam/core';
 import { useMemo } from 'react';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { LengthField, NumericField } from '@/panels/NumericField';
 import { runCommand } from '@/state/camView';
 import { useApp } from '@/state/store';
 import { chamferInfo } from './chamferInfo';
+import { slotView } from './slotInfo';
 import { contourKinds } from './openChains';
 
 const pctField = (label: string, value: number, testId: string, onCommit: (v: number) => void) => (
@@ -360,10 +362,70 @@ function ChamferPasses({ op }: { op: ChamferOp }) {
   );
 }
 
+const STRATEGY_LABEL: Record<SlotOp['strategy'], string> = { auto: 'Auto', toolWidth: 'Tool-width', wider: 'Wider', trochoidal: 'Trochoidal' };
+const END_LABEL: Record<NonNullable<SlotOp['squareEnds']>, string> = { inside: 'Inside', endWall: 'End wall', dogbone: 'Dogbone' };
+
+function SlotPasses({ op }: { op: SlotOp }) {
+  const patch = (p: Partial<SlotOp>) => runCommand({ type: 'updateOperation', id: op.id, patch: p });
+  const job = useApp((s) => s.job);
+  const geometry = useApp((s) => s.geometry);
+  const tool = job.tools.find((t) => t.id === op.toolId) ?? null;
+  const ctx = useMemo(() => camContext(job, geometry), [job, geometry]);
+  const { info, fields } = useMemo(() => slotView(op, ctx, tool), [op, ctx, tool]);
+
+  return (
+    <div className="space-y-3">
+      <label className="grid grid-cols-[1fr_10rem] items-center gap-2 text-sm">
+        <span className="text-muted-foreground">Strategy</span>
+        <select
+          data-testid="pass-slot-strategy" value={op.strategy} className="h-8 rounded-md border bg-transparent px-2 text-sm"
+          onChange={(e) => patch({ strategy: e.target.value as SlotOp['strategy'] })}
+        >
+          {(Object.keys(STRATEGY_LABEL) as SlotOp['strategy'][]).map((k) => <option key={k} value={k} className="bg-background">{STRATEGY_LABEL[k]}</option>)}
+        </select>
+      </label>
+      {info.auto.map((line) => <p key={line} data-testid="slot-auto-line" className="text-xs text-muted-foreground">{line}</p>)}
+      {fields.width && <LengthField label="Width" valueMm={op.width} testId="pass-slot-width" min={0.01} onCommit={(v) => patch({ width: v })} />}
+      {fields.stepdown && (
+        <LengthField label="Stepdown" valueMm={op.stepdown} testId="pass-stepdown" min={0.01} onCommit={(v) => patch({ stepdown: v })} />
+      )}
+      {fields.stepover && pctField('Stepover', op.stepoverPct, 'pass-stepover', (v) => patch({ stepoverPct: v }))}
+      {fields.step && pctField('Step', op.trochoidal.stepPct, 'pass-slot-step', (v) => patch({ trochoidal: { stepPct: v } }))}
+      {fields.direction && directionField(op.direction, (v) => patch({ direction: v }))}
+      {fields.layers && (
+        <p data-testid="slot-layers" className="text-xs text-muted-foreground">Layers: {info.trochoidalLayers}</p>
+      )}
+      {fields.radialStock && <LengthField label="Radial stock" valueMm={op.stockRadial} testId="pass-stock-radial" min={0} onCommit={(v) => patch({ stockRadial: v })} />}
+      <LengthField label="Axial stock" valueMm={op.stockAxial} testId="pass-stock-axial" min={0} onCommit={(v) => patch({ stockAxial: v })} />
+      {fields.finishWalls && (
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" data-testid="pass-finish-walls" className="accent-primary" checked={op.finishWalls} onChange={(e) => patch({ finishWalls: e.target.checked })} />
+          Finish walls
+        </label>
+      )}
+      {fields.squareEnds && (
+        <label className="grid grid-cols-[1fr_10rem] items-center gap-2 text-sm">
+          <span className="text-muted-foreground">Square ends</span>
+          <select
+            data-testid="pass-slot-ends" value={op.squareEnds ?? ''} aria-invalid={op.squareEnds === null}
+            className={cn('h-8 rounded-md border bg-transparent px-2 text-sm', op.squareEnds === null && 'border-destructive')}
+            onChange={(e) => patch({ squareEnds: (e.target.value || null) as SlotOp['squareEnds'] })}
+          >
+            <option value="" className="bg-background">Choose…</option>
+            {(Object.keys(END_LABEL) as NonNullable<SlotOp['squareEnds']>[]).map((k) => <option key={k} value={k} className="bg-background">{END_LABEL[k]}</option>)}
+          </select>
+        </label>
+      )}
+      <EntryFields entry={op.entry} showAngles onPatch={(p) => patch({ entry: { ...op.entry, ...p } })} />
+    </div>
+  );
+}
+
 export function PassesTab({ op }: { op: Operation }) {
   if (op.type === 'profile') return <ProfilePasses op={op} />;
   if (op.type === 'pocket') return <PocketPasses op={op} />;
   if (op.type === 'drill') return <DrillPasses op={op} />;
   if (op.type === 'face') return <FacePasses op={op} />;
+  if (op.type === 'slot') return <SlotPasses op={op} />;
   return <ChamferPasses op={op} />;
 }

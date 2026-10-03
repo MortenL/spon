@@ -1,3 +1,4 @@
+import { pointInPolys, type Poly } from '../../geometry/offset/clipper';
 import { arcStepCount } from '../../geometry/path2d';
 import { vec3, type Vec3 } from '../../geometry/vec3';
 import type { Tool } from '../../tools/types';
@@ -22,6 +23,11 @@ export interface GougeOptions {
    * tolerance + sagitta.
    */
   sagitta?: number;
+  /**
+   * Slots: tool-centre zones where cutting into the model was chosen (square ends cut to or past the wall). A feed
+   * sample at or above the zone's `minZ` (the slot floor) that gouges inside a zone gives that zone's warning once, instead of a gouge.
+   */
+  intended?: { zone: Poly[]; message: string; minZ?: number }[];
 }
 
 /** Cell size for a tool radius: clamp(R / 3, 0.5, 3) rounded down to a bucket, so a placement holds at most four indexes. */
@@ -69,6 +75,8 @@ export function gougeCheck(toolpath: Toolpath, tool: Tool, ctx: CamContext, opti
   const reduced = shrink(rAllow);
   const cycleShape = shrink(Math.max(gTol + ctx.tolerance + 0.02 * shape.radius, rAllow));
   let active = shape;
+  const intended = options.intended ?? [];
+  const intendedHit = intended.map(() => false);
 
   const sample = (x: number, y: number, z: number, isRapid: boolean) => {
     let depth = 0;
@@ -79,6 +87,10 @@ export function gougeCheck(toolpath: Toolpath, tool: Tool, ctx: CamContext, opti
       if (d > lim) depth = d - z;
     }
     if (depth > 0) {
+      if (!isRapid && intended.length) {
+        const k = intended.findIndex((iz) => (iz.minZ === undefined || z >= iz.minZ) && pointInPolys({ x, y }, iz.zone));
+        if (k >= 0) { intendedHit[k] = true; prev = null; return; }
+      }
       const p = vec3(x, y, z);
       const kind = isRapid ? 'rapid' : 'feed';
       if (isRapid) rapidFound = true;
@@ -142,6 +154,9 @@ export function gougeCheck(toolpath: Toolpath, tool: Tool, ctx: CamContext, opti
     });
   }
   if (rapidFound) diagnostics.push({ operationId: toolpath.operationId, severity: 'error', code: 'gouge', message: 'A rapid move passes through the model' });
+  intended.forEach((z, k) => {
+    if (intendedHit[k]) diagnostics.push({ operationId: toolpath.operationId, severity: 'warning', code: 'slot-overcut', message: z.message });
+  });
   compact();
   return { diagnostics, gouges: found };
 }

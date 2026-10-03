@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { igesFile, stepFile } from './cadWriters.mjs';
 import { steppedData } from './steppedData.mjs';
+import { obroundPts, rectPts, terracedTriangles } from './terraced.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -62,6 +63,22 @@ function camPartDxf() {
     ...line(30, 20, 70, 20), ...line(70, 20, 70, 40), ...line(30, 40, 70, 40), ...line(30, 40, 30, 20),
     ...circle('POCKET', 50, 30, 4), // island
     ...circle('HOLES', 10, 10, 3), ...circle('HOLES', 90, 10, 3), ...circle('HOLES', 10, 50, 3), ...circle('HOLES', 90, 50, 3),
+    [0, 'ENDSEC'], [0, 'EOF'],
+  ];
+  return groups.map(([code, value]) => `${code}\n${value}`).join('\n') + '\n';
+}
+
+function slotLinesDxf() {
+  const groups = [
+    [0, 'SECTION'], [2, 'HEADER'], [9, '$INSUNITS'], [70, 4], [0, 'ENDSEC'],
+    [0, 'SECTION'], [2, 'TABLES'], [0, 'TABLE'], [2, 'LAYER'], [70, 2],
+    [0, 'LAYER'], [2, 'OUTLINE'], [70, 0], [62, 7], [6, 'CONTINUOUS'],
+    [0, 'LAYER'], [2, 'SLOTS'], [70, 0], [62, 3], [6, 'CONTINUOUS'],
+    [0, 'ENDTAB'], [0, 'ENDSEC'],
+    [0, 'SECTION'], [2, 'ENTITIES'],
+    [0, 'LWPOLYLINE'], [8, 'OUTLINE'], [90, 4], [70, 1], [10, 0], [20, 0], [10, 100], [20, 0], [10, 100], [20, 60], [10, 0], [20, 60],
+    [0, 'LINE'], [8, 'SLOTS'], [10, 20], [20, 30], [30, 0], [11, 60], [21, 30], [31, 0],
+    [0, 'ARC'], [8, 'SLOTS'], [10, 50], [20, 0], [30, 0], [40, 40], [50, 60], [51, 120],
     [0, 'ENDSEC'], [0, 'EOF'],
   ];
   return groups.map(([code, value]) => `${code}\n${value}`).join('\n') + '\n';
@@ -200,6 +217,12 @@ writeFileSync(join(here, 'box-20x10x5.stl'), binaryStl(boxTriangles(20, 10, 5)))
 writeFileSync(join(here, 'plate-pocket.stl'), binaryStl(platePocketTriangles(), 'Spon fixture: plate with pocket and holes'));
 writeFileSync(join(here, 'plate-mm.dxf'), plateDxf());
 writeFileSync(join(here, 'cam-part.dxf'), camPartDxf());
+// 100 × 60 × 10 plate with an obround through slot (6.5 wide, centres (20,30) and (33.5,30)) and a square-ended keyway (8 wide, x 50-90 at y 45, floor 6)
+writeFileSync(join(here, 'slot-plate.stl'), binaryStl(terracedTriangles(rectPts(0, 0, 100, 60), 10, [
+  { poly: obroundPts(20, 33.5, 30, 6.5), z: 0 },
+  { poly: rectPts(50, 41, 90, 49), z: 6 },
+]), 'Spon fixture: slot plate'));
+writeFileSync(join(here, 'slot-lines.dxf'), slotLinesDxf());
 // STEP and IGES fixtures (Milestone 3.2). Their recorded reader output (*.occt.json) is written by
 // packages/web/scripts/record-occt.mjs, which runs the real occt-import-js reader (a dependency of @sponcam/web only).
 writeFileSync(join(here, 'box-hole.step'), stepFile('box-hole.step', [

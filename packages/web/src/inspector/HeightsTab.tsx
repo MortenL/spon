@@ -10,7 +10,7 @@ const COLOR: Record<HeightName, string> = { clearance: '#f97316', retract: '#84c
 const NAME_LABEL: Record<HeightName, string> = { clearance: 'Clearance', retract: 'Retract', feed: 'Feed', top: 'Top', bottom: 'Bottom' };
 const FROM_LABEL: Record<HeightFrom, string> = {
   stockTop: 'Stock top', stockBottom: 'Stock bottom', modelTop: 'Model top', modelBottom: 'Model bottom',
-  contour: 'Selected contour', face: 'Picked face', origin: 'WCS origin (absolute)', holeBottom: 'Hole bottom',
+  contour: 'Selected contour', face: 'Picked face', origin: 'WCS origin (absolute)', holeBottom: 'Hole bottom', slotBottom: 'Slot bottom',
   retract: 'Retract height', feed: 'Feed height', top: 'Top height',
 };
 
@@ -64,7 +64,7 @@ export function HeightsTab({ op }: { op: Operation }) {
                 data-testid={`height-${name}-from`} value={spec.from} className="h-8 rounded-md border bg-transparent px-2 text-sm"
                 onChange={(e) => setSpec({ from: e.target.value as HeightFrom })}
               >
-                {HEIGHT_FROM[name].map((f) => <option key={f} value={f} className="bg-background">{FROM_LABEL[f]}</option>)}
+                {HEIGHT_FROM[name].filter((f) => f !== 'slotBottom' || op.type === 'slot' || spec.from === f).map((f) => <option key={f} value={f} className="bg-background">{FROM_LABEL[f]}</option>)}
               </select>
             </label>
             <LengthField label="Offset" valueMm={spec.offset} testId={`height-${name}-offset`} onCommit={(v) => setSpec({ offset: v })} />

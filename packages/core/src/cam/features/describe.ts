@@ -7,6 +7,7 @@ import type { Job } from '../../job/types';
 import { camContext, type CamGeometry, drawingPathToProgram } from '../context';
 import type { DxfPathRef, MeshFaceRef, MeshHoleRef } from '../types';
 import { circleOf } from './dxf';
+import { catalogSlot, type CatalogSlot, faceSlots } from './slots';
 import { faceGeometry, faceRefFromTriangle, holeBottom } from './mesh';
 
 export interface CatalogFace {
@@ -27,14 +28,14 @@ export interface CatalogContour {
   circle: { center: Vec2; diameter: number } | null;
 }
 export interface CatalogHole { ref: MeshHoleRef | DxfPathRef; center: Vec2; diameter: number; top: number; bottom: number; through: boolean }
-export interface GeometryCatalog { faces: CatalogFace[]; contours: CatalogContour[]; holes: CatalogHole[] }
+export interface GeometryCatalog { faces: CatalogFace[]; contours: CatalogContour[]; holes: CatalogHole[]; slots: CatalogSlot[] }
 
 const COS_1DEG = Math.cos(Math.PI / 180);
 
 /** Everything pickable, described in program coordinates (spec §8a). */
 export function describeGeometry(job: Job, geometry: CamGeometry): GeometryCatalog {
   const ctx = camContext(job, geometry);
-  const out: GeometryCatalog = { faces: [], contours: [], holes: [] };
+  const out: GeometryCatalog = { faces: [], contours: [], holes: [], slots: [] };
   const model = job.model;
   if (!model || !ctx.placement) return out;
   if (geometry.kind === 'mesh') {
@@ -52,6 +53,7 @@ export function describeGeometry(job: Job, geometry: CamGeometry): GeometryCatal
         const hb = holeBottom(ctx, l.circle.center, l.circle.diameter / 2, f.z);
         out.holes.push({ ref: { kind: 'meshHole', face: ref, loop: l.index }, center: l.circle.center, diameter: l.circle.diameter, top: f.z, ...hb });
       }
+      out.slots.push(...faceSlots(ctx, f, ref).map(catalogSlot));
     }
     out.faces.sort((a, b) => b.z - a.z);
   } else {

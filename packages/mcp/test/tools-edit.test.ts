@@ -164,4 +164,45 @@ describe('editing tools', () => {
     expect(generated.operations[0].status).not.toBe('error');
     expect(generated.export.errors).toEqual([]);
   });
+
+  describe('slots', () => {
+    async function slotPlate() {
+      const t = await connect({}, ['slot-plate.stl']);
+      await t.call('new_job');
+      await t.call('import_model', { path: 'slot-plate.stl', units: 'mm' });
+      return t;
+    }
+    const handleOf = (listing: string, shape: string) => new RegExp(`^(S\\d+) slot ${shape}`, 'm').exec(listing)![1];
+
+    it('lists recognised slots with handles and filters them', async () => {
+      const { call } = await slotPlate();
+      const all = text(await call('describe_geometry'));
+      expect(all).toMatch(/^S\d+ slot 6\.5 × 13\.5 \(line, round\/round\) at \(-?[\d.]+, -?[\d.]+\) → \(-?[\d.]+, -?[\d.]+\), z -11\.000 to -1\.000, through$/m);
+      expect(all).toMatch(/^S\d+ slot 8 × 40 \(line, square\/square\)/m);
+      const only = await call('describe_geometry', { filter: 'slots' });
+      expect(text(only).split(/\n/).filter((l) => l.startsWith('S'))).toHaveLength(2);
+      expect(text(only)).not.toMatch(/^F\d/m);
+      expect(data(only).slots).toHaveLength(2);
+    });
+
+    it('says so when there are no slots', async () => {
+      const { call } = await dxfJob();
+      expect(text(await call('describe_geometry', { filter: 'slots' }))).toContain('No slots found.');
+    });
+
+    it('cuts a recognised slot', async () => {
+      const { call } = await slotPlate();
+      const handle = handleOf(text(await call('describe_geometry')), '6\\.5 × 13\\.5');
+      const added = await call('add_operation', { type: 'slot', tool: 'starter-flat-6', geometry: [handle], params: { stepdown: 2 } });
+      expect(added.isError).toBeFalsy();
+      const generated = await call('generate');
+      expect(generated.isError).toBeFalsy();
+      expect(data(generated).export.errors).toEqual([]);
+      const gen = data(generated) as { operations: { status: string; diagnostics: unknown[] }[]; files: { lines: number }[]; extents: unknown };
+      expect(gen.operations[0].status).not.toBe('error');
+      expect(gen.files.length).toBeGreaterThan(0);
+      expect(gen.files[0].lines).toBeGreaterThan(10);
+      expect(gen.extents).not.toBeNull();
+    });
+  });
 });

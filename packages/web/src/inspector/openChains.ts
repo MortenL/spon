@@ -7,11 +7,17 @@ export function contourKinds(op: Operation, ctx: CamContext): { closed: boolean;
 }
 
 /**
- * Open chains of a profile or chamfer as drawn (any reverse applied); a profile cuts along them, a chamfer may run
+ * Open chains of a profile, chamfer or slot as drawn (any reverse applied); a profile cuts along them, a chamfer may run
  * against them, see `chamferRunsAsDrawn`. `ref` is the seed reference,
  * `members` every reference that makes up the chain, `z` the height the drawing lies at.
  */
 export function openChains(op: Operation, ctx: CamContext): { ref: number; members: number[]; z: number; path: Path2D }[] {
+  if (op.type === 'slot') {
+    // a drawn centreline runs as drawn (any reverse applied); recognised slots have no direction
+    return resolveGeometry(op, ctx).slots
+      .filter((s) => !s.centreline.closed && op.geometry[s.ref]?.kind === 'dxfPath')
+      .map((s) => ({ ref: s.ref, members: s.members ?? [s.ref], z: s.top, path: s.centreline }));
+  }
   if (op.type !== 'profile' && op.type !== 'chamfer') return [];
   return resolveGeometry(op, ctx).contours
     .filter((c) => !c.path.closed)

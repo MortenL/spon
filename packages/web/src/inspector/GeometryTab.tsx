@@ -17,6 +17,7 @@ const PICK_HINT: Record<OperationType, string> = {
   drill: 'Click circles, or a face to add all its holes; Alt-click one hole',
   face: 'Facing the stock needs no geometry; for a picked area, click faces or closed paths',
   chamfer: 'Click edges: paths, faces, edge loops or holes',
+  slot: 'Click centrelines (lines or arcs), or a slot in the model',
 };
 
 export function GeometryTab({ op }: { op: Operation }) {
@@ -113,6 +114,19 @@ export function GeometryTab({ op }: { op: Operation }) {
                 <label key={i} data-testid={`catalog-face-${i}`} className="flex items-center gap-2 text-sm">
                   <input type="checkbox" className="accent-primary" checked={checked} onChange={() => setGeometry(toggleRef(op.geometry, f.ref))} />
                   <span className="min-w-0 flex-1 truncate">Face at Z {formatLength(f.z, units)} · {f.area.toFixed(1)} mm²</span>
+                </label>
+              );
+            })}
+
+          {geometry?.kind === 'mesh' && op.type === 'slot' &&
+            (catalog?.slots ?? []).map((s, i) => {
+              const checked = op.geometry.some((r) => sameRef(r, s.ref));
+              return (
+                <label key={i} data-testid={`catalog-slot-${i}`} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" className="accent-primary" checked={checked} onChange={() => setGeometry(toggleRef(op.geometry, s.ref))} />
+                  <span className="min-w-0 flex-1 truncate">
+                    {formatLength(s.width, units)} × {formatLength(s.length, units)} · {s.through ? 'through' : `blind to Z ${formatLength(s.bottom, units)}`} · {s.ends.join(' / ')}
+                  </span>
                 </label>
               );
             })}

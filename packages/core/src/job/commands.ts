@@ -47,15 +47,18 @@ const OP_KEYS: Readonly<Record<OperationType, readonly string[]>> = {
   drill: [...COMMON_KEYS, 'cycle', 'peck', 'dwellSeconds', 'diameterFilter'],
   face: [...COMMON_KEYS, 'area', 'overlap', 'pattern', 'angleDeg', 'stepoverPct', 'oneWay', 'direction', 'stepdown', 'finishPass', 'finishStepoverPct'],
   chamfer: [...COMMON_KEYS, 'side', 'openSide', 'direction', 'width', 'tipOffset', 'stepdown'],
+  slot: [...COMMON_KEYS, 'strategy', 'width', 'direction', 'stepdown', 'stepoverPct', 'stockRadial', 'stockAxial', 'finishWalls', 'entry', 'trochoidal', 'squareEnds'],
 };
 const ENUMS: Readonly<Record<string, Partial<Record<OperationType, readonly string[]>>>> = {
   side: { profile: ['outside', 'inside', 'on'], chamfer: ['auto', 'outside', 'inside'] },
   openSide: { profile: ['left', 'on', 'right'], chamfer: ['left', 'right'] },
-  direction: { profile: ['climb', 'conventional'], pocket: ['climb', 'conventional'], face: ['climb', 'conventional'], chamfer: ['climb', 'conventional'] },
+  direction: { profile: ['climb', 'conventional'], pocket: ['climb', 'conventional'], face: ['climb', 'conventional'], chamfer: ['climb', 'conventional'], slot: ['climb', 'conventional'] },
   area: { face: ['stock', 'picked'] },
   pattern: { face: ['zigzag', 'spiral'] },
+  strategy: { slot: ['auto', 'toolWidth', 'wider', 'trochoidal'] },
+  squareEnds: { slot: ['inside', 'endWall', 'dogbone'] },
 };
-const NESTED = new Set(['heights', 'feeds', 'entry', 'leads', 'tabs']);
+const NESTED = new Set(['heights', 'feeds', 'entry', 'leads', 'tabs', 'trochoidal']);
 const POSITIVE = ['stepdown', 'peck', 'width'];
 const NON_NEGATIVE = ['stockRadial', 'stockAxial', 'dwellSeconds', 'overlap', 'tipOffset'];
 
@@ -90,7 +93,7 @@ function patchOperation(job: Job, op: Operation, patch: OperationPatch): Operati
   for (const [key, value] of Object.entries(patch)) {
     if (!allowed.includes(key)) throw new CommandError(`"${key}" does not apply to a ${op.type} operation`);
     const allowedValues = ENUMS[key]?.[op.type];
-    if (allowedValues && !allowedValues.includes(value as string)) throw new CommandError(`${key} must be one of ${allowedValues.join(', ')}`);
+    if (allowedValues && !(key === 'squareEnds' && value === null) && !allowedValues.includes(value as string)) throw new CommandError(`${key} must be one of ${allowedValues.join(', ')}`);
     // a chamfer's stepdown may be 0 (one pass)
     if (key === 'stepdown' && op.type === 'chamfer') {
       if (!((value as number) >= 0 && Number.isFinite(value))) throw new CommandError('stepdown must not be negative');
@@ -99,6 +102,10 @@ function patchOperation(job: Job, op: Operation, patch: OperationPatch): Operati
     if ((key === 'stepoverPct' || key === 'finishStepoverPct') && !((value as number) > 0 && (value as number) <= 100)) throw new CommandError(`${key} must be in (0, 100]`);
     if (key === 'angleDeg' && !Number.isFinite(value)) throw new CommandError('angleDeg must be a finite number');
     if (key === 'toolId') checkTool(job, value as string | null);
+    if (key === 'trochoidal') {
+      const v = value as { stepPct?: number };
+      if ('stepPct' in v && !((v.stepPct as number) > 0 && (v.stepPct as number) <= 100)) throw new CommandError('trochoidal.stepPct must be in (0, 100]');
+    }
     if (key === 'tabs') checkTabs(value as Partial<TabSettings>);
     next[key] = NESTED.has(key) ? { ...(op as unknown as Record<string, object>)[key], ...(value as object) } : value;
   }
