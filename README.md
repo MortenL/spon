@@ -8,7 +8,7 @@ An MCP server lets Claude (or any MCP client) drive the same jobs: on `.spon` fi
 
 **Workspace**
 - A left icon rail with Setup (Model, Orientation, Stock, Origin) and CAM (Operations, Post, Programs). One panel is open at a time; it can be resized, or hidden by clicking its icon again. Status dots show what needs attention, and a setup summary sits under the CAM panels.
-- Operation rows show the first problem, reorder by dragging, and have a ⋯ menu and shortcuts (Ctrl+D duplicates, Del deletes, Alt+↑/↓ moves). Machine settings are in the top bar.
+- Operation rows show the first problem, reorder by dragging, and have a ⋯ menu and shortcuts that act while the Operations panel is open (Ctrl+D duplicates, Del deletes, Alt+↑/↓ moves). Machine settings are in the top bar.
 
 **Import**
 - STL meshes, STEP and IGES solids (multi-body files ask which body), DXF drawings and SVG drawings.

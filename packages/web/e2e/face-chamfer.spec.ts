@@ -78,6 +78,7 @@ test('DXF part: a chamfer mill chamfers the outline, with its depth computed', a
 test('STL: a cut into the model is an error that blocks export, until the depth is fixed', async ({ page }) => {
   await openFixture(page, 'stepped.stl');
   await page.getByTestId('units-mm').click();
+  await expect(page.getByTestId('model-size')).toBeVisible(); // the import has finished and brought the Model panel forward
   await addOp(page, 'profile');
   await page.getByTestId('catalog-face-0').click(); // the boss top, the topmost face
   await expect(lastRow(page)).toHaveAttribute('data-status', 'error');

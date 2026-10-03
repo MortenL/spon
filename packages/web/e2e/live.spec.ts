@@ -45,6 +45,7 @@ test('Claude drives the open tab: each tool call is one undo step, the preview r
     const catalog = (await call('describe_geometry')).structuredContent as { contours: { handle: string; layer: string }[] };
     const outline = catalog.contours.filter((c) => c.layer === 'OUTLINE').map((c) => c.handle);
     await call('add_operation', { type: 'profile', tool: 'starter-flat-6', geometry: outline, params: { tabs: { enabled: true } } });
+    await expect(page.getByTestId('left-panel')).toHaveAttribute('data-panel', 'operations'); // the add switched the panel
     await expect(page.locator('[data-testid^="op-row-"]')).toHaveCount(1);
     await expect(page.getByText(/Claude: Add Profile on/)).toBeVisible();
 

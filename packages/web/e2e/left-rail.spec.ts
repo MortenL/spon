@@ -43,16 +43,147 @@ test('the width and the open panel survive a reload', async ({ page }) => {
   expect(Math.abs((await page.getByTestId('left-panel').boundingBox())!.width - before)).toBeLessThan(3);
 });
 
-test('opening a model shows Model; adding an operation shows Operations', async ({ page }) => {
+test('opening a model shows Model', async ({ page }) => {
   await page.getByTestId('rail-post').click();
   await openMesh(page);
   await expect(page.getByTestId('left-panel')).toHaveAttribute('data-panel', 'model');
-  await openPanel(page, 'operations');
-  await page.getByTestId('rail-stock').click();
+});
+
+test('undoing an operation removal brings Operations forward, from another panel and from a hidden one', async ({ page }) => {
+  await openMesh(page);
   await openPanel(page, 'operations');
   await page.getByTestId('add-op').click();
   await page.getByTestId('add-op-drill').click();
+  await page.getByTestId('op-row-0').click();
+  await page.keyboard.press('Delete');
+  await expect(page.getByTestId('op-name')).toHaveCount(0);
+  await openPanel(page, 'stock');
+  await page.locator('body').press('Control+z');
   await expect(page.getByTestId('left-panel')).toHaveAttribute('data-panel', 'operations');
+  await expect(page.getByTestId('op-name')).toHaveCount(1);
+  // the same with the panel hidden: redo the removal, hide the panel, undo again
+  await page.locator('body').press('Control+Shift+z');
+  await page.getByTestId('rail-operations').click();
+  await expect(page.getByTestId('left-panel')).toHaveCount(0);
+  await page.locator('body').press('Control+z');
+  await expect(page.getByTestId('left-panel')).toHaveAttribute('data-panel', 'operations');
+});
+
+test('the hidden state survives a reload; any icon brings the panel back', async ({ page }) => {
+  await page.getByTestId('rail-model').click();
+  await expect(page.getByTestId('left-panel')).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByTestId('rail-model')).toBeVisible();
+  await expect(page.getByTestId('left-panel')).toHaveCount(0);
+  await page.getByTestId('rail-stock').click();
+  await expect(page.getByTestId('left-panel')).toHaveAttribute('data-panel', 'stock');
+});
+
+test('rail arrow keys move focus, but Alt+Arrow does not', async ({ page }) => {
+  await page.getByTestId('rail-model').focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(page.getByTestId('rail-orientation')).toBeFocused();
+  await page.keyboard.press('Alt+ArrowDown');
+  await expect(page.getByTestId('rail-orientation')).toBeFocused();
+});
+
+test('a summary part click focuses the matching rail icon', async ({ page }) => {
+  await openMesh(page);
+  await openPanel(page, 'operations');
+  await page.getByTestId('setup-summary-stock').click();
+  await expect(page.getByTestId('rail-stock')).toBeFocused();
+});
+
+test('operation ⋯ menu and Alt+Arrow shortcuts move and delete rows; focus follows a delete', async ({ page }) => {
+  await openMesh(page);
+  await openPanel(page, 'operations');
+  for (const t of ['drill', 'pocket', 'profile']) {
+    await page.getByTestId('add-op').click();
+    await page.getByTestId(`add-op-${t}`).click();
+  }
+  const names = () => page.getByTestId('op-name').allTextContents();
+  const start = await names();
+  const menu = async (row: number, item: string) => {
+    await page.getByTestId(`op-row-${row}`).getByTestId('op-menu').click();
+    await page.getByTestId(item).click();
+    await expect(page.getByRole('menu')).toHaveCount(0);
+  };
+  await menu(1, 'op-up');
+  await expect.poll(names).toEqual([start[1], start[0], start[2]]);
+  await menu(0, 'op-down');
+  await expect.poll(names).toEqual(start);
+  await page.getByTestId('op-row-0').getByTestId('op-menu').click();
+  await expect(page.getByTestId('op-up')).toBeDisabled();
+  await page.keyboard.press('Escape');
+  await page.getByTestId('op-row-2').getByTestId('op-menu').click();
+  await expect(page.getByTestId('op-down')).toBeDisabled();
+  await page.keyboard.press('Escape');
+  // a row is keyboard-selectable; Alt+ArrowDown / Alt+ArrowUp move it
+  await page.getByTestId('op-row-0').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByTestId('op-row-0')).toHaveAttribute('data-selected', 'true');
+  await page.keyboard.press('Alt+ArrowDown');
+  await expect.poll(names).toEqual([start[1], start[0], start[2]]);
+  await page.keyboard.press('Alt+ArrowUp');
+  await expect.poll(names).toEqual(start);
+  // Delete from the menu: focus goes to the next row's menu, and to Add operation after the last row
+  await menu(1, 'op-delete');
+  await expect.poll(names).toEqual([start[0], start[2]]);
+  await expect(page.getByTestId('op-row-1').getByTestId('op-menu')).toBeFocused();
+  await menu(1, 'op-delete');
+  await expect(page.getByTestId('add-op')).toBeFocused();
+  await page.getByTestId('undo').click();
+  await expect.poll(names).toEqual([start[0], start[2]]);
+});
+
+function program(name: string): { name: string; mimeType: string; buffer: Buffer } {
+  const lines = ['G21 G90 G17 G54', 'S9000 M3', 'G0 Z5', 'G0 X0 Y0', 'G1 Z-1 F300', 'G1 X10 Y0 F600', 'G0 Z5', 'M5', 'M30'];
+  return { name, mimeType: 'text/plain', buffer: Buffer.from(lines.join('\n')) };
+}
+
+test('imported programs: ⋯ menu and drag reorder, each one undo step; Remove', async ({ page }) => {
+  for (const n of ['prog-a.nc', 'prog-b.nc', 'prog-c.nc']) {
+    await page.getByTestId('open-input').setInputFiles(program(n));
+    await expect(page.getByTestId(`program-${n}`)).toBeVisible();
+  }
+  await expect(page.getByTestId('left-panel')).toHaveAttribute('data-panel', 'programs');
+  const order = () => page.locator('[data-active]').evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.testid));
+  const start = ['program-prog-a.nc', 'program-prog-b.nc', 'program-prog-c.nc'];
+  await expect.poll(order).toEqual(start);
+  const menu = async (name: string, item: string) => {
+    await page.getByTestId(`program-${name}`).getByTestId('program-menu').click();
+    await page.getByTestId(item).click();
+    await expect(page.getByRole('menu')).toHaveCount(0);
+  };
+  await menu('prog-a.nc', 'program-down');
+  await expect.poll(order).toEqual([start[1], start[0], start[2]]);
+  await page.getByTestId('undo').click();
+  await expect.poll(order).toEqual(start);
+  await menu('prog-c.nc', 'program-up');
+  await expect.poll(order).toEqual([start[0], start[2], start[1]]);
+  await page.getByTestId('undo').click();
+  await expect.poll(order).toEqual(start);
+  // drag the first row below the third
+  await page.getByTestId('program-prog-a.nc').getByTestId('program-drag').hover();
+  await page.mouse.down();
+  const tb = (await page.getByTestId('program-prog-c.nc').boundingBox())!;
+  await page.mouse.move(tb.x + 20, tb.y + tb.height - 2, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(order).toEqual([start[1], start[2], start[0]]);
+  await page.getByTestId('undo').click();
+  await expect.poll(order).toEqual(start);
+  await menu('prog-b.nc', 'program-remove');
+  await expect.poll(order).toEqual([start[0], start[2]]);
+});
+
+test('operation line 2 lines up under the name', async ({ page }) => {
+  await openMesh(page);
+  await openPanel(page, 'operations');
+  await page.getByTestId('add-op').click();
+  await page.getByTestId('add-op-drill').click();
+  const name = (await page.getByTestId('op-row-0').getByTestId('op-name').boundingBox())!;
+  const tool = (await page.getByTestId('op-row-0').getByTestId('op-tool').boundingBox())!;
+  expect(Math.abs(name.x - tool.x)).toBeLessThan(4);
 });
 
 test('fixed stock that is too small: amber dot and summary', async ({ page }) => {
@@ -96,9 +227,13 @@ test('reorder by drag and by keyboard; one undo step each; menu and shortcuts', 
   await expect(page.getByText(/is over position 2$/)).toBeAttached();
   await page.keyboard.press('Space');
   await expect.poll(names).toEqual([start[1], start[0], start[2]]);
+  await page.keyboard.press('Control+z'); // one undo step restores the order
+  await expect.poll(names).toEqual(start);
   // shortcuts on the selected row; typing in the job name does not trigger them
   await page.getByTestId('op-row-0').click();
   await page.keyboard.press('Control+d');
+  await expect(page.getByTestId('op-name')).toHaveCount(4);
+  await page.keyboard.press('Control+Shift+d'); // Shift makes it another shortcut
   await expect(page.getByTestId('op-name')).toHaveCount(4);
   await page.getByTestId('job-name').focus();
   await page.keyboard.press('Delete');
