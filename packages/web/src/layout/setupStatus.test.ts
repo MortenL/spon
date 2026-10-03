@@ -1,6 +1,6 @@
 import { createJob, type Job, type ModelGeometry, QUAT_IDENTITY, quatFromAxisAngle, setModel, setStock, setWcs, vec3 } from '@sponcam/core';
 import { describe, expect, it } from 'vitest';
-import { originLabel, setupStatus, upAxisLabel } from './setupStatus';
+import { originLabel, setupStatus, textStatus, upAxisLabel } from './setupStatus';
 
 // Placement only reads rawPoints, so the geometry carries the corner points and an empty mesh/drawing.
 function corners(x: number, y: number, z: number): Float32Array {
@@ -89,5 +89,13 @@ describe('labels', () => {
     expect(originLabel({ anchor: { x: 'min', y: 'min', z: 'top' }, offset: vec3(0, 0, 0), workOffset: 'G54' })).toBe('origin front-left, top (G54)');
     expect(originLabel({ anchor: { x: 'center', y: 'center', z: 'bottom' }, offset: vec3(0, 0, 0), workOffset: 'G55' })).toBe('origin centre, bottom (G55)');
     expect(originLabel({ anchor: { x: 'max', y: 'max', z: 'top' }, offset: vec3(1, 0, 0), workOffset: 'G54' })).toBe('origin back-right, top + offset (G54)');
+  });
+});
+
+describe('textStatus', () => {
+  it('shows a dot only when a text has an error', () => {
+    expect(textStatus([])).toEqual({ state: 'ok' });
+    expect(textStatus([{ diagnostics: [{ severity: 'warning' }] }])).toEqual({ state: 'ok' });
+    expect(textStatus([{ diagnostics: [] }, { diagnostics: [{ severity: 'error' }] }])).toMatchObject({ state: 'attention' });
   });
 });

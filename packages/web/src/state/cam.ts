@@ -1,7 +1,7 @@
 import { type GeometryCatalog, type Job, type PreviewOptions, programContext, type ProgramRef } from '@sponcam/core';
 import { toast } from 'sonner';
 import type { StoreApi } from 'zustand/vanilla';
-import { catalogInWorker, generateInWorker, previewSvgInWorker, setCamModelInWorker, workerEpoch } from '../workers/importClient';
+import { addFontsInWorker, catalogInWorker, generateInWorker, previewSvgInWorker, setCamModelInWorker, workerEpoch } from '../workers/importClient';
 import type { CamFile, CamRun, OperationSummary } from './camTypes';
 import { type AppState, appStore, type ModelGeometry, type ProgramData } from './store';
 
@@ -13,9 +13,10 @@ export interface CamOutput {
   results: Record<string, OperationSummary>;
   programData: Record<string, ProgramData>;
   catalog: CamRun['catalog'];
+  texts: CamRun['texts'];
 }
 
-export const EMPTY_CAM_OUTPUT: CamOutput = { programs: [], files: [], results: {}, programData: {}, catalog: null };
+export const EMPTY_CAM_OUTPUT: CamOutput = { programs: [], files: [], results: {}, programData: {}, catalog: null, texts: [] };
 
 export function toCamOutput(run: CamRun): CamOutput {
   const id = (name: string) => `${GEN_PREFIX}${name}`;
@@ -25,15 +26,16 @@ export function toCamOutput(run: CamRun): CamOutput {
     results: Object.fromEntries(run.results.map((r) => [r.operationId, r])),
     programData: Object.fromEntries(run.files.map((f) => [id(f.name), { status: 'ready' as const, text: f.text, parsed: f.parsed, error: null }])),
     catalog: run.catalog,
+    texts: run.texts,
   };
 }
 
-export const EMPTY_RUN: CamRun = { results: [], files: [], catalog: null };
+export const EMPTY_RUN: CamRun = { results: [], files: [], catalog: null, texts: [] };
 
 /** True when the change from (a, ga) to (b, gb) can change the toolpaths: what triggers regeneration. */
 export function camInputsChanged(a: Job, b: Job, ga: ModelGeometry | null, gb: ModelGeometry | null): boolean {
   return (
-    a.operations !== b.operations || a.tools !== b.tools || a.post !== b.post || a.tolerance !== b.tolerance || a.model !== b.model ||
+    a.operations !== b.operations || a.texts !== b.texts || a.tools !== b.tools || a.post !== b.post || a.tolerance !== b.tolerance || a.model !== b.model ||
     a.stock !== b.stock || a.wcs !== b.wcs || a.machine !== b.machine || a.displayUnits !== b.displayUnits || a.name !== b.name || ga !== gb
   );
 }
@@ -41,6 +43,8 @@ export function camInputsChanged(a: Job, b: Job, ga: ModelGeometry | null, gb: M
 let generation = 0;
 let sentGeometry: ModelGeometry | null | undefined;
 let sentEpoch = -1;
+const sentFontIds = new Set<string>();
+let sentFontEpoch = -1;
 
 /** The newest finished run and the inputs it was made from. */
 let latest: { job: Job; geometry: ModelGeometry | null; run: CamRun } | null = null;
@@ -56,13 +60,31 @@ export async function ensureCamModel(geometry: ModelGeometry | null): Promise<vo
   sentEpoch = epoch;
 }
 
+/** Sends font bytes the worker has not got yet (once per blob id; a replaced worker has lost them all). */
+function freshFonts(): [string, Uint8Array][] {
+  if (sentFontEpoch !== workerEpoch()) {
+    sentFontIds.clear();
+    sentFontEpoch = workerEpoch();
+  }
+  return Object.entries(appStore.getState().fontBytes).filter(([id]) => !sentFontIds.has(id));
+}
+
+export async function ensureCamFonts(): Promise<void> {
+  const epoch = workerEpoch();
+  const fresh = freshFonts();
+  if (!fresh.length) return;
+  await addFontsInWorker(Object.fromEntries(fresh));
+  if (workerEpoch() !== epoch) return;
+  for (const [id] of fresh) sentFontIds.add(id);
+}
+
 export async function regenerate(): Promise<void> {
   const gen = ++generation;
   const s = appStore.getState();
   const { job, geometry } = s;
-  if (!job.operations.length) {
+  if (!job.operations.length && !job.texts.length) {
     latest = { job, geometry, run: EMPTY_RUN };
-    if (s.generatedPrograms.length || Object.keys(s.camResults).length) s.setCamOutput(EMPTY_CAM_OUTPUT);
+    if (s.generatedPrograms.length || Object.keys(s.camResults).length || s.camTexts.length) s.setCamOutput(EMPTY_CAM_OUTPUT);
     else s.setCamStatus('idle');
     return;
   }
@@ -80,6 +102,8 @@ export async function regenerate(): Promise<void> {
     // the worker keeps its own copy of the model; a replaced worker has lost it
     // no await when the worker already has the model: generation then starts synchronously
     if (!camModelSent(geometry)) await ensureCamModel(geometry);
+    // no await when the worker has every font: generation then starts synchronously
+    if (freshFonts().length) await ensureCamFonts();
     const result = await generateInWorker(job, programContext(job, geometry));
     const state = check();
     if (state === 'superseded') return;
@@ -105,7 +129,7 @@ export function startCamPipeline(store: StoreApi<AppState>, delayMs = 250): () =
     timer = setTimeout(() => void regenerate(), delayMs);
   };
   const unsubscribe = store.subscribe((s, prev) => {
-    if (camInputsChanged(prev.job, s.job, prev.geometry, s.geometry)) schedule();
+    if (camInputsChanged(prev.job, s.job, prev.geometry, s.geometry) || s.fontBytes !== prev.fontBytes) schedule();
   });
   schedule();
   return () => {
@@ -148,5 +172,6 @@ export async function camCatalog(): Promise<GeometryCatalog | null> {
 export async function camPreviewSvg(options: PreviewOptions): Promise<string> {
   const { job, geometry } = appStore.getState();
   await ensureCamModel(geometry);
+  await ensureCamFonts();
   return previewSvgInWorker(job, programContext(job, geometry), options);
 }

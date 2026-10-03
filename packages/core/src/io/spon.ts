@@ -1,5 +1,6 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import type { Job, ModelRef, ProgramRef } from '../job/types';
+import { fontBlobPath } from '../text/types';
 import { SponFileError } from './errors';
 import { migrateJob } from './migrations';
 
@@ -17,11 +18,19 @@ export function programFilePath(program: ProgramRef): string {
   return `programs/${program.blobId}.nc`;
 }
 
-/** Every blob the job references: the model (if any) first, then programs in list order. */
+/** Every blob the job references: the model (if any) first, then programs in list order, then uploaded fonts. */
 export function jobBlobIds(job: Job): string[] {
-  return [...(job.model ? [job.model.blobId] : []), ...job.programs.map((p) => p.blobId)];
+  return [...blobPaths(job), ...fontBlobPaths(job)].map(([blobId]) => blobId);
 }
 
+/** Uploaded fonts of the job's texts, deduplicated by blobId. */
+function fontBlobPaths(job: Job): [blobId: string, path: string][] {
+  const seen = new Map<string, string>();
+  for (const t of job.texts) if (t.font.kind === 'file' && !seen.has(t.font.blobId)) seen.set(t.font.blobId, fontBlobPath(t.font.blobId, t.font.name));
+  return [...seen];
+}
+
+/** Model and program blobs: a job cannot be written or read without them. Fonts are optional (the text then reports font-missing). */
 function blobPaths(job: Job): [blobId: string, path: string][] {
   return [
     ...(job.model ? [[job.model.blobId, modelFilePath(job.model)] as [string, string]] : []),
@@ -37,6 +46,8 @@ export function writeSpon(job: Job, blobs: BlobMap): Uint8Array {
     if (!bytes) throw new SponFileError(`Missing data for ${path}`);
     files[path] = bytes;
   }
+  // a font whose bytes are lost stays referenced; its text shows font-missing
+  for (const [blobId, path] of fontBlobPaths(job)) if (blobs[blobId]) files[path] = blobs[blobId];
   return zipSync(files, { level: 6 });
 }
 
@@ -62,5 +73,6 @@ export function readSpon(bytes: Uint8Array): { job: Job; blobs: BlobMap } {
     if (!data) throw new SponFileError(`${path} is missing from the job file`);
     blobs[blobId] = data;
   }
+  for (const [blobId, path] of fontBlobPaths(job)) if (files[path]) blobs[blobId] = files[path];
   return { job, blobs };
 }

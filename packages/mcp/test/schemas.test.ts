@@ -1,7 +1,7 @@
-import type { GeometryRef, JobCommand, OperationPatch, Tool } from '@sponcam/core';
+import type { FontRef, GeometryRef, JobCommand, OperationPatch, TextPatch, Tool } from '@sponcam/core';
 import { describe, expect, it } from 'vitest';
 import type { z } from 'zod';
-import { geometryRefSchema, jobCommandSchema, operationPatchSchema, toolSchema } from '../src/schemas';
+import { fontRefSchema, geometryRefSchema, jobCommandSchema, operationPatchSchema, textPatchSchema, toolSchema } from '../src/schemas';
 import { tool6 } from './helpers';
 
 // compile-time: each schema's type and the core type are assignable both ways
@@ -11,6 +11,9 @@ same<Same<z.infer<typeof jobCommandSchema>, JobCommand>>();
 same<Same<z.infer<typeof operationPatchSchema>, OperationPatch>>();
 // an optional key missing from the schema passes the check above, so compare the key sets as well
 same<Same<keyof z.infer<typeof operationPatchSchema>, keyof OperationPatch>>();
+same<Same<z.infer<typeof textPatchSchema>, TextPatch>>();
+same<Same<keyof z.infer<typeof textPatchSchema>, keyof TextPatch>>();
+same<Same<z.infer<typeof fontRefSchema>, FontRef>>();
 same<Same<z.infer<typeof toolSchema>, Tool>>();
 same<Same<z.infer<typeof geometryRefSchema>, GeometryRef>>();
 

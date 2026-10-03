@@ -11,6 +11,7 @@ import { niceGridStep } from './convert';
 /** The subset of OrbitControls this code uses (drei registers it as the default controls). */
 export interface OrbitLike {
   target: THREE.Vector3;
+  enabled?: boolean;
   update(): void;
 }
 

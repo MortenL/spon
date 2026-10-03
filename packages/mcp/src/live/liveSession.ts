@@ -3,7 +3,7 @@ import {
   type RunReport, type SessionInfo, toBase64,
 } from '@sponcam/core';
 import { withSponExtension, writeFileAtomic } from '../files';
-import { type JobSession, type ModelInput, SessionError, type ToolLibraryAccess } from '../session';
+import { type JobSession, type ModelInput, SessionError, type ToolLibraryAccess, type UploadedFontRef } from '../session';
 import { debugLog } from '../log';
 import type { TabConnection } from './connection';
 
@@ -85,5 +85,9 @@ export class LiveSession implements JobSession {
 
   importProgram(fileName: string, bytes: Uint8Array): Promise<ProgramRef> {
     return this.tab.request('importProgram', { fileName, bytes: toBase64(bytes) });
+  }
+
+  async loadFont(fileName: string, bytes: Uint8Array): Promise<UploadedFontRef> {
+    return (await this.tab.request('loadFont', { fileName, bytes: toBase64(bytes) })).font;
   }
 }

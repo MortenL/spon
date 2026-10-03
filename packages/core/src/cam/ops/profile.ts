@@ -86,6 +86,8 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
   let clearance = -Infinity;
   let plungeWarned = false;
   let leadWarned = false;
+  // the side of the contour being cut: an inner loop (a counter of a letter) is cut on the opposite side, so the tool stays out of the material
+  let side = op.side;
 
   const emitSegs = (segs: Segment[], z0: number, z1: number) => {
     const total = segs.reduce((a, s) => a + segmentLength(s), 0);
@@ -107,7 +109,7 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
   const cutClosed = (
     lap: Path2D, levels: number[], h: ResolvedHeights, first: boolean, index: number, ref: number, useExplicit: boolean, recordOverlay: boolean,
   ) => {
-    const wantCW = lapRunsCW(op.side, op.direction);
+    const wantCW = lapRunsCW(side, op.direction);
     let path = orientPath(lap, !wantCW);
     const total = pathLength(path);
     const explicitStart =
@@ -115,12 +117,12 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
     path = rotateStart(path, explicitStart ?? autoStart(path));
     const P = pathStart(path);
     const T = pointAt(path, 0).tangent;
-    const freeLeft = op.side === 'inside' ? !wantCW : wantCW; // CW loop: outside is on the left
+    const freeLeft = side === 'inside' ? !wantCW : wantCW; // CW loop: outside is on the left
 
     // The tool centre may only move inside the lap ('inside') or outside it ('outside', 'on'); the lap is its
     // boundary. The check polygon is widened by FREE_SLACK so moves along or tangent to the lap itself pass.
     const lapPoly = flattenPath(orientPath(path, true), FREE_TOL);
-    const inside = op.side === 'inside';
+    const inside = side === 'inside';
     const check = offsetPolys([lapPoly], inside ? FREE_SLACK : -FREE_SLACK, FREE_TOL);
     const clear = (a: Vec2, b: Vec2) => !segmentCrossesPolys(a, b, check) && pointInPolys(b, check) === inside;
     const segsClear = (segs: Segment[]) => {
@@ -223,7 +225,9 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
     const h = hr.values;
     out.heights ??= h;
     clearance = Math.max(clearance, h.clearance);
-    const res = contourLaps(c.path, op.side, op.openSide, op.direction, r + op.stockRadial, tol);
+    side = c.kind === 'inner' ? (op.side === 'outside' ? 'inside' : op.side === 'inside' ? 'outside' : 'on') : op.side;
+    const res = contourLaps(c.path, side, op.openSide, op.direction, r + op.stockRadial, tol);
+    if (!res && c.kind === 'inner') return diag('warning', 'offset-collapsed', 'The tool does not fit inside a counter of this contour; it was skipped', c.ref);
     if (!res) {
       return diag('error', 'offset-collapsed', c.path.closed ? 'The tool does not fit inside this contour' : 'The tool does not fit beside this line', c.ref);
     }
@@ -237,7 +241,7 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
     });
     if (op.finishPass && (c.path.closed || op.openSide !== 'on')) {
       // closed contours and open-side chains get a finish pass at the tool radius; a cut on the line has none
-      const finishLaps = contourLaps(c.path, op.side, op.openSide, op.direction, r, tol)?.laps ?? [];
+      const finishLaps = contourLaps(c.path, side, op.openSide, op.direction, r, tol)?.laps ?? [];
       finishLaps.forEach((lap, i) => {
         if (lap.closed) cutClosed(lap, [h.bottom], h, false, index, c.ref, i === 0, false);
         else cutOpen(lap, [h.bottom], h, false, true);

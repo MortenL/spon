@@ -19,7 +19,7 @@ export function identityTransform(): ModelTransform {
 
 export function createJob(name = 'Untitled'): Job {
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     id: crypto.randomUUID(),
     name,
     displayUnits: 'mm',
@@ -30,6 +30,7 @@ export function createJob(name = 'Untitled'): Job {
     programs: [],
     tools: [],
     operations: [],
+    texts: [],
     post: defaultPostSettings('grbl'),
     tolerance: DEFAULT_TOLERANCE,
   };

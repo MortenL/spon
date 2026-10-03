@@ -132,6 +132,7 @@ function OpenChainArrows({ job, geometry, op }: { job: Job; geometry: ModelGeome
 
 /** Polylines (program coordinates) for one picked reference, following spec §8's picked-geometry conventions. */
 function refLoops(ctx: CamContext, ref: GeometryRef): Point3[][] {
+  if (ref.kind === 'text') return []; // texts are drawn from the pipeline result (Task 6)
   if (ref.kind === 'dxfPath') return [dxfPathPoints(ctx, ref)].filter((p): p is Point3[] => p !== null);
   if (ref.kind === 'meshSlot') {
     const slot = meshSlots(ctx).find((s) => sameRef(s.ref, ref));

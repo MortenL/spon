@@ -1,5 +1,5 @@
 import type {
-  Boxes, ExportOutcome, GeometryCatalog, ImportOutcome, Job, JobCommand, LengthUnit, LibraryImportResult, PreviewOptions, ProgramRef, RunReport,
+  Boxes, ExportOutcome, FontRef, GeometryCatalog, ImportOutcome, Job, JobCommand, LengthUnit, LibraryImportResult, PreviewOptions, ProgramRef, RunReport,
   SessionInfo, SvgScale, Tool,
 } from '@sponcam/core';
 
@@ -9,6 +9,9 @@ export type { Boxes, ExportOutcome, ImportOutcome, LibraryImportResult, SessionI
 export class SessionError extends Error {
   override name = 'SessionError';
 }
+
+/** A font ref to an uploaded file. */
+export type UploadedFontRef = Extract<FontRef, { kind: 'file' }>;
 
 export interface ModelInput { fileName: string; bytes: Uint8Array; units?: LengthUnit; body?: number; svgScale?: SvgScale }
 
@@ -37,4 +40,6 @@ export interface JobSession {
   save(path?: string): Promise<string>;
   exportGcode(): Promise<ExportOutcome>;
   importProgram(fileName: string, bytes: Uint8Array): Promise<ProgramRef>;
+  /** Checks a font file and adds its bytes to the job under a fresh blob id; the returned ref goes into a text's font. */
+  loadFont(fileName: string, bytes: Uint8Array): Promise<UploadedFontRef>;
 }

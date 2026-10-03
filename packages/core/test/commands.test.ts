@@ -164,16 +164,22 @@ describe('applyCommand', () => {
       { type: 'updateOperation', id: 'op1', patch: { toolId: null } },
       { type: 'updateOperation', id: 'op3', patch: { toolId: null } },
       { type: 'removeTool', id: 't6' },
+      { type: 'addText', id: 'tx1' },
+      { type: 'addText', id: 'tx2', patch: { text: 'Two' } },
+      { type: 'updateText', id: 'tx1', patch: { size: 12 } },
+      { type: 'moveText', id: 'tx2', delta: -1 },
+      { type: 'removeText', id: 'tx1' },
       { type: 'setTolerance', tolerance: 0.005 },
     ];
 
-    // Exhaustiveness guard: ensure all 25 variants are covered
+    // Exhaustiveness guard: ensure all 29 variants are covered
     const covered = {
       renameJob: 1, setDisplayUnits: 1, setImportUnits: 1, rotateQuarter: 1, layFlat: 1, setZSpin: 1,
       resetOrientation: 1, setStock: 1, setWcs: 1, setMachineProfile: 1, applyMachinePreset: 1,
       moveProgram: 1, setProgramInTimeline: 1, removeProgram: 1, addOperation: 1, updateOperation: 1,
       removeOperation: 1, duplicateOperation: 1, moveOperation: 1, setOperationEnabled: 1, addTool: 1,
       updateTool: 1, removeTool: 1, setPost: 1, setTolerance: 1,
+      addText: 1, updateText: 1, removeText: 1, moveText: 1,
     } satisfies Record<JobCommand['type'], 1>;
     const commandTypes = new Set(commands.map((c) => c.type));
     const coveredTypes = Object.keys(covered);

@@ -1,6 +1,6 @@
 import {
   applyCommand, applyCommands, type CadBodySummary, type CadFormat, createJob, type GeometryCatalog, type Job,
-  type JobCommand, type LengthUnit, type ModelGeometry, type NewModel, type ParsedProgram, type ProgramRef, setModel, type Vec2, type Vec3,
+  type JobCommand, type LengthUnit, type ModelGeometry, type NewModel, type ParsedProgram, type ProgramRef, setModel, type TextSummary, type Vec2, type Vec3,
 } from '@sponcam/core';
 import { useStore } from 'zustand';
 import { createStore, type StoreApi } from 'zustand/vanilla';
@@ -57,6 +57,7 @@ export interface LoadedDocument {
   dirty: boolean;
   fileHandle: FileSystemFileHandle | null;
   programBytes: Record<string, Uint8Array>;
+  fontBytes: Record<string, Uint8Array>;
 }
 
 export interface AppState {
@@ -82,6 +83,10 @@ export interface AppState {
   programBytes: Record<string, Uint8Array>;
   /** Parsed program data by blobId (view state, not undoable). */
   programData: Record<string, ProgramData>;
+  /** Original bytes of uploaded fonts by blobId (saved into .spon files). */
+  fontBytes: Record<string, Uint8Array>;
+  /** Font blob ids registered but not yet used by any text; pruning keeps them until a text references them. */
+  pendingFontIds: string[];
   activeProgramId: string | null;
   selectedLine: number | null;
   /** Global timeline position, seconds. */
@@ -95,8 +100,13 @@ export interface AppState {
   camFiles: CamFile[];
   camResults: Record<string, OperationSummary>;
   catalog: GeometryCatalog | null;
+  /** Laid-out texts from the last generation (program coordinates). */
+  camTexts: TextSummary[];
   camStatus: 'idle' | 'generating';
   selectedOperationId: string | null;
+  selectedTextId: string | null;
+  /** The text whose surface face is being picked in the viewport. */
+  textPick: string | null;
   camPick: { operationId: string; target: CamPickTarget } | null;
   inspectorTab: InspectorTab;
 
@@ -121,6 +131,9 @@ export interface AppState {
   setBusy(message: string | null): void;
   setProgramBytes(blobId: string, bytes: Uint8Array): void;
   setProgramData(blobId: string, data: ProgramData): void;
+  /** Stores uploaded font bytes; the blob stays safe from pruning until a text references it or the document is replaced. */
+  addFontBytes(blobId: string, bytes: Uint8Array): void;
+  setPendingFontIds(ids: string[]): void;
   /** Drops programBytes/programData entries for blobs no longer referenced (see referencedBlobIds). */
   pruneProgramData(keepIds: readonly string[]): void;
   setActiveProgram(id: string | null): void;
@@ -133,6 +146,9 @@ export interface AppState {
   setCamOutput(output: CamOutput): void;
   setCamStatus(status: 'idle' | 'generating'): void;
   selectOperation(id: string | null): void;
+  /** Selecting a text clears the selected operation and the reverse. */
+  selectText(id: string | null): void;
+  setTextPick(textId: string | null): void;
   setCamPick(pick: { operationId: string; target: CamPickTarget } | null): void;
   setInspectorTab(tab: InspectorTab): void;
 }
@@ -141,6 +157,15 @@ export interface AppState {
 function activeProgramIdFor(programs: readonly ProgramRef[], activeProgramId: string | null): string | null {
   if (activeProgramId !== null && programs.some((p) => p.id === activeProgramId)) return activeProgramId;
   return programs[0]?.id ?? null;
+}
+
+/** Clears the text selection and face pick when the text they name is no longer in the job (undo of an add, a removal by Claude). */
+function textSelectionFor(job: Job, s: Pick<AppState, 'selectedTextId' | 'textPick'>): Partial<Pick<AppState, 'selectedTextId' | 'textPick'>> {
+  const gone = (id: string | null) => id !== null && !job.texts.some((t) => t.id === id);
+  return {
+    ...(gone(s.selectedTextId) ? { selectedTextId: null } : {}),
+    ...(gone(s.textPick) ? { textPick: null } : {}),
+  };
 }
 
 export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState> {
@@ -164,6 +189,8 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
     busy: null,
     programBytes: {},
     programData: {},
+    fontBytes: {},
+    pendingFontIds: [],
     activeProgramId: null,
     selectedLine: null,
     playhead: 0,
@@ -175,8 +202,11 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
     camFiles: [],
     camResults: {},
     catalog: null,
+    camTexts: [],
     camStatus: 'idle',
     selectedOperationId: null,
+    selectedTextId: null,
+    textPick: null,
     camPick: null,
     inspectorTab: 'geometry',
 
@@ -184,7 +214,7 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
       const { job, past } = get();
       const next = update(job);
       if (next === job) return;
-      set({ job: next, past: [...past, job].slice(-UNDO_LIMIT), future: [], dirty: true });
+      set({ job: next, past: [...past, job].slice(-UNDO_LIMIT), future: [], dirty: true, ...textSelectionFor(next, get()) });
     },
     dispatch(command) {
       get().commit((job) => applyCommand(job, command));
@@ -197,7 +227,7 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
       const previous = past.at(-1);
       if (!previous) return;
       set({
-        job: previous, past: past.slice(0, -1), future: [job, ...future], dirty: true,
+        job: previous, past: past.slice(0, -1), future: [job, ...future], dirty: true, ...textSelectionFor(previous, get()),
         activeProgramId: activeProgramIdFor(allPrograms({ job: previous, generatedPrograms }), activeProgramId),
       });
     },
@@ -206,15 +236,15 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
       const [next, ...rest] = future;
       if (!next) return;
       set({
-        job: next, past: [...past, job].slice(-UNDO_LIMIT), future: rest, dirty: true,
+        job: next, past: [...past, job].slice(-UNDO_LIMIT), future: rest, dirty: true, ...textSelectionFor(next, get()),
         activeProgramId: activeProgramIdFor(allPrograms({ job: next, generatedPrograms }), activeProgramId),
       });
     },
     loadDocument(doc) {
       set({
         ...doc, past: [], future: [], pickMode: 'none', hiddenLayers: [], pendingImport: null, pendingBodies: null, pendingScale: null,
-        programData: {}, activeProgramId: doc.job.programs[0]?.id ?? null, selectedLine: null, playhead: 0, playing: false,
-        generatedPrograms: [], camFiles: [], camResults: {}, catalog: null, selectedOperationId: null, camPick: null,
+        programData: {}, pendingFontIds: [], activeProgramId: doc.job.programs[0]?.id ?? null, selectedLine: null, playhead: 0, playing: false,
+        generatedPrograms: [], camFiles: [], camResults: {}, catalog: null, camTexts: [], selectedOperationId: null, selectedTextId: null, textPick: null, camPick: null,
       });
     },
     applyImportedModel(model, geometry, modelBytes, warnings) {
@@ -225,7 +255,7 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
       set({ dirty: false, fileHandle: handle });
     },
     setPickMode(pickMode) {
-      set({ pickMode, ...(pickMode !== 'none' ? { camPick: null } : {}) });
+      set({ pickMode, ...(pickMode !== 'none' ? { camPick: null, textPick: null } : {}) });
     },
     toggleEdges() {
       set({ showEdges: !get().showEdges });
@@ -255,16 +285,27 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
     setProgramBytes(blobId, bytes) {
       set({ programBytes: { ...get().programBytes, [blobId]: bytes } });
     },
+    addFontBytes(blobId, bytes) {
+      const { fontBytes, pendingFontIds } = get();
+      set({ fontBytes: { ...fontBytes, [blobId]: bytes }, pendingFontIds: pendingFontIds.includes(blobId) ? pendingFontIds : [...pendingFontIds, blobId] });
+    },
+    setPendingFontIds(pendingFontIds) {
+      set({ pendingFontIds });
+    },
     setProgramData(blobId, data) {
       set({ programData: { ...get().programData, [blobId]: data } });
     },
     pruneProgramData(keepIds) {
       const keep = new Set(keepIds);
-      const { programBytes, programData } = get();
-      set({
-        programBytes: Object.fromEntries(Object.entries(programBytes).filter(([id]) => keep.has(id))),
-        programData: Object.fromEntries(Object.entries(programData).filter(([id]) => keep.has(id))),
-      });
+      const { programBytes, programData, fontBytes } = get();
+      // an object is replaced only when an entry is dropped, so a no-op prune does not wake subscribers
+      const kept = <T,>(record: Record<string, T>): Record<string, T> => {
+        const entries = Object.entries(record);
+        const filtered = entries.filter(([id]) => keep.has(id));
+        return filtered.length === entries.length ? record : Object.fromEntries(filtered);
+      };
+      const next = { fontBytes: kept(fontBytes), programBytes: kept(programBytes), programData: kept(programData) };
+      if (next.fontBytes !== fontBytes || next.programBytes !== programBytes || next.programData !== programData) set(next);
     },
     setActiveProgram(activeProgramId) {
       set({ activeProgramId, selectedLine: null });
@@ -291,7 +332,7 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
     setCamOutput(out) {
       const kept = Object.fromEntries(Object.entries(get().programData).filter(([id]) => !id.startsWith('gen:')));
       const next = {
-        generatedPrograms: out.programs, camFiles: out.files, camResults: out.results, catalog: out.catalog,
+        generatedPrograms: out.programs, camFiles: out.files, camResults: out.results, catalog: out.catalog, camTexts: out.texts,
         camStatus: 'idle' as const, programData: { ...kept, ...out.programData },
       };
       const programs = allPrograms({ job: get().job, generatedPrograms: out.programs });
@@ -302,10 +343,22 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
       set({ camStatus });
     },
     selectOperation(id) {
-      set({ selectedOperationId: id, ...(id !== get().selectedOperationId ? { camPick: null } : {}) });
+      set({
+        selectedOperationId: id, ...(id !== get().selectedOperationId ? { camPick: null } : {}),
+        ...(id !== null ? { selectedTextId: null, textPick: null } : {}),
+      });
+    },
+    selectText(id) {
+      set({
+        selectedTextId: id, ...(id !== get().selectedTextId ? { textPick: null } : {}),
+        ...(id !== null ? { selectedOperationId: null, camPick: null } : {}),
+      });
+    },
+    setTextPick(textId) {
+      set({ textPick: textId, ...(textId !== null ? { camPick: null, pickMode: 'none' as const } : {}) });
     },
     setCamPick(camPick) {
-      set({ camPick, ...(camPick !== null ? { pickMode: 'none' as const } : {}) });
+      set({ camPick, ...(camPick !== null ? { pickMode: 'none' as const, textPick: null } : {}) });
     },
     setInspectorTab(inspectorTab) {
       set({ inspectorTab });

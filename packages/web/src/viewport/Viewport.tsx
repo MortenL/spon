@@ -12,6 +12,7 @@ import { applyPick, pickDxf } from './camPick';
 import { CamOverlays } from './CamOverlays';
 import { ModelObject } from './ModelObject';
 import { BedGrid, CameraRig, CursorTracker, StockBox, WcsTriad } from './SceneObjects';
+import { TextObjects } from './TextObjects';
 import { Toolpaths } from './Toolpaths';
 
 const PRESETS: { preset: ViewPreset; label: string }[] = [
@@ -75,6 +76,7 @@ export function Viewport() {
         )}
         <Toolpaths />
         <CamOverlays />
+        <TextObjects />
         <WcsTriad />
         <CameraRig />
         <CursorTracker />

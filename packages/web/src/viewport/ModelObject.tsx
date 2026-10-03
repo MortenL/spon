@@ -1,5 +1,5 @@
 import {
-  alignEdgeToX, camContext, faceRegion, type LengthUnit, layFlat, nearestTriangleEdge, regionNormal, unitScale, type Vec3,
+  alignEdgeToX, camContext, faceRefFromTriangle, faceRegion, type LengthUnit, layFlat, nearestTriangleEdge, regionNormal, resolveFaceRef, unitScale, type Vec3,
 } from '@sponcam/core';
 import { Edges, Line } from '@react-three/drei';
 import type { ThreeEvent } from '@react-three/fiber';
@@ -38,6 +38,8 @@ function ModelMesh({ geometry, importUnits }: { geometry: MeshGeometry; importUn
   const showEdges = useApp((s) => s.showEdges);
   const pickMode = useApp((s) => s.pickMode);
   const camPick = useApp((s) => s.camPick);
+  const textPick = useApp((s) => s.textPick);
+  const picking = camPick !== null || textPick !== null;
   const buffer = useMemo(() => meshToGeometry(geometry.mesh), [geometry.mesh]);
   useEffect(() => () => buffer.dispose(), [buffer]);
 
@@ -48,7 +50,7 @@ function ModelMesh({ geometry, importUnits }: { geometry: MeshGeometry; importUn
   useEffect(() => {
     setRegion(null);
     setEdge(null);
-  }, [pickMode, camPick]);
+  }, [pickMode, camPick, textPick]);
 
   // 0.01 mm plane tolerance, expressed in the mesh's raw units
   const regionAt = (tri: number) => faceRegion(geometry.mesh, geometry.adjacency, tri, { distanceTol: 0.01 / unitScale(importUnits) });
@@ -58,9 +60,9 @@ function ModelMesh({ geometry, importUnits }: { geometry: MeshGeometry; importUn
   };
 
   const onPointerMove = (e: ThreeEvent<PointerEvent>) => {
-    if ((pickMode === 'none' && !camPick) || e.faceIndex == null) return;
+    if ((pickMode === 'none' && !picking) || e.faceIndex == null) return;
     e.stopPropagation();
-    if (pickMode === 'face' || (pickMode === 'none' && camPick)) {
+    if (pickMode === 'face' || (pickMode === 'none' && picking)) {
       if (!region?.includes(e.faceIndex)) setRegion(regionAt(e.faceIndex));
     } else {
       setEdge(edgeAt(e, e.faceIndex));
@@ -68,9 +70,9 @@ function ModelMesh({ geometry, importUnits }: { geometry: MeshGeometry; importUn
   };
 
   const onClick = (e: ThreeEvent<MouseEvent>) => {
-    if ((pickMode === 'none' && !camPick) || e.faceIndex == null || e.delta > 4) return; // ignore the end of an orbit drag
+    if ((pickMode === 'none' && !picking) || e.faceIndex == null || e.delta > 4) return; // ignore the end of an orbit drag
     e.stopPropagation();
-    const { commit, setPickMode, requestView, job, setCamPick } = appStore.getState();
+    const { commit, setPickMode, requestView, job, setCamPick, setTextPick } = appStore.getState();
     if (pickMode === 'face') {
       const tris = region?.includes(e.faceIndex) ? region : regionAt(e.faceIndex);
       const normal = regionNormal(geometry.mesh, tris);
@@ -81,6 +83,16 @@ function ModelMesh({ geometry, importUnits }: { geometry: MeshGeometry; importUn
       const [a, b] = edgeAt(e, e.faceIndex);
       commit((j) => alignEdgeToX(j, a, b));
       setPickMode('none');
+    } else if (textPick) {
+      const model = job.model;
+      if (!model) return;
+      const face = faceRefFromTriangle(geometry.mesh, model.blobId, e.faceIndex);
+      const res = resolveFaceRef(camContext(job, geometry), face);
+      if (!res.ok) {
+        toast.error(res.message);
+        return;
+      }
+      if (runCommand({ type: 'updateText', id: textPick, patch: { surface: { from: 'face', face } } })) setTextPick(null);
     } else if (camPick) {
       const op = job.operations.find((o) => o.id === camPick.operationId);
       if (!op) {
@@ -114,7 +126,7 @@ function ModelMesh({ geometry, importUnits }: { geometry: MeshGeometry; importUn
       <mesh
         geometry={buffer} onPointerMove={onPointerMove} onClick={onClick} onPointerOut={() => { setRegion(null); setEdge(null); }}
         // a full-mesh raycast on every pointer move is only worth it while picking a face, edge or CAM reference
-        raycast={pickMode === 'none' && !camPick ? noRaycast : THREE.Mesh.prototype.raycast}
+        raycast={pickMode === 'none' && !picking ? noRaycast : THREE.Mesh.prototype.raycast}
       >
         <meshStandardMaterial
           color="#9aa6b5" metalness={0.15} roughness={0.65} flatShading side={THREE.DoubleSide}

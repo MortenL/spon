@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { igesFile, stepFile } from './cadWriters.mjs';
 import { steppedData } from './steppedData.mjs';
+import { testFontBytes } from './testFontData.mjs';
 import { obroundPts, rectPts, terracedTriangles } from './terraced.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -273,3 +274,4 @@ function engraveLinesDxf() {
 
 writeFileSync(join(here, 'vcarve-spon.svg'), vcarveSvg());
 writeFileSync(join(here, 'engrave-lines.dxf'), engraveLinesDxf());
+writeFileSync(join(here, 'TestSans.otf'), testFontBytes());

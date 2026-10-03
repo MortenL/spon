@@ -4,6 +4,7 @@ import type { CamRun } from './camTypes';
 
 const worker = vi.hoisted(() => ({
   setCamModelInWorker: vi.fn(async () => {}),
+  addFontsInWorker: vi.fn(async () => {}),
   generateInWorker: vi.fn(),
   catalogInWorker: vi.fn(async () => null),
   previewSvgInWorker: vi.fn(async () => '<svg/>'),
@@ -14,13 +15,14 @@ vi.mock('../workers/importClient', () => worker);
 
 const { camCatalog, camInputsChanged, camPreviewSvg, currentCamRun, regenerate, startCamPipeline, toCamOutput, waitForCamRun } = await import('./cam');
 const { appStore } = await import('./store');
+const { textStatus } = await import('../layout/setupStatus');
 const { allPrograms } = await import('./programList');
 
 const parsed = { table: { count: 0 }, analysis: { summary: { totalSeconds: 3 }, diagnostics: [] }, interpretDiagnostics: [] } as never;
 const run = (names: string[]): CamRun => ({
   results: [{ operationId: 'o1', diagnostics: [], heights: null, overlays: { tabs: [], laps: [], unmachined: [], gouges: [] }, hasToolpath: true }],
   files: names.map((name) => ({ name, text: `(${name})\n`, operationIds: ['o1'], tools: [1], sections: [{ operationId: 'o1', firstLine: 0, lastLine: 0 }], parsed, postErrors: [] })),
-  catalog: null,
+  catalog: null, texts: [],
 });
 const withOp = () => applyCommand(createJob(), { type: 'addOperation', opType: 'drill', toolId: null, id: 'o1' } as JobCommand);
 
@@ -28,7 +30,8 @@ describe('CAM pipeline', () => {
   beforeEach(() => {
     worker.generateInWorker.mockReset();
     worker.setCamModelInWorker.mockClear();
-    appStore.setState({ job: createJob(), programData: {}, generatedPrograms: [], camFiles: [], camResults: {}, activeProgramId: null, camStatus: 'idle' });
+    worker.addFontsInWorker.mockClear();
+    appStore.setState({ fontBytes: {}, camTexts: [], job: createJob(), programData: {}, generatedPrograms: [], camFiles: [], camResults: {}, activeProgramId: null, camStatus: 'idle' });
   });
 
   it('maps a run to generated programs, program data and results', () => {
@@ -110,6 +113,60 @@ describe('CAM pipeline', () => {
     }
   });
 
+  it('treats a change of texts as a regeneration trigger', () => {
+    const a = createJob();
+    const b = applyCommand(a, { type: 'addText', id: 't' } as JobCommand);
+    expect(camInputsChanged(a, a, null, null)).toBe(false);
+    expect(camInputsChanged(a, b, null, null)).toBe(true);
+  });
+
+  it('generates for a job with only texts and stores the laid-out texts', async () => {
+    appStore.setState({ job: applyCommand(createJob(), { type: 'addText', id: 't' } as JobCommand) });
+    const texts = [{ textId: 't', diagnostics: [], z: 0, loops: [] }];
+    worker.generateInWorker.mockResolvedValue({ ...run([]), texts });
+    await regenerate();
+    expect(worker.generateInWorker).toHaveBeenCalledTimes(1);
+    expect(appStore.getState().camTexts).toEqual(texts);
+  });
+
+  it('sends a new font to the worker once and regenerates when font bytes are added', async () => {
+    vi.useFakeTimers();
+    const stop = startCamPipeline(appStore, 10);
+    try {
+      appStore.setState({ job: applyCommand(createJob(), { type: 'addText', id: 't' } as JobCommand), fontBytes: {} });
+      worker.generateInWorker.mockResolvedValue(run([]));
+      await vi.advanceTimersByTimeAsync(50);
+      const calls = worker.generateInWorker.mock.calls.length;
+      appStore.getState().addFontBytes('font-1', new Uint8Array([1, 2]));
+      expect(appStore.getState().camStatus).toBe('generating');
+      await vi.advanceTimersByTimeAsync(50);
+      expect(worker.generateInWorker.mock.calls.length).toBe(calls + 1);
+      expect(worker.addFontsInWorker).toHaveBeenCalledTimes(1);
+      expect(Object.keys((worker.addFontsInWorker.mock.calls[0] as unknown[])[0] as object)).toEqual(['font-1']);
+      await regenerate();
+      expect(worker.addFontsInWorker).toHaveBeenCalledTimes(1);
+      worker.epoch++; // replaced worker lost its fonts
+      await regenerate();
+      expect(worker.addFontsInWorker).toHaveBeenCalledTimes(2);
+    } finally {
+      stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it('clears the laid-out texts when the last text is deleted from a job without operations', async () => {
+    const withText = applyCommand(createJob(), { type: 'addText', id: 't' } as JobCommand);
+    appStore.setState({ job: withText });
+    const texts = [{ textId: 't', diagnostics: [{ operationId: '', severity: 'error', code: 'text-empty', message: 'Text 1 has no text' }], z: 0, loops: [] }];
+    worker.generateInWorker.mockResolvedValue({ ...run([]), results: [], texts });
+    await regenerate();
+    expect(textStatus(appStore.getState().camTexts)).toMatchObject({ state: 'attention' });
+    appStore.setState({ job: applyCommand(withText, { type: 'removeText', id: 't' } as JobCommand) });
+    await regenerate();
+    expect(appStore.getState().camTexts).toEqual([]);
+    expect(textStatus(appStore.getState().camTexts)).toEqual({ state: 'ok' });
+  });
+
   it('settles to idle when there is nothing to generate', async () => {
     appStore.setState({ camStatus: 'generating' });
     await regenerate();
@@ -170,7 +227,7 @@ describe('CAM pipeline', () => {
     appStore.setState({ job: createJob('Empty'), camStatus: 'generating' });
     const waiting = waitForCamRun();
     await regenerate();
-    expect((await waiting).run).toEqual({ results: [], files: [], catalog: null });
+    expect((await waiting).run).toEqual({ results: [], files: [], catalog: null, texts: [] });
   });
 
   it('sends the model before asking the worker for the catalog and the preview', async () => {

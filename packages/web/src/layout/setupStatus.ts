@@ -4,6 +4,11 @@ import {
 
 export type StepId = 'model' | 'orientation' | 'stock' | 'origin';
 export interface StepState { state: 'ok' | 'empty' | 'attention'; reason?: string }
+/** Problem-only dot of the Text panel: attention when any laid-out text has an error. */
+export function textStatus(texts: readonly { diagnostics: readonly { severity: string }[] }[]): StepState {
+  return texts.some((t) => t.diagnostics.some((d) => d.severity === 'error')) ? { state: 'attention', reason: 'A text has a problem' } : OK;
+}
+
 export interface SummaryPart { id: StepId; text: string }
 export interface SetupStatus { steps: Record<StepId, StepState>; summary: SummaryPart[] }
 

@@ -62,7 +62,7 @@ beforeEach(() => {
   vi.mocked(analyzeInWorker).mockReset();
   vi.mocked(parseProgramInWorker).mockReset();
   appStore.getState().loadDocument({
-    job: createJob(), geometry: null, modelBytes: null, warnings: [], dirty: false, fileHandle: null, programBytes: {},
+    job: createJob(), geometry: null, modelBytes: null, warnings: [], dirty: false, fileHandle: null, programBytes: {}, fontBytes: {},
   });
 });
 

@@ -8,6 +8,8 @@ import { cn } from '@/lib/utils';
 import { LengthField } from '@/panels/NumericField';
 import { runCommand } from '@/state/camView';
 import { appStore, useApp } from '@/state/store';
+import { listedTexts } from './geometryGroups';
+import { fontDisplayName } from './textFonts';
 import { chainReversed, openChains, toggleChainReverse } from './openChains';
 import { refLabel, sameRef, toggleRef } from './geometryLabels';
 
@@ -30,6 +32,7 @@ export function GeometryTab({ op }: { op: Operation }) {
   const camPick = useApp((s) => s.camPick);
   const units = useApp((s) => s.job.displayUnits);
   const job = useApp((s) => s.job);
+  const texts = job.texts;
   const seeds = useMemo(() => new Map(openChains(op, camContext(job, geometry)).map((c) => [c.ref, c.members])), [op, job, geometry]);
 
   const drawingLayers = geometry?.kind === 'drawing' ? geometry.drawing.layers.map((l) => l.name) : null;
@@ -41,6 +44,7 @@ export function GeometryTab({ op }: { op: Operation }) {
   const contours = op.type === 'drill' ? (catalog?.contours ?? []).filter((c) => c.circle)
     : op.type === 'vcarve' ? (catalog?.contours ?? []).filter((c) => c.closed)
     : (catalog?.contours ?? []);
+  const listed = listedTexts(op.type, texts);
   const byLayer = new Map<string, typeof contours>();
   for (const c of contours) byLayer.set(c.layer, [...(byLayer.get(c.layer) ?? []), c]);
 
@@ -64,8 +68,8 @@ export function GeometryTab({ op }: { op: Operation }) {
               className={cn('flex items-center gap-2 rounded-md border px-2 py-1 text-sm', hasError && 'border-destructive/50')}
             >
               {hasError && <CircleX className="size-3.5 shrink-0 text-destructive" />}
-              <span className="min-w-0 flex-1 truncate" title={refLabel(ref, catalog, drawingLayers, units)}>
-                {refLabel(ref, catalog, drawingLayers, units)}
+              <span className="min-w-0 flex-1 truncate" title={refLabel(ref, catalog, drawingLayers, units, texts)}>
+                {refLabel(ref, catalog, drawingLayers, units, texts)}
               </span>
               {seeds.has(i) && (
                 <Toggle
@@ -157,6 +161,21 @@ export function GeometryTab({ op }: { op: Operation }) {
                 </label>
               );
             })}
+
+          {listed.length > 0 && (
+            <div className="space-y-1" data-testid="catalog-texts">
+              <div className="text-xs font-medium text-muted-foreground">Texts</div>
+              {listed.map((t) => {
+                const ref = { kind: 'text' as const, textId: t.id };
+                return (
+                  <label key={t.id} data-testid={`catalog-text-${t.id}`} className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" className="accent-primary" checked={op.geometry.some((r) => sameRef(r, ref))} onChange={() => setGeometry(toggleRef(op.geometry, ref))} />
+                    <span className="min-w-0 flex-1 truncate">{t.name} · {fontDisplayName(t.font)}</span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
         </CollapsibleContent>
       </Collapsible>
 

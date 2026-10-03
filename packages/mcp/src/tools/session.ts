@@ -47,7 +47,7 @@ function importText(name: string, o: Exclude<ImportOutcome, { status: 'error' }>
   }
 }
 
-const SECTIONS = ['operations', 'tools', 'stock', 'wcs', 'machine', 'post', 'model', 'programs'] as const;
+const SECTIONS = ['operations', 'tools', 'stock', 'wcs', 'machine', 'post', 'model', 'programs', 'texts'] as const;
 
 const newJobShape = {
   name: z.string().optional().describe('Job name'),

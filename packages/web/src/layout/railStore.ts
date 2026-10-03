@@ -2,8 +2,8 @@ import type { Job } from '@sponcam/core';
 import { useStore } from 'zustand';
 import { createStore, type StoreApi } from 'zustand/vanilla';
 
-export type PanelId = 'model' | 'orientation' | 'stock' | 'origin' | 'operations' | 'post' | 'programs';
-export const PANEL_IDS: readonly PanelId[] = ['model', 'orientation', 'stock', 'origin', 'operations', 'post', 'programs'];
+export type PanelId = 'model' | 'orientation' | 'stock' | 'origin' | 'text' | 'operations' | 'post' | 'programs';
+export const PANEL_IDS: readonly PanelId[] = ['model', 'orientation', 'stock', 'origin', 'text', 'operations', 'post', 'programs'];
 export const WIDTH = { min: 260, max: 560, default: 320 } as const;
 
 export interface Settings { get(key: string): string | null; set(key: string, value: string | null): void }

@@ -6,6 +6,7 @@ import { registerEditTools } from './tools/edit';
 import { registerLibraryTools } from './tools/library';
 import { registerOutputTools } from './tools/output';
 import { registerSessionTools } from './tools/session';
+import { registerTextTools } from './tools/text';
 import { VERSION } from './version';
 
 export type { ServerDeps } from './context';
@@ -15,6 +16,7 @@ export function createSponServer(deps: ServerDeps): McpServer {
   const ctx = createContext(deps);
   registerSessionTools(server, ctx);
   registerEditTools(server, ctx);
+  registerTextTools(server, ctx);
   registerOutputTools(server, ctx);
   registerLibraryTools(server, ctx);
   registerResources(server, ctx);

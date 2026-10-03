@@ -1,9 +1,11 @@
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FileSession } from '../src/fileSession';
 import { ToolLibraryFile } from '../src/library';
 import { LiveBridge } from '../src/live/bridge';
 import { loadNodeOcct } from '../src/occt';
+import { testFontBytes } from '../../core/test/fixtures/testFont';
 import { connect, data, text } from './connect';
 import { openTab, sessionHandler } from './fakeTab';
 import { tempDir } from './helpers';
@@ -58,6 +60,24 @@ describe('live tools', () => {
     expect(generated.operations.map((o) => o.status)).not.toContain('error');
     expect((await call('render_preview')).content[0].type).toBe('image');
     expect(tab.methods).toEqual(expect.arrayContaining(['apply', 'run', 'catalog', 'previewSvg', 'tools.list']));
+  });
+
+  it('edits texts live and loads a font through the bridge', async () => {
+    const bridge = await withBridge();
+    const { call, dir } = await connect({ bridge });
+    const tab = backingTab(bridge);
+    await tab.welcomed;
+    await call('use_live_tab');
+    const added = await call('add_text', { text: 'LIVE' });
+    expect(added.isError).toBeFalsy();
+    expect(data(await call('get_job', { section: 'texts' })).texts).toHaveLength(1);
+    expect(data(await call('list_fonts')).bundled).toHaveLength(6);
+    expect((await call('load_font', { path: 'does-not-exist.ttf' })).isError).toBe(true);
+    writeFileSync(join(dir, 'Test.ttf'), testFontBytes());
+    const loaded = await call('load_font', { path: 'Test.ttf' });
+    expect(loaded.isError).toBeFalsy();
+    expect(data(loaded).font).toMatchObject({ kind: 'file', name: 'Test.ttf' });
+    expect(tab.methods).toContain('loadFont');
   });
 
   it('never refuses to leave a live tab, and leaves a dirty file job only with discard', async () => {

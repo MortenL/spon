@@ -2,6 +2,7 @@ import { newOperation, OPERATION_LABELS } from '../cam/defaults';
 import type { Operation, OperationPatch, OperationType, TabSettings } from '../cam/types';
 import type { Vec3 } from '../geometry/vec3';
 import type { PostSettings } from '../post/types';
+import { BUNDLED_FONT_IDS, newTextItem, TEXT_ANCHORS, type TextItem, type TextPatch } from '../text/types';
 import type { Tool } from '../tools/types';
 import type { LengthUnit } from '../units/units';
 import type { MachinePresetName } from './machine';
@@ -30,6 +31,10 @@ export type JobCommand =
   | { type: 'duplicateOperation'; id: string; newId?: string }
   | { type: 'moveOperation'; id: string; delta: -1 | 1 }
   | { type: 'setOperationEnabled'; id: string; enabled: boolean }
+  | { type: 'addText'; id?: string; patch?: TextPatch }
+  | { type: 'updateText'; id: string; patch: TextPatch }
+  | { type: 'removeText'; id: string }
+  | { type: 'moveText'; id: string; delta: -1 | 1 }
   | { type: 'addTool'; tool: Tool }
   | { type: 'updateTool'; id: string; patch: Partial<Omit<Tool, 'id'>> }
   | { type: 'removeTool'; id: string }
@@ -71,6 +76,63 @@ function findOp(job: Job, id: string): Operation {
   if (!op) throw new CommandError(`No operation with id ${id}`);
   return op;
 }
+
+const TEXT_KEYS = ['name', 'text', 'font', 'size', 'letterSpacing', 'lineSpacing', 'align', 'fit', 'position', 'anchor', 'angle', 'mirror', 'arc', 'surface'];
+const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+const positive = (v: unknown): boolean => typeof v === 'number' && v > 0 && Number.isFinite(v);
+
+function findText(job: Job, id: string): TextItem {
+  const t = job.texts.find((x) => x.id === id);
+  if (!t) throw new CommandError(`No text with id ${id}`);
+  return t;
+}
+
+function patchText(text: TextItem, patch: TextPatch): TextItem {
+  const next: Record<string, unknown> = { ...text };
+  for (const [key, value] of Object.entries(patch) as [string, unknown][]) {
+    if (key === 'id') throw new CommandError('"id" cannot be changed');
+    if (!TEXT_KEYS.includes(key)) throw new CommandError(`"${key}" is not a text setting`);
+    if (key === 'size' || key === 'lineSpacing') {
+      if (!positive(value)) throw new CommandError(`${key} must be greater than 0`);
+    } else if (key === 'letterSpacing' || key === 'angle') {
+      if (typeof value !== 'number' || !Number.isFinite(value)) throw new CommandError(`${key} must be a finite number`);
+    } else if (key === 'align') {
+      if (value !== 'left' && value !== 'center' && value !== 'right') throw new CommandError('align must be one of left, center, right');
+    } else if (key === 'anchor') {
+      if (!TEXT_ANCHORS.includes(value as never)) throw new CommandError(`anchor must be one of ${TEXT_ANCHORS.join(', ')}`);
+    } else if (key === 'text') {
+      if (typeof value !== 'string') throw new CommandError('text must be a string');
+    } else if (key === 'name') {
+      if (typeof value !== 'string' || value.trim() === '') throw new CommandError('name must not be empty');
+    } else if (key === 'mirror') {
+      if (typeof value !== 'boolean') throw new CommandError('mirror must be true or false');
+    } else if (key === 'position') {
+      if (!isObj(value) || typeof value.x !== 'number' || typeof value.y !== 'number' || !Number.isFinite(value.x) || !Number.isFinite(value.y)) {
+        throw new CommandError('position.x and position.y must be finite numbers');
+      }
+    } else if (key === 'fit') {
+      if (value !== null) {
+        if (!isObj(value) || !positive(value.width)) throw new CommandError('fit.width must be greater than 0');
+        if (value.height !== null && !positive(value.height)) throw new CommandError('fit.height must be greater than 0');
+      }
+    } else if (key === 'arc') {
+      if (value !== null) {
+        if (!isObj(value) || !positive(value.radius)) throw new CommandError('arc.radius must be greater than 0');
+        if (value.side !== 'outside' && value.side !== 'inside') throw new CommandError('arc.side must be one of outside, inside');
+      }
+    } else if (key === 'font') {
+      const ok = isObj(value) && ((value.kind === 'bundled' && BUNDLED_FONT_IDS.includes(value.id as never)) || (value.kind === 'file' && typeof value.blobId === 'string' && typeof value.name === 'string'));
+      if (!ok) throw new CommandError(`font must be a bundled font (${BUNDLED_FONT_IDS.join(', ')}) or a file with blobId and name`);
+    } else if (key === 'surface') {
+      if (!isObj(value) || (value.from !== 'stockTop' && value.from !== 'face')) throw new CommandError('surface.from must be one of stockTop, face');
+      if (value.from === 'face' && !isObj(value.face)) throw new CommandError('surface.face is required when surface.from is face');
+    }
+    next[key] = structuredClone(value);
+  }
+  return next as unknown as TextItem;
+}
+
+const replaceText = (job: Job, text: TextItem): Job => ({ ...job, texts: job.texts.map((t) => (t.id === text.id ? text : t)) });
 
 function checkTool(job: Job, toolId: string | null): Tool | null {
   if (toolId === null) return null;
@@ -167,6 +229,24 @@ export function applyCommand(job: Job, c: JobCommand): Job {
     case 'setOperationEnabled': {
       const op = findOp(job, c.id);
       return op.enabled === c.enabled ? job : replaceOp(job, { ...op, enabled: c.enabled });
+    }
+    case 'addText': {
+      const id = c.id ?? crypto.randomUUID();
+      if (job.texts.some((t) => t.id === id)) throw new CommandError(`A text with id ${id} already exists`);
+      // Commands cannot see model geometry: an auto stock centres at the origin until the app re-centres it.
+      const position = job.stock.mode === 'fixed' ? { x: job.stock.size.x / 2, y: job.stock.size.y / 2 } : { x: 0, y: 0 };
+      const text = patchText(newTextItem(id, `Text ${job.texts.length + 1}`, position), c.patch ?? {});
+      return { ...job, texts: [...job.texts, text] };
+    }
+    case 'updateText': return replaceText(job, patchText(findText(job, c.id), c.patch));
+    case 'removeText': findText(job, c.id); return { ...job, texts: job.texts.filter((t) => t.id !== c.id) };
+    case 'moveText': {
+      const i = job.texts.indexOf(findText(job, c.id));
+      const j = i + c.delta;
+      if (j < 0 || j >= job.texts.length) return job;
+      const texts = [...job.texts];
+      [texts[i], texts[j]] = [texts[j], texts[i]];
+      return { ...job, texts };
     }
     case 'addTool':
       if (job.tools.some((t) => t.id === c.tool.id)) throw new CommandError(`A tool with id ${c.tool.id} is already in the job`);

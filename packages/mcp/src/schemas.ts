@@ -1,3 +1,4 @@
+import { BUNDLED_FONT_IDS, TEXT_ANCHORS } from '@sponcam/core';
 import { z } from 'zod';
 
 export const vec3Schema = z.strictObject({ x: z.number(), y: z.number(), z: z.number() });
@@ -15,12 +16,38 @@ export const geometryRefSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('meshLoop'), face: meshFaceRef, loop: z.number().int() }),
   z.strictObject({ kind: z.literal('meshHole'), face: meshFaceRef, loop: z.number().int() }),
   z.strictObject({ kind: z.literal('meshSlot'), face: meshFaceRef, loop: z.number().int().optional() }),
+  z.strictObject({ kind: z.literal('text'), textId: z.string() }),
 ]);
 
 const heightFrom = z.enum(['stockTop', 'stockBottom', 'modelTop', 'modelBottom', 'contour', 'face', 'origin', 'holeBottom', 'slotBottom', 'retract', 'feed', 'top']);
 const heightSpec = z.strictObject({ from: heightFrom, offset: z.number(), face: meshFaceRef.optional() });
 const coolant = z.enum(['off', 'flood', 'mist']);
 const lapPosition = z.strictObject({ refIndex: z.number().int(), t: z.number() });
+
+const nonEmpty = <T extends string>(list: readonly T[]) => list as unknown as [T, ...T[]];
+export const fontRefSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('bundled'), id: z.enum(nonEmpty(BUNDLED_FONT_IDS)) }),
+  z.strictObject({ kind: z.literal('file'), blobId: z.string(), name: z.string() }),
+]);
+export const textPatchSchema = z.strictObject({
+  name: z.string().optional(),
+  text: z.string().optional(),
+  font: fontRefSchema.optional(),
+  size: z.number().optional(),
+  letterSpacing: z.number().optional(),
+  lineSpacing: z.number().optional(),
+  align: z.enum(['left', 'center', 'right']).optional(),
+  fit: z.strictObject({ width: z.number(), height: z.number().nullable() }).nullable().optional(),
+  position: z.strictObject({ x: z.number(), y: z.number() }).optional(),
+  anchor: z.enum(nonEmpty(TEXT_ANCHORS)).optional(),
+  angle: z.number().optional(),
+  mirror: z.boolean().optional(),
+  arc: z.strictObject({ radius: z.number(), side: z.enum(['outside', 'inside']) }).nullable().optional(),
+  surface: z.discriminatedUnion('from', [
+    z.strictObject({ from: z.literal('stockTop') }),
+    z.strictObject({ from: z.literal('face'), face: meshFaceRef }),
+  ]).optional(),
+});
 
 export const operationPatchSchema = z.strictObject({
   name: z.string(),
@@ -123,6 +150,10 @@ export const jobCommandSchema = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('duplicateOperation'), id: z.string(), newId: z.string().optional() }),
   z.strictObject({ type: z.literal('moveOperation'), id: z.string(), delta }),
   z.strictObject({ type: z.literal('setOperationEnabled'), id: z.string(), enabled: z.boolean() }),
+  z.strictObject({ type: z.literal('addText'), id: z.string().optional(), patch: textPatchSchema.optional() }),
+  z.strictObject({ type: z.literal('updateText'), id: z.string(), patch: textPatchSchema }),
+  z.strictObject({ type: z.literal('removeText'), id: z.string() }),
+  z.strictObject({ type: z.literal('moveText'), id: z.string(), delta }),
   z.strictObject({ type: z.literal('addTool'), tool: toolSchema }),
   z.strictObject({ type: z.literal('updateTool'), id: z.string(), patch: toolSchema.omit({ id: true }).partial() }),
   z.strictObject({ type: z.literal('removeTool'), id: z.string() }),

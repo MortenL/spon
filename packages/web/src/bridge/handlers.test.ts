@@ -6,6 +6,7 @@ import type { CamRun } from '../state/camTypes';
 
 const worker = vi.hoisted(() => ({
   setCamModelInWorker: vi.fn(async () => {}),
+  addFontsInWorker: vi.fn(async () => {}),
   generateInWorker: vi.fn(),
   catalogInWorker: vi.fn(async () => null),
   previewSvgInWorker: vi.fn(async () => '<svg/>'),
@@ -27,7 +28,7 @@ const parsed = { table: { count: 0 }, analysis: { summary: { totalSeconds: 3, li
 const run = (): CamRun => ({
   results: [{ operationId: 'o1', diagnostics: [], heights: null, overlays: { tabs: [], laps: [], unmachined: [], gouges: [] }, hasToolpath: true }],
   files: [{ name: 'job.nc', text: 'G0 X0\n', operationIds: ['o1'], tools: [1], sections: [], parsed, postErrors: [] }],
-  catalog: null,
+  catalog: null, texts: [],
 });
 const add = (id: string): JobCommand => ({ type: 'addOperation', opType: 'drill', toolId: null, id });
 
@@ -81,5 +82,18 @@ describe('bridge handlers', () => {
     const tool = { ...starterLibrary()[1], id: 'via-bridge', name: 'Via bridge', number: 88 };
     await handlers['tools.add']({ tool });
     expect((await handlers['tools.list']({})).some((t) => t.id === 'via-bridge')).toBe(true);
+  });
+});
+
+describe('loadFont', () => {
+  it('keeps a valid font under a fresh font- blob id and refuses a bad file with the exact message', async () => {
+    const { testFontBytes } = await import('../../../core/test/fixtures/testFont');
+    const { toBase64 } = await import('@sponcam/core');
+    const result = await handlers.loadFont({ fileName: 'Test.ttf', bytes: toBase64(testFontBytes()) });
+    expect(result.font).toMatchObject({ kind: 'file', name: 'Test.ttf' });
+    expect(result.font.blobId).toMatch(/^font-/);
+    expect(appStore.getState().fontBytes[result.font.blobId]).toEqual(testFontBytes());
+    await expect(handlers.loadFont({ fileName: 'bad.ttf', bytes: toBase64(new Uint8Array([1, 2, 3])) })).rejects.toThrow("This font file can't be read");
+    await expect(handlers.loadFont({ fileName: 'f.woff2', bytes: toBase64(new Uint8Array([1])) })).rejects.toThrow('WOFF2 fonts are not supported; use TTF, OTF or WOFF');
   });
 });

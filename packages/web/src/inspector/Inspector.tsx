@@ -11,11 +11,18 @@ import { appStore, useApp } from '@/state/store';
 import { GeometryTab } from './GeometryTab';
 import { HeightsTab } from './HeightsTab';
 import { PassesTab } from './PassesTab';
+import { TextInspector } from './TextInspector';
 import { ToolTab } from './ToolTab';
 
 const TYPE_ICON: Record<OperationType, typeof Scissors> = { profile: Scissors, pocket: SquareDashed, drill: Circle, face: Layers, chamfer: Triangle, slot: RectangleHorizontal, engrave: PenLine, vcarve: ChevronsDown, vclear: Eraser };
 
+/** The right-hand inspector: the selected text's, else the selected operation's. */
 export function Inspector() {
+  const hasText = useApp((s) => s.selectedTextId !== null);
+  return hasText ? <TextInspector /> : <OperationInspector />;
+}
+
+function OperationInspector() {
   const selectedOperationId = useApp((s) => s.selectedOperationId);
   const operations = useApp((s) => s.job.operations);
   const camResults = useApp((s) => s.camResults);
