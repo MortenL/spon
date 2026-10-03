@@ -1,14 +1,14 @@
 export type ListAction = 'duplicate' | 'delete' | 'up' | 'down';
 export interface KeyLike {
   key: string; ctrlKey: boolean; metaKey: boolean; altKey: boolean; shiftKey: boolean;
-  target: { tagName?: string; isContentEditable?: boolean } | null;
+  target: { tagName?: string; isContentEditable?: boolean; closest?: (selector: string) => unknown } | null;
 }
 
 const TYPING = new Set(['INPUT', 'TEXTAREA', 'SELECT']);
 
 /** Spec §5.3: the list action a key press means, or null (always null while typing or with a dialog open). */
 export function shouldHandle(e: KeyLike, dialogOpen: boolean): ListAction | null {
-  if (dialogOpen || !e.target || TYPING.has(e.target.tagName ?? '') || e.target.isContentEditable) return null;
+  if (dialogOpen || !e.target || TYPING.has(e.target.tagName ?? '') || e.target.isContentEditable || e.target.closest?.('[role="menu"]')) return null;
   if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'd') return 'duplicate';
   if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key === 'Delete') return 'delete';
   if (e.altKey && !e.ctrlKey && !e.metaKey && e.key === 'ArrowUp') return 'up';

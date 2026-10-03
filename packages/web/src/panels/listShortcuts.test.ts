@@ -42,3 +42,11 @@ describe('moveSteps (review focus 4)', () => {
     expect(moveSteps(['a', 'b'], 'a', 'zz')).toBe(0);
   });
 });
+
+describe('open menu', () => {
+  it('ignores keys whose target is inside a menu', () => {
+    const inMenu = { tagName: 'DIV', closest: (sel: string) => (sel === '[role="menu"]' ? {} : null) };
+    expect(shouldHandle(key('Delete', {}, inMenu), false)).toBeNull();
+    expect(shouldHandle(key('d', { ctrlKey: true }, inMenu), false)).toBeNull();
+  });
+});

@@ -5,6 +5,7 @@ import {
 } from '@sponcam/core';
 import { toast } from 'sonner';
 import { cadReaderLoaded, importInWorker, loadCadReaderInWorker } from '../workers/importClient';
+import { withoutAutoPanel } from '@/layout/railStore';
 import { getBlob, loadCurrentJob } from './autosave';
 import { downloadBytes, pickOpenFile, pickSaveHandle, safeFileName, supportsFsAccess, writeToHandle } from './fileio';
 import { importProgramBytes, isProgramFile, loadPrograms, pruneBlobs, storeBlob } from './programs';
@@ -341,7 +342,8 @@ export async function restoreAutosave(): Promise<void> {
   }
   // the user already opened, imported or started something while the restore was pending: keep their work
   if (state().job !== jobAtStart) return;
-  state().loadDocument({ job, geometry, modelBytes, warnings, dirty: saved.dirty, fileHandle: null, programBytes });
+  // the remembered panel stays open after a reload: the restore is not a file the user opened
+  withoutAutoPanel(() => state().loadDocument({ job, geometry, modelBytes, warnings, dirty: saved.dirty, fileHandle: null, programBytes }));
   state().requestView('fit');
   await loadPrograms();
 }

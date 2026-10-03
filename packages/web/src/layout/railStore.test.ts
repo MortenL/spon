@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { autoPanel, createRailStore, type Settings } from './railStore';
+import { autoPanel, autoPanelSuppressed, createRailStore, type Settings, withoutAutoPanel } from './railStore';
 
 function memory(init: Record<string, string> = {}): Settings & { data: Record<string, string> } {
   const data = { ...init };
@@ -77,5 +77,14 @@ describe('autoPanel', () => {
   });
   it('a model change wins over operations arriving with it (opening a .spon job)', () => {
     expect(autoPanel(job({}), job({ model: model('a'), operations: [{ id: 'x' }] }))).toBe('model');
+  });
+});
+
+describe('withoutAutoPanel', () => {
+  it('suppresses automatic switches only while the callback runs, even when it throws', () => {
+    expect(autoPanelSuppressed()).toBe(false);
+    withoutAutoPanel(() => expect(autoPanelSuppressed()).toBe(true));
+    expect(() => withoutAutoPanel(() => { throw new Error('x'); })).toThrow('x');
+    expect(autoPanelSuppressed()).toBe(false);
   });
 });

@@ -4,12 +4,12 @@ import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { appStore, useApp } from '@/state/store';
 import { type RailPanel, RAIL_PANELS } from './railPanels';
-import { autoPanel, railStore, useRail, WIDTH } from './railStore';
+import { autoPanel, autoPanelSuppressed, railStore, useRail, WIDTH } from './railStore';
 import { type StepId, setupStatus } from './setupStatus';
 import { SetupSummary } from './SetupSummary';
 
 appStore.subscribe((s, prev) => {
-  if (s.job === prev.job) return;
+  if (s.job === prev.job || autoPanelSuppressed()) return;
   const id = autoPanel(prev.job, s.job);
   if (id) railStore.getState().show(id);
 });

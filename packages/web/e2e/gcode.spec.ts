@@ -47,8 +47,7 @@ test('G-code: load over a job, analyse, jump to the diagnostic, scrub, and resto
   // autosave restores the program and its analysis
   await page.waitForTimeout(1500);
   await page.reload();
-  await expect(page.getByTestId('model-size')).toBeVisible(); // the restore has finished and brought the Model panel forward
-  await openPanel(page, 'programs');
+  await openPanel(page, 'programs'); // the remembered panel; the restore no longer switches panels
   await expect(page.getByTestId('program-drill-arc.nc')).toBeVisible();
   await page.getByTestId('dock-tab-analysis').click();
   await expect(page.getByTestId('diagnostic')).toHaveCount(1);

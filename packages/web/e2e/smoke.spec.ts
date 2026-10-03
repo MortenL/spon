@@ -60,6 +60,9 @@ test('STL: import, lay flat, stock, WCS, then autosave restores everything', asy
   // 4. autosave (1 s debounce) survives a reload
   await page.waitForTimeout(1500);
   await page.reload();
+  // the remembered panel (Work origin) stays open once the restored job has loaded; the restore must not switch to Model
+  await expect(page.getByTestId('wcs-position')).toHaveText('X 0.00 · Y 0.00 · Z 12.00 mm');
+  await expect(page.getByTestId('left-panel')).toHaveAttribute('data-panel', 'origin');
   await openPanel(page, 'model');
   await expect(page.getByTestId('model-size')).toHaveText('20.00 × 5.00 × 10.00 mm');
   await openPanel(page, 'stock');
