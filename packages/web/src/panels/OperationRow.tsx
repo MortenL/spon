@@ -3,7 +3,7 @@ import {
   Check, Circle, CircleX, Layers, Loader2, MoreHorizontal, Scissors, SquareDashed, Triangle, TriangleAlert, RectangleHorizontal, PenLine, ChevronsDown, Eraser,
 } from 'lucide-react';
 import type React from 'react';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuTrigger,
@@ -11,6 +11,7 @@ import {
 import { cn } from '@/lib/utils';
 import { operationSeconds, operationStatus, runCommand, type OperationStatus } from '@/state/camView';
 import { appStore, useApp } from '@/state/store';
+import { InlayDialog } from '@/inspector/InlayDialog';
 import { formatDuration } from './format';
 import { duplicateShortcutLabel, firstProblem } from './listShortcuts';
 
@@ -69,8 +70,10 @@ export function OperationRow({ op, index, count, selected, dragHandle }: {
   const Icon = TYPE_ICON[op.type];
 
   const stop = (e: React.MouseEvent) => e.stopPropagation();
+  const [inlayOpen, setInlayOpen] = useState(false);
 
   return (
+    <>
     <div
       data-testid={`op-row-${index}`} data-selected={selected} data-status={status}
       onClick={() => appStore.getState().selectOperation(op.id)} tabIndex={0}
@@ -102,6 +105,9 @@ export function OperationRow({ op, index, count, selected, dragHandle }: {
             <DropdownMenuItem data-testid="op-duplicate" onSelect={() => duplicateOperation(op.id)}>Duplicate<DropdownMenuShortcut>{DUPLICATE_SHORTCUT}</DropdownMenuShortcut></DropdownMenuItem>
             <DropdownMenuItem data-testid="op-up" disabled={index === 0} onSelect={() => moveOperation(op.id, -1)}>Move up<DropdownMenuShortcut>Alt+↑</DropdownMenuShortcut></DropdownMenuItem>
             <DropdownMenuItem data-testid="op-down" disabled={index === count - 1} onSelect={() => moveOperation(op.id, 1)}>Move down<DropdownMenuShortcut>Alt+↓</DropdownMenuShortcut></DropdownMenuItem>
+            {op.type === 'vcarve' && (
+              <DropdownMenuItem data-testid="op-make-inlay" onSelect={() => setInlayOpen(true)}>Make inlay…</DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem data-testid="op-delete" variant="destructive" onSelect={() => removeOperation(op.id)}>Delete<DropdownMenuShortcut>Del</DropdownMenuShortcut></DropdownMenuItem>
           </DropdownMenuContent>
@@ -115,5 +121,7 @@ export function OperationRow({ op, index, count, selected, dragHandle }: {
         )}
       </div>
     </div>
+    {op.type === 'vcarve' && <InlayDialog op={op} open={inlayOpen} onOpenChange={setInlayOpen} />}
+    </>
   );
 }

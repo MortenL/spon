@@ -1,4 +1,4 @@
-import { camContext, type ChamferOp, type DrillCycle, type DrillOp, CommandError, type EngraveOp, type EntrySettings, type FaceOp, formatLength, type Operation, type PocketOp, type ProfileOp, resolveGeometry, type SlotOp, type VCarveOp, type VClearOp } from '@sponcam/core';
+import { camContext, type ChamferOp, type DrillCycle, type DrillOp, CommandError, type EngraveOp, type EntrySettings, type FaceOp, formatLength, type Operation, type PocketOp, type ProfileOp, resolveGeometry, type SlotOp, type VCarveOp, type VClearOp, type VPlugOp } from '@sponcam/core';
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -501,6 +501,29 @@ function VCarvePasses({ op }: { op: VCarveOp }) {
   );
 }
 
+function VPlugPasses({ op }: { op: VPlugOp }) {
+  const patch = (p: Partial<VPlugOp>) => runCommand({ type: 'updateOperation', id: op.id, patch: p });
+  const H = op.inlayDepth - op.glueGap + op.startDepth;
+  return (
+    <div className="space-y-3">
+      <LengthField label="Inlay depth (D)" valueMm={op.inlayDepth} testId="pass-vplug-depth" min={0.01} onCommit={(v) => patch({ inlayDepth: v })} />
+      <LengthField label="Start depth (S)" valueMm={op.startDepth} testId="pass-vplug-start" min={0.01} onCommit={(v) => patch({ startDepth: v })} />
+      <LengthField label="Glue gap (g)" valueMm={op.glueGap} testId="pass-vplug-gap" min={0.01} onCommit={(v) => patch({ glueGap: v })} />
+      <LengthField label="Plug height (H)" valueMm={H} testId="pass-vplug-height" disabled onCommit={() => {}} />
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox" data-testid="pass-vplug-stepdown-on" className="accent-primary" checked={op.stepdown !== null}
+          onChange={(e) => patch({ stepdown: e.target.checked ? 1 : null })}
+        />
+        Stepdown (off = one pass)
+      </label>
+      {op.stepdown !== null && (
+        <LengthField label="Stepdown" valueMm={op.stepdown} testId="pass-vplug-stepdown" min={0.01} onCommit={(v) => patch({ stepdown: v })} />
+      )}
+    </div>
+  );
+}
+
 function VClearPasses({ op }: { op: VClearOp }) {
   const patch = (p: Partial<VClearOp>) => runCommand({ type: 'updateOperation', id: op.id, patch: p });
   const job = useApp((s) => s.job);
@@ -533,6 +556,6 @@ export function PassesTab({ op }: { op: Operation }) {
   if (op.type === 'engrave') return <EngravePasses op={op} />;
   if (op.type === 'vcarve') return <VCarvePasses op={op} />;
   if (op.type === 'vclear') return <VClearPasses op={op} />;
-  if (op.type === 'vplug') return null; // Task 7
+  if (op.type === 'vplug') return <VPlugPasses op={op} />;
   return <ChamferPasses op={op} />;
 }
