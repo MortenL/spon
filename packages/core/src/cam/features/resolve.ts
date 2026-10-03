@@ -109,7 +109,10 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
           for (const isl of sh.islands) out.contours.push({ path: isl, z: r.z, ref: i, kind: 'inner' });
         }
       } else if (op.type === 'profile') {
-        for (const sh of r.shapes) for (const path of [sh.outer, ...sh.islands]) out.contours.push({ path, z: r.z, ref: i });
+        for (const sh of r.shapes) {
+          out.contours.push({ path: sh.outer, z: r.z, ref: i, kind: 'outer' });
+          for (const isl of sh.islands) out.contours.push({ path: isl, z: r.z, ref: i, kind: 'inner' });
+        }
       } else if (op.type === 'pocket' || op.type === 'vcarve') {
         for (const shape of r.shapes) out.shapes.push({ shape, z: r.z, ref: i });
       } else fail(i, 'wrong-geometry', "Text can't be used by this operation");

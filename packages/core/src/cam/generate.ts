@@ -37,6 +37,14 @@ export class GenerationCache {
   }
 }
 
+function textKeys(op: Operation, job: Job, fonts: FontSet): unknown[] {
+  return op.geometry.flatMap((g) => {
+    if (g.kind !== 'text') return [];
+    const t = job.texts.find((x) => x.id === g.textId) ?? null;
+    return [[t, t ? fonts.status(t.font) : null]];
+  });
+}
+
 export function operationKey(op: Operation, job: Job, fonts: FontSet = EMPTY_FONTS): string {
   // a clearing depends on its source operation and that operation's tool; a V-carve's warning on whether an enabled clearing exists
   let extra: unknown = null;
@@ -44,12 +52,12 @@ export function operationKey(op: Operation, job: Job, fonts: FontSet = EMPTY_FON
     const src = job.operations.find((o) => o.id === op.sourceId) ?? null;
     extra = [src, src ? job.tools.find((t) => t.id === src.toolId) ?? null : null];
   } else if (op.type === 'vcarve') extra = job.operations.some((o) => o.enabled && o.type === 'vclear' && o.sourceId === op.id);
-  // a picked text (and the state of its font) changes the geometry
-  const texts = op.geometry.flatMap((g) => {
-    if (g.kind !== 'text') return [];
-    const t = job.texts.find((x) => x.id === g.textId) ?? null;
-    return [[t, t ? fonts.status(t.font) : null]];
-  });
+  // a picked text (and the state of its font) changes the geometry; a clearing also depends on its source's texts
+  const texts = textKeys(op, job, fonts);
+  if (op.type === 'vclear') {
+    const src = job.operations.find((o) => o.id === op.sourceId);
+    if (src) texts.push(...textKeys(src, job, fonts));
+  }
   return JSON.stringify([op, job.tools.find((t) => t.id === op.toolId) ?? null, job.tolerance, job.model, job.stock, job.wcs, job.machine.maxFeed, extra, texts]);
 }
 
