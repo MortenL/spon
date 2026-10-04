@@ -7,9 +7,9 @@ const update = (patch: object, job = base()) => applyCommand(job, { type: 'updat
 
 describe('thread job model', () => {
   it('is schema 8 and migrates schema 7 jobs unchanged', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(8);
+    expect(CURRENT_SCHEMA_VERSION).toBe(9);
     const v7 = { ...createJob(), schemaVersion: 7 };
-    expect(migrateJob(v7)).toEqual({ ...v7, schemaVersion: 8 });
+    expect(migrateJob(v7)).toEqual({ ...v7, schemaVersion: 9 });
   });
 
   it('adds a thread operation with defaults', () => {

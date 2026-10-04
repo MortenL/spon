@@ -17,6 +17,7 @@ export * from './import/dxf/curves';
 export * from './import/importFile';
 export * from './import/cad';
 export * from './job/types';
+export * from './job/axes';
 export * from './job/defaults';
 export * from './job/orientation';
 export * from './job/update';

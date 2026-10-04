@@ -87,7 +87,7 @@ describe('wcsPoint', () => {
     for (const x of ['min', 'center', 'max'] as const) {
       for (const y of ['min', 'center', 'max'] as const) {
         for (const z of ['top', 'bottom'] as const) {
-          const p = wcsPoint({ anchor: { x, y, z }, offset: vec3(0, 0, 0), workOffset: 'G54' }, stock);
+          const p = wcsPoint({ anchor: { x, y, z }, offset: vec3(0, 0, 0), workOffset: 'G54', axes: { reverseX: false, reverseY: false, swapXY: false } }, stock);
           expect(p).toEqual(vec3(xs[x], ys[y], zs[z]));
         }
       }
@@ -95,7 +95,7 @@ describe('wcsPoint', () => {
   });
 
   it('adds the offset', () => {
-    const p = wcsPoint({ anchor: { x: 'min', y: 'min', z: 'top' }, offset: vec3(1, 2, -3), workOffset: 'G54' }, stock);
+    const p = wcsPoint({ anchor: { x: 'min', y: 'min', z: 'top' }, offset: vec3(1, 2, -3), workOffset: 'G54', axes: { reverseX: false, reverseY: false, swapXY: false } }, stock);
     expect(p).toEqual(vec3(-14, -8, 3));
   });
 });

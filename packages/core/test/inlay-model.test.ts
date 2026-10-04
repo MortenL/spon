@@ -7,9 +7,9 @@ const withV = () => applyCommand(createJob(), { type: 'addTool', tool: vbit });
 
 describe('inlay job model', () => {
   it('is schema 8 and migrates schema 6 jobs unchanged', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(8);
+    expect(CURRENT_SCHEMA_VERSION).toBe(9);
     const v6 = { ...createJob(), schemaVersion: 6 };
-    expect(migrateJob(v6)).toEqual({ ...v6, schemaVersion: 8 });
+    expect(migrateJob(v6)).toEqual({ ...v6, schemaVersion: 9 });
   });
 
   it('adds a V-carve plug with defaults and validates it', () => {

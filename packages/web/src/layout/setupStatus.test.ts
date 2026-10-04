@@ -86,9 +86,9 @@ describe('labels', () => {
     expect(upAxisLabel(quatFromAxisAngle(vec3(1, 0, 0), 30))).toBe('custom');
   });
   it('describes the origin in words', () => {
-    expect(originLabel({ anchor: { x: 'min', y: 'min', z: 'top' }, offset: vec3(0, 0, 0), workOffset: 'G54' })).toBe('origin front-left, top (G54)');
-    expect(originLabel({ anchor: { x: 'center', y: 'center', z: 'bottom' }, offset: vec3(0, 0, 0), workOffset: 'G55' })).toBe('origin centre, bottom (G55)');
-    expect(originLabel({ anchor: { x: 'max', y: 'max', z: 'top' }, offset: vec3(1, 0, 0), workOffset: 'G54' })).toBe('origin back-right, top + offset (G54)');
+    expect(originLabel({ anchor: { x: 'min', y: 'min', z: 'top' }, offset: vec3(0, 0, 0), workOffset: 'G54', axes: { reverseX: false, reverseY: false, swapXY: false } })).toBe('origin front-left, top (G54)');
+    expect(originLabel({ anchor: { x: 'center', y: 'center', z: 'bottom' }, offset: vec3(0, 0, 0), workOffset: 'G55', axes: { reverseX: false, reverseY: false, swapXY: false } })).toBe('origin centre, bottom (G55)');
+    expect(originLabel({ anchor: { x: 'max', y: 'max', z: 'top' }, offset: vec3(1, 0, 0), workOffset: 'G54', axes: { reverseX: false, reverseY: false, swapXY: false } })).toBe('origin back-right, top + offset (G54)');
   });
 });
 
