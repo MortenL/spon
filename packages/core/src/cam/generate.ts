@@ -65,7 +65,7 @@ export function operationKey(op: Operation, job: Job, fonts: FontSet = EMPTY_FON
   return JSON.stringify([op, job.tools.find((t) => t.id === op.toolId) ?? null, job.tolerance, job.model, job.stock, job.wcs, job.machine.maxFeed, extra, texts]);
 }
 
-const emptyGeometry = (): ResolvedGeometry => ({ contours: [], shapes: [], holes: [], slots: [], diagnostics: [], sagitta: 0, faceZ: () => null });
+const emptyGeometry = (): ResolvedGeometry => ({ contours: [], shapes: [], holes: [], bosses: [], slots: [], diagnostics: [], sagitta: 0, faceZ: () => null });
 
 export function generateOperation(op: Operation, ctx: CamContext): OperationResult {
   const base: OperationResult = { operationId: op.id, key: '', toolpath: null, diagnostics: [], heights: null, overlays: emptyOverlays() };

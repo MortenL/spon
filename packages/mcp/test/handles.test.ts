@@ -34,7 +34,7 @@ describe('HandleMap', () => {
     const map = new HandleMap();
     map.assign(plateCatalog());
     expect(map.size).toBeGreaterThan(0);
-    map.assign({ faces: [], holes: [], contours: [], slots: [] });
+    map.assign({ faces: [], holes: [], contours: [], slots: [], bosses: [] });
     expect(() => map.resolve('F1')).toThrow('Unknown handle F1');
     map.assign(plateCatalog());
     map.clear();
@@ -50,7 +50,7 @@ describe('HandleMap', () => {
 
   it('reverses a contour handle with a trailing !', () => {
     const map = new HandleMap();
-    map.assign({ faces: [], holes: [], slots: [], contours: [{ ref: { kind: 'dxfPath', blobId: 'b', layer: 0, path: 2 }, layer: 'L', closed: false, length: 10, bbox: { min: { x: 0, y: 0, z: 0 }, max: { x: 1, y: 1, z: 0 } }, circle: null }] } as never);
+    map.assign({ faces: [], holes: [], slots: [], bosses: [], contours: [{ ref: { kind: 'dxfPath', blobId: 'b', layer: 0, path: 2 }, layer: 'L', closed: false, length: 10, bbox: { min: { x: 0, y: 0, z: 0 }, max: { x: 1, y: 1, z: 0 } }, circle: null }] } as never);
     expect(map.resolve('C1!')).toEqual({ kind: 'dxfPath', blobId: 'b', layer: 0, path: 2, reverse: true });
     expect(map.resolve('c1')).toEqual({ kind: 'dxfPath', blobId: 'b', layer: 0, path: 2 });
     expect(() => map.resolve('F1!')).toThrow(/Unknown handle F1|Only drawing contours/);

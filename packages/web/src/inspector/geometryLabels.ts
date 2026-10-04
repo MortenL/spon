@@ -26,10 +26,8 @@ export function refLabel(ref: GeometryRef, catalog: GeometryCatalog | null, laye
     return t ? `Text: ${t.name}` : 'Text (deleted)';
   }
   if (ref.kind === 'meshBoss') {
-    const boss = catalog?.faces.find((f) => sameFace(f.ref, ref.face));
-    if (!boss) return 'Boss (not found)';
-    const circle = boss.loops[0]?.circle;
-    return circle ? `Boss Ø${L(circle.diameter)}` : 'Boss';
+    const boss = catalog?.bosses.find((b) => b.ref.kind === 'meshBoss' && sameFace(b.ref.face, ref.face));
+    return boss ? `Boss Ø${L(boss.diameter)}` : 'Boss (not found)';
   }
   if (ref.kind === 'meshSlot') {
     const slot = catalog?.slots.find((s) => sameRef(s.ref, ref));

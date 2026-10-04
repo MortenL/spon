@@ -63,7 +63,7 @@ export interface FaceGeometry {
   loops: Path2D[];
   /** Per loop: the largest gap between a mesh chord and the arc fitted over it (mm); 0 for a loop without fitted arcs. */
   sagittas: number[];
-  /** Per loop: the round hole it stands for, fitted to its vertices however coarse the faceting (null when it is not round). */
+  /** Per loop: the round hole (loop 0: the round boss outline) it stands for, fitted to its vertices however coarse the faceting (null when it is not round). */
   circles: ({ center: Vec2; diameter: number } | null)[];
   /** Per loop: the largest gap between a mesh chord and `circles[k]` (mm); 0 when there is no circle. */
   circleSagittas: number[];
@@ -121,6 +121,30 @@ export function resolveFaceRef(ctx: CamContext, ref: MeshFaceRef): { ok: true; f
     return { ok: false, code: 'face-not-horizontal', message: 'The face is not horizontal and facing up in the current orientation' };
   }
   return { ok: true, face: faceGeometry(ctx, faceRegion(g.mesh, g.adjacency, ref.seed)) };
+}
+
+/** Do the walls just outside a round loop `circle` of a face drop below the face? True for a boss outline or a hole wall; false for a recess floor or the base ring of a boss, where they rise. */
+export function wallsDrop(ctx: CamContext, f: FaceGeometry, circle: { center: Vec2; diameter: number }): boolean {
+  const g = ctx.geometry;
+  if (!g || g.kind !== 'mesh') return false;
+  const inRegion = new Set(f.tris);
+  const r = circle.diameter / 2;
+  let seen = false;
+  for (const t of f.tris) {
+    for (let e = 0; e < 3; e++) {
+      const nb = g.adjacency.neighbors[t * 3 + e];
+      if (nb < 0 || inRegion.has(nb)) continue;
+      const ia = g.mesh.indices[t * 3 + e], ib = g.mesh.indices[t * 3 + ((e + 1) % 3)];
+      const a = toProgram(ctx, vertexAt(g.mesh, ia)), b = toProgram(ctx, vertexAt(g.mesh, ib));
+      // only the walls on the outer circle: edges of the other loops (holes in the boss top) are skipped
+      if (Math.abs(Math.hypot((a.x + b.x) / 2 - circle.center.x, (a.y + b.y) / 2 - circle.center.y) - r) > Math.max(0.05 * r, ctx.tolerance)) continue;
+      const third = [0, 1, 2].map((k) => g.mesh.indices[nb * 3 + k]).find((v) => v !== ia && v !== ib);
+      if (third === undefined) continue;
+      if (toProgram(ctx, vertexAt(g.mesh, third)).z >= f.z - 1e-6) return false;
+      seen = true;
+    }
+  }
+  return seen;
 }
 
 const upFacing = new WeakMap<CamContext, { x: number; y: number; z: number }[]>();
