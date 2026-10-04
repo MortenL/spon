@@ -53,7 +53,7 @@ An MCP server lets Claude (or any MCP client) drive the same jobs: on `.spon` fi
 - Export refuses on errors. Warnings ask for confirmation.
 
 **Claude integration (MCP)**
-- `packages/mcp` is a local stdio MCP server with tools for jobs, import, setup, geometry, operations (profile, pocket, drill, face and chamfer), generation, a PNG preview, export and the tool library.
+- `packages/mcp` is a local stdio MCP server with tools for jobs, import, setup, geometry, operations (profile, pocket, drill, face, chamfer and thread), round holes and bosses with handles, a `list_threads` table, generation, a PNG preview, export and the tool library.
 - **Live mode.** Click **Claude** in the app's status bar, and Claude drives the job open in that tab. Each change is one undo step.
 - See [`packages/mcp/README.md`](packages/mcp/README.md).
 

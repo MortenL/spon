@@ -3,7 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { ToolContext } from '../context';
 import { SessionError } from '../session';
-import { isToolTableFile } from '@sponcam/core';
+import { isToolTableFile, listThreads } from '@sponcam/core';
 import { lengthUnitSchema, toolSchema } from '../schemas';
 import { type Args, guarded, ok } from './result';
 
@@ -12,6 +12,7 @@ const listShape = {
   type: z.enum(['flat', 'ball', 'bull', 'vbit', 'drill', 'chamfer', 'threadmill']).optional(),
   diameter: z.number().optional().describe('Diameter in mm (±0.01)'),
 };
+const threadsShape = { standard: z.enum(['iso-coarse', 'iso-fine', 'unc', 'unf']).optional().describe('Only this standard') };
 const addShape = { tool: toolSchema.describe('A complete tool; lengths in mm, feeds in mm/min') };
 const importShape = {
   path: z.string().describe('A Spon tool library .json, a Fusion 360 library .json / .tools, or a LinuxCNC tool table .tbl'),
@@ -38,6 +39,15 @@ export function registerLibraryTools(server: McpServer, ctx: ToolContext): void 
       ? tools.map((t) => `[${t.source}] T${t.number} ${t.name} — ${t.type} ⌀${t.diameter} mm, id ${t.id}${t.presets.length ? `; presets: ${t.presets.map((p) => p.name).join(', ')}` : ''}`).join('\n')
       : 'No tools match.';
     return ok(text, { tools });
+  }));
+
+  server.registerTool('list_threads', {
+    title: 'List threads',
+    description: 'The standard thread table (ISO coarse and fine, UNC, UNF): size, major diameter, pitch and flank angle, in mm. Use a row in a thread operation as params.thread { standard, size, majorDiameter, pitch, angle }.',
+    inputSchema: threadsShape,
+  }, guarded('list_threads', async (a: Args<typeof threadsShape>) => {
+    const threads = listThreads(a.standard);
+    return ok(threads.map((t) => `${t.standard} ${t.size}: ⌀${t.majorDiameter} mm, pitch ${t.pitch} mm, ${t.angle}°`).join('\n'), { threads });
   }));
 
   server.registerTool('add_library_tool', {

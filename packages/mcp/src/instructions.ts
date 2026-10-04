@@ -8,8 +8,8 @@ Typical flow
 1. new_job (or open_job for an existing .spon).
 2. import_model with an STL, STEP, IGES, DXF or SVG file. If it answers needsUnits or needsBody, call it again with units or body. An SVG without real-world units answers needsScale: call it again with svgDpi (96 for CSS/Inkscape/Affinity, 72 for Illustrator) or svgWidth (mm).
 3. Set up with apply_commands: rotateQuarter / layFlat / setZSpin to orient, setStock, setWcs, applyMachinePreset, setPost { dialect: "grbl" | "linuxcnc" | "fanuc" }. A drawing (DXF or SVG) is flat: give the stock its material thickness with setStock (auto stock margin zBottom = thickness).
-4. describe_geometry lists what can be machined, with short handles: faces F1, F2… (top down, horizontal and facing up), their loops F1.L0 (outer), F1.L1…, holes H1…, slots S1… (recognised slots), and drawing (DXF/SVG) contours C1…. Call it again after importing or reorienting.
-5. add_operation for each operation: type profile, pocket, drill, face, chamfer, slot, engrave, vcarve or vclear (face and vclear take an empty geometry list); a tool from list_tools (job tool id, T number, or library tool id); geometry handles; params.
+4. describe_geometry lists what can be machined, with short handles: faces F1, F2… (top down, horizontal and facing up), their loops F1.L0 (outer), F1.L1…, holes H1…, round bosses B1…, slots S1… (recognised slots), and drawing (DXF/SVG) contours C1…. Call it again after importing or reorienting.
+5. add_operation for each operation: type profile, pocket, drill, face, chamfer, slot, engrave, vcarve, vclear or thread (face and vclear take an empty geometry list); a tool from list_tools (job tool id, T number, or library tool id); geometry handles; params.
 6. generate: read each operation's status and diagnostics and fix errors with apply_commands (updateOperation).
 7. render_preview (top, then iso) to check the toolpaths by eye: feeds are solid, rapids dashed, red hatching is material the tool cannot reach.
 8. export_gcode into a folder, and save_job to a .spon path. The user can open the .spon in the Spon web app.
@@ -38,6 +38,11 @@ Slots
 - strategy auto picks toolWidth when the width matches the tool diameter (0.02 mm narrower to 0.05 mm wider; narrower than that is refused), else wider; trochoidal is used only when set (trochoidal.stepPct, default 10).
 - Square-ended slots need squareEnds: inside (corners keep the tool radius), endWall (overcuts the end by the tool radius) or dogbone (corner reliefs); export is refused until it is set.
 - endWall and dogbone overcuts give a slot-overcut warning, not a gouge error.
+
+Threads
+- thread mills a screw thread with a thread mill (tool type threadmill, see list_tools): kind internal on a round hole (H1), or external on a round boss (B1).
+- thread: pick a row from list_threads ({ standard, size, majorDiameter, pitch, angle }), or standard custom with size null and your own major diameter, pitch and angle. hand (right | left), length (mm of thread, from the top of the hole or boss), allowance (mm, positive leaves the thread loose), passes, springPass, direction (climb | conventional), feedCompensation.
+- Cutter requirements: its tooth angle must match the thread angle; a multi-tooth cutter cuts one fixed pitch (the thread must match it); the cutter must fit the hole, and its neck must reach the thread depth (neck length at least the length plus the distance down from the top). Drill the tap drill (major minus pitch) first for internal threads; a hole smaller than the thread's minor diameter gives a warning.
 
 Engrave and V-carve
 - engrave cuts along lines and outlines with the tool centre on the line; with a V-bit, depthMode width sets the line width (lineWidth) instead of a depth.
