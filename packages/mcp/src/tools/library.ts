@@ -9,7 +9,7 @@ import { type Args, guarded, ok } from './result';
 
 const listShape = {
   query: z.string().optional().describe('Text in the name, vendor or product id'),
-  type: z.enum(['flat', 'ball', 'bull', 'vbit', 'drill', 'chamfer']).optional(),
+  type: z.enum(['flat', 'ball', 'bull', 'vbit', 'drill', 'chamfer', 'threadmill']).optional(),
   diameter: z.number().optional().describe('Diameter in mm (±0.01)'),
 };
 const addShape = { tool: toolSchema.describe('A complete tool; lengths in mm, feeds in mm/min') };

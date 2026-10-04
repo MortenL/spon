@@ -7,10 +7,19 @@ export class ToolLibraryError extends Error {
 
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
+function validThread(t: Tool): boolean {
+  const th = t.thread;
+  if (t.type !== 'threadmill') return th === undefined;
+  if (th === null || typeof th !== 'object') return false;
+  return isNum(th.neckDiameter) && th.neckDiameter > 0 && isNum(th.neckLength) && th.neckLength > 0 &&
+    (th.pitch === null || (isNum(th.pitch) && th.pitch > 0)) && Number.isInteger(th.teeth) && th.teeth >= 1 &&
+    t.tipAngleDeg > 0 && t.tipAngleDeg < 180;
+}
+
 export function validateTool(value: unknown): value is Tool {
   if (value === null || typeof value !== 'object') return false;
   const t = value as Tool;
-  return (
+  return validThread(t) && (
     typeof t.id === 'string' && typeof t.name === 'string' && TOOL_TYPES.includes(t.type) &&
     Number.isInteger(t.number) && t.number >= 0 && isNum(t.diameter) && t.diameter > 0 && isNum(t.cornerRadius) && t.cornerRadius >= 0 &&
     isNum(t.tipAngleDeg) && isNum(t.fluteLength) && t.fluteLength > 0 && isNum(t.stickout) && t.stickout > 0 &&

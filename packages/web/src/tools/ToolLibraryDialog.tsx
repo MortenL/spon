@@ -29,6 +29,13 @@ function blankTool(tools: readonly Tool[]): Tool {
   };
 }
 
+/** Switching to or from a thread mill adds or drops its thread data so the tool stays valid. */
+function withType(tool: Tool, type: ToolType): Tool {
+  const { thread: _drop, ...rest } = tool;
+  if (type !== 'threadmill') return { ...rest, type };
+  return { ...rest, type, tipAngleDeg: tool.tipAngleDeg > 0 && tool.tipAngleDeg < 180 ? tool.tipAngleDeg : 60, thread: tool.thread ?? { neckDiameter: tool.diameter * 0.75, neckLength: 20, pitch: null, teeth: 1 } };
+}
+
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 const intField = (min: number) => ({
@@ -280,7 +287,7 @@ export function ToolLibraryDialog() {
                     <span className="text-muted-foreground">Type</span>
                     <select
                       data-testid="tool-field-type" value={draft.type} className="h-8 rounded-md border bg-transparent px-2 text-sm"
-                      onChange={(e) => setDraft({ ...draft, type: e.target.value as ToolType })}
+                      onChange={(e) => setDraft(withType(draft, e.target.value as ToolType))}
                     >
                       {TOOL_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                     </select>

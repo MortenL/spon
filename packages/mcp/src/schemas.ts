@@ -107,7 +107,7 @@ const presetSchema = z.strictObject({
 export const toolSchema = z.strictObject({
   id: z.string(),
   name: z.string(),
-  type: z.enum(['flat', 'ball', 'bull', 'vbit', 'drill', 'chamfer']),
+  type: z.enum(['flat', 'ball', 'bull', 'vbit', 'drill', 'chamfer', 'threadmill']),
   number: z.number().int(),
   diameter: z.number(),
   cornerRadius: z.number(),
@@ -116,6 +116,7 @@ export const toolSchema = z.strictObject({
   stickout: z.number(),
   flutes: z.number().int(),
   presets: z.array(presetSchema),
+  thread: z.strictObject({ neckDiameter: z.number(), neckLength: z.number(), pitch: z.number().nullable(), teeth: z.number().int() }).optional(),
   vendor: z.string().optional(),
   productId: z.string().optional(),
 });

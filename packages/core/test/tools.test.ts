@@ -21,17 +21,17 @@ const fusion = {
 };
 
 describe('starter library', () => {
-  it('has 10 valid tools with unique ids and numbers and a preset per material', () => {
+  it('has 12 valid tools with unique ids and numbers and a preset per material', () => {
     const tools = starterLibrary();
-    expect(tools).toHaveLength(10);
-    expect(new Set(tools.map((t) => t.id)).size).toBe(10);
-    expect(new Set(tools.map((t) => t.number)).size).toBe(10);
+    expect(tools).toHaveLength(12);
+    expect(new Set(tools.map((t) => t.id)).size).toBe(12);
+    expect(new Set(tools.map((t) => t.number)).size).toBe(12);
     for (const t of tools) {
       expect(validateTool(t), t.name).toBe(true);
       expect(t.presets.map((p) => p.name)).toEqual([...MATERIALS]);
     }
     expect(tools.map((t) => `${t.type}:${t.diameter}`)).toEqual([
-      'flat:3', 'flat:6', 'flat:8', 'ball:6', 'vbit:12', 'vbit:12', 'drill:3', 'drill:5', 'drill:6', 'drill:8',
+      'flat:3', 'flat:6', 'flat:8', 'ball:6', 'vbit:12', 'vbit:12', 'drill:3', 'drill:5', 'drill:6', 'drill:8', 'threadmill:6', 'threadmill:6.2',
     ]);
   });
 });
