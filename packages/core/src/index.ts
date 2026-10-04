@@ -107,3 +107,5 @@ export { flatAreas, shapePolys, vcarveToolpath } from './cam/ops/vcarve';
 export { vplugToolpath } from './cam/ops/vplug';
 export * from './cam/inlay/plugStrokes';
 export { vclearToolpath } from './cam/ops/vclear';
+export * from './thread/table';
+export * from './thread/derive';
