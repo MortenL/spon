@@ -8,7 +8,7 @@ import { type CamContext, drawingPathToProgram } from '../context';
 import type { CamCode, CamDiagnostic, MeshFaceRef, Operation, SlotEnd } from '../types';
 import { chainPaths, nestLoops, type Shape } from './chain';
 import { circleOf, drawingPath } from './dxf';
-import { type FaceGeometry, faceGeometry, holeBottom, resolveFaceRef } from './mesh';
+import { type FaceGeometry, faceGeometry, holeBottom, resolveFaceRef, wallsDrop } from './mesh';
 import { closedSlotOf, openSlotOf, resolvedSlotOf } from './slots';
 import { resolveText } from '../../text/resolve';
 
@@ -139,7 +139,7 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
         if (!holeFromLoop(f, g.loop, i)) fail(i, 'ref-changed', 'The picked loop is not a round hole');
       } else if (g.kind === 'meshBoss' && !internal) {
         const c = f.circles[0];
-        if (!c) return fail(i, 'ref-changed', 'The picked boss is no longer round');
+        if (!c || !wallsDrop(ctx, f, c)) return fail(i, 'ref-changed', 'The picked boss is no longer round');
         out.sagitta = Math.max(out.sagitta, f.circleSagittas[0] ?? 0);
         out.bosses.push({ center: c.center, diameter: c.diameter, top: f.z, ref: i });
       } else fail(i, 'wrong-geometry', internal ? 'Internal threads need round holes' : 'External threads need round bosses');

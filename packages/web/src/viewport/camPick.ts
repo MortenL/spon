@@ -1,6 +1,6 @@
 import {
   type CamContext, circleOf, drawingPath, drawingPathToProgram, type DxfPathRef, dist2, faceRefFromTriangle, type GeometryRef,
-  type MeshSlotRef, meshSlots, nearestDxfPath, nearestS, offsetPolys, type Operation, pathEnd, pathStart, pointInPolys, resolveFaceRef, type Vec2,
+  type MeshSlotRef, meshSlots, nearestDxfPath, nearestS, offsetPolys, type Operation, pathEnd, pathStart, pointInPolys, resolveFaceRef, type Vec2, wallsDrop,
 } from '@sponcam/core';
 import { sameRef } from '@/inspector/geometryLabels';
 
@@ -81,7 +81,8 @@ export function pickMesh(op: Operation, ctx: CamContext, tri: number, q: Vec2, a
   if (!res.ok) return { error: res.message };
   if (op.type === 'thread' && op.kind === 'external') {
     // a round boss: clicking its top face (or its edge) picks the boss
-    return res.face.circles[0] ? { refs: [{ kind: 'meshBoss', face }] } : { error: 'Click the top of a round boss' };
+    const top = res.face.circles[0];
+    return top && wallsDrop(ctx, res.face, top) ? { refs: [{ kind: 'meshBoss', face }] } : { error: 'Click the top of a round boss' };
   }
   const isHoleOp = op.type === 'drill' || op.type === 'thread'; // an internal thread picks one round hole even without Alt
   if ((!alt && op.type !== 'thread') || op.type === 'pocket' || op.type === 'face') return { refs: [face] };

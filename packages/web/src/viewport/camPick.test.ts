@@ -2,6 +2,8 @@ import { applyCommand, camContext, type CamGeometry, createJob, describeGeometry
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { camPartSetup, faceAt, plateSetup } from '../../../core/test/fixtures/camSetup';
+import { terracedSetup } from '../../../core/test/fixtures/slotSetup';
+import { rectPts } from '../../../core/test/fixtures/terraced.mjs';
 import { applyPick, connectedDxfRefs, pickDxf, pickMesh, pickSlot } from './camPick';
 
 const op = (job: Parameters<typeof applyCommand>[0], type: Operation['type']) =>
@@ -116,6 +118,15 @@ describe('thread picking', () => {
     const plateTop = cat.holes[0].ref;
     if (plateTop.kind !== 'meshHole') throw new Error('expected a mesh hole');
     expect(pickMesh(threadOp('external'), ctx, plateTop.face.seed, { x: 10, y: 10 }, false)).toMatchObject({ error: expect.any(String) });
+  });
+
+  it('refuses the floor of a round pocket for an external thread (its walls rise, it is no boss)', () => {
+    const circle = Array.from({ length: 96 }, (_, i) => [30 + 8 * Math.cos((2 * Math.PI * i) / 96), 20 + 8 * Math.sin((2 * Math.PI * i) / 96)] as [number, number]);
+    const s = terracedSetup(rectPts(0, 0, 60, 40), 10, [{ poly: circle, z: 5 }]);
+    const floor = s.catalog().faces.at(-1)!;
+    if (floor.ref.kind !== 'meshFace') throw new Error('expected a mesh face');
+    const pocketCtx = camContext(s.job, s.geometry);
+    expect(pickMesh(threadOp('external'), pocketCtx, floor.ref.seed, { x: 35, y: 25 }, false)).toEqual({ error: 'Click the top of a round boss' });
   });
 
   it('picks a round hole for an internal thread without Alt', () => {

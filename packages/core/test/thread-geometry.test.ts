@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { applyCommand, camContext, type CamGeometry, describeGeometry, importFile, type Job, resolveGeometry, setModel, createJob, setStock, type GeometryRef } from '../src';
 import { camPartSetup } from './fixtures/camSetup';
+import { terracedSetup } from './fixtures/slotSetup';
+import { rectPts } from './fixtures/terraced.mjs';
 
 function threadPlate() {
   const r = importFile('thread-plate.stl', readFileSync(new URL('./fixtures/thread-plate.stl', import.meta.url)));
@@ -67,5 +69,17 @@ describe('thread geometry', () => {
     expect(ext.bosses).toHaveLength(1);
     expect(ext.bosses[0].diameter).toBeCloseTo(circle.circle!.diameter, 6);
     expect(threadOp(s.job, s.geometry, 'internal', [circle.ref]).holes).toHaveLength(1);
+  });
+});
+
+describe('a meshBoss needs walls that drop', () => {
+  it('refuses the floor of a round pocket (ref-changed)', () => {
+    const circle = Array.from({ length: 96 }, (_, i) => [30 + 8 * Math.cos((2 * Math.PI * i) / 96), 20 + 8 * Math.sin((2 * Math.PI * i) / 96)] as [number, number]);
+    const s = terracedSetup(rectPts(0, 0, 60, 40), 10, [{ poly: circle, z: 5 }]);
+    const floor = s.catalog().faces.at(-1)!;
+    expect(floor.z).toBeLessThan(0);
+    const r = threadOp(s.job, s.geometry, 'external', [{ kind: 'meshBoss', face: floor.ref }]);
+    expect(r.bosses).toHaveLength(0);
+    expect(r.diagnostics).toMatchObject([{ severity: 'error', code: 'ref-changed' }]);
   });
 });
