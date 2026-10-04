@@ -37,6 +37,7 @@ export * from './gcode/cycles';
 export * from './gcode/interpreter';
 export * from './gcode/timing';
 export * from './gcode/analysis';
+export * from './gcode/mapTable';
 export * from './gcode/program';
 export * from './tools/types';
 export * from './post/types';

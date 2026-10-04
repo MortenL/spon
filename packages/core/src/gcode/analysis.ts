@@ -1,16 +1,19 @@
 import type { BBox } from '../geometry/bbox';
 import { vec3 } from '../geometry/vec3';
+import type { WcsAxes } from '../job/axes';
 import type { MachineProfile } from '../job/machine';
 import { arcBoundsInto, arcGeometry, type Plane } from './arcs';
 import { DiagnosticSink } from './diagnostics';
 import { rowStart } from './motion';
-import { rowKinematics } from './timing';
+import { rowKinematics, timingProfile } from './timing';
 import { type Diagnostic, LineFlag, type MotionTable, MoveKind, RowFlag } from './types';
 
 export interface AnalysisContext {
   profile: MachineProfile;
   /** Stock box in program coordinates, or null when the job has no stock. */
   stock: BBox | null;
+  /** The job's WCS axis switches (absent = none): the program is in machine axes, the table in Spon's, so timing swaps X and Y rates when swapXY. */
+  axes?: WcsAxes;
 }
 
 export interface ToolTime {
@@ -72,6 +75,7 @@ export function analyzeTable(table: MotionTable, lineFlags: Uint8Array, ctx: Ana
   const rowMin = [0, 0, 0];
   const rowMax = [0, 0, 0];
   const stock = ctx.stock;
+  const profile = timingProfile(ctx.profile, ctx.axes);
   const footMin = stock ? [stock.min.x, stock.min.y, -Infinity] : null;
   const footMax = stock ? [stock.max.x, stock.max.y, stock.max.z - EPS] : null;
   let total = 0;
@@ -82,7 +86,7 @@ export function analyzeTable(table: MotionTable, lineFlags: Uint8Array, ctx: Ana
 
   for (let i = 0; i < table.count; i++) {
     const kind = table.kind[i];
-    const k = rowKinematics(table, i, ctx.profile);
+    const k = rowKinematics(table, i, profile);
     total += k.duration;
     table.t[i] = total;
     const tool = table.tool[i];

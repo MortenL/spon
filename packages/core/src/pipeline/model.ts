@@ -71,5 +71,6 @@ export function programContext(job: Job, geometry: ModelGeometry | null): Progra
     profile: job.machine,
     stock: box && origin ? { min: v3sub(box.min, origin), max: v3sub(box.max, origin) } : null,
     jobWorkOffset: job.wcs.workOffset,
+    axes: job.wcs.axes,
   };
 }
