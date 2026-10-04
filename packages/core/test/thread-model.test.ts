@@ -35,6 +35,10 @@ describe('thread job model', () => {
   it('refuses invalid values', () => {
     const custom = { standard: 'custom', size: null, majorDiameter: 40, pitch: 4, angle: 60 };
     expect(() => update({ thread: { ...custom, standard: 'unc', size: '9/9-99' } })).toThrow('Unknown thread size 9/9-99');
+    expect(() => update({ thread: { standard: 'unc' } as never })).toThrow('thread.size is required for a table standard');
+    expect(() => update({ thread: { standard: 'iso-coarse', size: null } })).toThrow('thread.size is required for a table standard');
+    // a table row needs no dimensions: they come from the table
+    expect(update({ thread: { standard: 'iso-coarse', size: 'M10' } }).operations[0]).toMatchObject({ thread: { size: 'M10', majorDiameter: 10, pitch: 1.5, angle: 60 } });
     expect(() => update({ thread: { ...custom, standard: 'bogus' } })).toThrow();
     expect(() => update({ thread: { ...custom, pitch: 0 } })).toThrow();
     expect(() => update({ thread: { ...custom, angle: 180 } })).toThrow();

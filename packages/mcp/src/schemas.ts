@@ -96,7 +96,7 @@ export const operationPatchSchema = z.strictObject({
   kind: z.enum(['internal', 'external']),
   thread: z.strictObject({
     standard: z.enum(['iso-coarse', 'iso-fine', 'unc', 'unf', 'custom']), size: z.string().nullable(),
-    majorDiameter: z.number(), pitch: z.number(), angle: z.number(),
+    majorDiameter: z.number().optional(), pitch: z.number().optional(), angle: z.number().optional(),
   }),
   hand: z.enum(['right', 'left']),
   length: z.number(),

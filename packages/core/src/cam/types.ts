@@ -206,9 +206,11 @@ type FieldsOf<T> = T extends unknown ? Omit<T, 'id' | 'type'> : never;
 /** The type of field K over every operation type that has it (a union where the types differ). */
 type FieldValue<K extends PropertyKey> = FieldsOf<Operation> extends infer F ? (F extends unknown ? (K extends keyof F ? F[K] : never) : never) : never;
 type AllKeys = keyof (FieldsOf<ProfileOp> & FieldsOf<PocketOp> & FieldsOf<DrillOp> & FieldsOf<FaceOp> & FieldsOf<ChamferOp> & FieldsOf<SlotOp> & FieldsOf<EngraveOp> & FieldsOf<VCarveOp> & FieldsOf<VClearOp> & FieldsOf<VPlugOp> & FieldsOf<ThreadOp>);
+/** A thread in a patch: a table row needs only its standard and size (the dimensions are filled in from the table); a custom thread gives all three. */
+export interface ThreadPatch { standard: ThreadSpec['standard']; size: string | null; majorDiameter?: number; pitch?: number; angle?: number }
 /** Any operation field; object-valued fields are merged one level deep. */
 export type OperationPatch = {
-  [K in AllKeys]?: K extends 'heights' ? Partial<Heights> : K extends 'feeds' | 'entry' | 'leads' | 'tabs' | 'trochoidal' ? Partial<FieldValue<K>> : K extends 'inlay' ? FieldValue<K> | null : FieldValue<K>;
+  [K in AllKeys]?: K extends 'thread' ? ThreadPatch : K extends 'heights' ? Partial<Heights> : K extends 'feeds' | 'entry' | 'leads' | 'tabs' | 'trochoidal' ? Partial<FieldValue<K>> : K extends 'inlay' ? FieldValue<K> | null : FieldValue<K>;
 };
 
 // ── toolpaths ────────────────────────────────────────────────────────────

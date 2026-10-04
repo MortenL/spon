@@ -78,7 +78,7 @@ test('custom thread: 8 TPI reads out as a 3.175 mm pitch', async ({ page }) => {
   await page.getByTestId('thread-pitch').fill('8');
   await page.getByTestId('thread-pitch').press('Enter');
   await expect(page.getByTestId('thread-pitch')).toHaveValue('8.00');
-  await expect(page.getByTestId('thread-readouts')).toContainText('Thread depth 1.72 mm'); // 0.5413 � 3.175
+  await expect(page.getByTestId('thread-readouts')).toContainText('Thread depth 1.72 mm'); // 0.5413 × 3.175
   await page.getByTestId('thread-pitch-unit').getByText('mm').click();
   await expect(page.getByTestId('thread-pitch')).toHaveValue('3.175');
 });

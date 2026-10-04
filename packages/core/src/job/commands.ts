@@ -177,7 +177,7 @@ function checkThread(v: unknown): ThreadSpec {
   if (!THREAD_STANDARDS.includes(standard)) throw new CommandError(`thread.standard must be one of ${THREAD_STANDARDS.join(', ')}`);
   if (standard !== 'custom') {
     const row = typeof v.size === 'string' ? threadRow(standard, v.size) : null;
-    if (!row) throw new CommandError(`Unknown thread size ${String(v.size)}`);
+    if (!row) throw new CommandError(typeof v.size === 'string' ? `Unknown thread size ${v.size}` : 'thread.size is required for a table standard');
     return { standard, size: row.size, majorDiameter: row.majorDiameter, pitch: row.pitch, angle: row.angle };
   }
   if (v.size !== null) throw new CommandError('A custom thread has no size');

@@ -19,6 +19,9 @@ const importShape = {
   units: lengthUnitSchema.optional().describe("LinuxCNC tool tables (.tbl) only: the machine's units"),
 };
 
+/** Rounded for the text listing (the structured data keeps the raw values). */
+const round = (x: number, decimals: number) => Number(x.toFixed(decimals));
+
 export function registerLibraryTools(server: McpServer, ctx: ToolContext): void {
   server.registerTool('list_tools', {
     title: 'List tools',
@@ -47,7 +50,7 @@ export function registerLibraryTools(server: McpServer, ctx: ToolContext): void 
     inputSchema: threadsShape,
   }, guarded('list_threads', async (a: Args<typeof threadsShape>) => {
     const threads = listThreads(a.standard);
-    return ok(threads.map((t) => `${t.standard} ${t.size}: ⌀${t.majorDiameter} mm, pitch ${t.pitch} mm, ${t.angle}°`).join('\n'), { threads });
+    return ok(threads.map((t) => `${t.standard} ${t.size}: ⌀${round(t.majorDiameter, 3)} mm, pitch ${round(t.pitch, 4)} mm, ${t.angle}°`).join('\n'), { threads });
   }));
 
   server.registerTool('add_library_tool', {

@@ -71,6 +71,34 @@ describe('Spon tool library files', () => {
   });
 });
 
+describe('thread mills in a Spon tool library', () => {
+  const mills = starterLibrary().filter((t) => t.type === 'threadmill');
+  it('has the two starter thread mills', () => {
+    expect(mills.map((t) => t.id).sort()).toEqual(['starter-thread-m8', 'starter-thread-sp6']);
+  });
+  it('round-trips through export and import with their thread data and tooth angle', () => {
+    const back = importToolLibrary(exportToolLibrary(mills));
+    expect(back).toEqual(mills);
+    for (const t of back) {
+      expect(t.thread).toBeDefined();
+      expect(t.tipAngleDeg).toBe(60);
+    }
+    expect(back.find((t) => t.id === 'starter-thread-m8')!.thread).toEqual({ neckDiameter: 4.8, neckLength: 15, pitch: 1.25, teeth: 8 });
+  });
+  it('survives a library file parse', () => {
+    const bytes = new TextEncoder().encode(exportToolLibrary(mills));
+    expect(parseToolLibraryFile(bytes, 'lib.json').tools).toEqual(mills);
+  });
+  it('refuses a thread mill without its thread data and thread data on other tools', () => {
+    const [sp6] = mills;
+    const bare: Tool = { ...sp6 };
+    delete bare.thread;
+    expect(validateTool(bare)).toBe(false);
+    const flat: Tool = { ...starterLibrary().find((t) => t.type === 'flat')!, thread: sp6.thread };
+    expect(validateTool(flat)).toBe(false);
+  });
+});
+
 describe('Fusion 360 import', () => {
   it('maps tools, converts inches, keeps presets and skips unsupported types', () => {
     const r = importFusionLibrary(strToU8(JSON.stringify(fusion)), 'lib.json');

@@ -14,6 +14,11 @@ describe('thread tools', () => {
     expect(unc.every((r) => r.standard === 'unc')).toBe(true);
     expect(all.some((r) => r.standard === 'iso-coarse' && r.size === 'M8')).toBe(true);
     expect(text(await call('list_threads', { standard: 'iso-coarse' }))).toContain('M8');
+    // the text rounds, the structured rows keep the raw values (25.4 / 13)
+    const half = await call('list_threads', { standard: 'unc' });
+    expect(text(half)).toContain('pitch 1.9538 mm');
+    expect(text(half)).not.toMatch(/\d\.\d{5,}/);
+    expect((data(half).threads as { pitch: number }[]).some((r) => String(r.pitch).length > 8)).toBe(true);
   });
 
   it('threads the hole internally, then the boss externally', async () => {
@@ -64,5 +69,18 @@ describe('thread tools', () => {
     expect(data(hole).operation).toMatchObject({ length: 10 });
     const given = await call('add_operation', { type: 'thread', tool: 'starter-thread-sp6', geometry: ['B1'], params: { kind: 'external', length: 5 } });
     expect(data(given).operation).toMatchObject({ length: 5 });
+  });
+
+  it('takes a table thread by standard and size alone', async () => {
+    const { call } = await connect({}, ['thread-plate.stl']);
+    await call('new_job');
+    await call('import_model', { path: 'thread-plate.stl', units: 'mm' });
+    await call('describe_geometry');
+    const added = await call('add_operation', { type: 'thread', tool: 'starter-thread-sp6', geometry: ['H1'], params: { thread: { standard: 'iso-coarse', size: 'M8' } } });
+    expect(added.isError).toBeFalsy();
+    expect(data(added).operation).toMatchObject({ thread: { size: 'M8', majorDiameter: 8, pitch: 1.25, angle: 60 } });
+    const custom = await call('add_operation', { type: 'thread', tool: 'starter-thread-sp6', geometry: ['H1'], params: { thread: { standard: 'custom', size: null } } });
+    expect(custom.isError).toBe(true);
+    expect(text(custom)).toContain('thread.majorDiameter must be greater than 0');
   });
 });
