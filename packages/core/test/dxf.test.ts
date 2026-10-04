@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { type ArcSegment, type LineSegment, segmentEnd, segmentStart, tessellatePath, type Vec2 } from '../src/geometry/path2d';
 import { countEntityTypes, DxfParseError, parseDxf } from '../src/import/dxf/dxf';
 import { arc, circle, dxfText, type Entity, hatch, insert, line, lwpolyline, polyline, text } from './fixtures/dxfBuilder';
+import { expectWithin } from './fixtures/perf';
 
 const near = (a: Vec2, b: Vec2, eps = 1e-9) => Math.abs(a.x - b.x) <= eps && Math.abs(a.y - b.y) <= eps;
 const layer = (result: ReturnType<typeof parseDxf>, name: string) => {
@@ -110,7 +111,7 @@ describe('parseDxf: blocks', () => {
       .toThrow(DxfParseError);
     expect(() => parseDxf(dxfText({ blocks: [one], entities: [insert('A', 'ONE', 0, 0, { rows: 3000, cols: 3000 })] })))
       .toThrow('DXF expands to more than 2000000 segments (possibly malformed block references)');
-    expect(Date.now() - started).toBeLessThan(2000);
+    expectWithin(Date.now() - started, 2000);
   });
 
   it('rejects nested INSERT fan-out ("billion laughs") that expands past the segment budget', () => {

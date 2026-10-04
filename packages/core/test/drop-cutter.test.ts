@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { camContext, dropCutter, meshIndex, meshIndexFromTriangles, profileHeight, type ToolShape, toolShape } from '../src';
 import { plateSetup, tool6 } from './fixtures/camSetup';
+import { expectWithin } from './fixtures/perf';
 
 const flat = toolShape({ ...tool6, diameter: 6 }); // R 3, rc 0
 const ball = toolShape({ ...tool6, type: 'ball', cornerRadius: 3 }); // R 3, rc 3
@@ -298,6 +299,6 @@ describe('dropCutter speed', () => {
     run(flat); // warm up
     const ms = run(flat);
     console.log(`drop-cutter speed: flat R3 ${ms.toFixed(0)} ms per 100k calls, ball R3 ${run(ball).toFixed(0)} ms, 90deg cone R6 ${run(cone).toFixed(0)} ms`);
-    expect(ms).toBeLessThan(1000);
+    expectWithin(ms, 1000);
   });
 });

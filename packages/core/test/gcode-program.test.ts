@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { allDiagnostics, motionTableTransferables, parsedProgramTransferables, parseProgram } from '../src/gcode/program';
 import { vec3 } from '../src/geometry/vec3';
 import { machinePreset } from '../src/job/machine';
+import { expectWithin } from './fixtures/perf';
 
 const ctx = { profile: machinePreset('Hobby GRBL router'), stock: { min: vec3(0, 0, -6), max: vec3(30, 20, 0) }, jobWorkOffset: 'G54' as const };
 const fixture = readFileSync(new URL('./fixtures/drill-arc.nc', import.meta.url));
@@ -41,6 +42,6 @@ describe('parseProgram', () => {
     const ms = performance.now() - started;
     expect(p.table.count).toBe(2_000_002);
     // spec target ≈ 3 s; 5 s leaves headroom for slower machines while still catching per-line allocations
-    expect(ms).toBeLessThan(5000);
+    expectWithin(ms, 5000);
   }, 60_000);
 });

@@ -36,6 +36,8 @@ Inlays (milestone 4.4c): `packages/core/test/inlay-fit.test.ts` (3 mm clearing) 
 
 Thread milling (milestone 4.5): `thread-plate.stl` (a 60×40×10 plate with a Ø20 boss topping at Z 18 and a Ø6.8 through hole, built by `make-fixtures.mjs`) is used by `packages/web/e2e/thread.spec.ts` (internal M8, external M20, custom TPI); the core thread tests are `thread-table`, `thread-tools`, `thread-model`, `thread-geometry` and `thread-toolpath` in `packages/core/test/`.
 
+Timing budgets: core tests never assert wall-clock budgets in the parallel `unit` project (30 s test timeout). Hard budgets go through `expectWithin(ms, budget)` from `packages/core/test/fixtures/perf.ts`, which asserts only in the serial `perf` vitest project (`SPON_PERF=1`, `fileParallelism: false`); add new files with budgets to `perfFiles` in `packages/core/vitest.config.ts`. `pnpm test` runs both projects.
+
 Before claiming a change works: run the focused tests for the files you touched, then `pnpm typecheck && pnpm test` once. UI changes also need `pnpm build`, and user flows need `pnpm e2e`.
 
 ## Rules that are easy to break

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { flattenPath, nearestS, type Path2D, pathFromPoints, pathLength, pointAt, segmentEnd, segmentStart, type Vec2 } from '../src';
 import { type OpenOffset, offsetOpenPath } from '../src/geometry/offset/openOffset';
+import { expectWithin } from './fixtures/perf';
 
 const L: Path2D = pathFromPoints([{ x: 0, y: 0 }, { x: 50, y: 0 }, { x: 50, y: 30 }], false);
 const tol = 0.01;
@@ -196,7 +197,7 @@ describe('offsetOpenPath', () => {
     const sine = P(pts);
     const t0 = performance.now();
     const r = offsetOpenPath(sine, 'left', 1, tol)!;
-    expect(performance.now() - t0).toBeLessThan(1000);
+    expectWithin(performance.now() - t0, 1000);
     expect(r.rounded).toBe(false);
     expect(r.paths).toHaveLength(1);
   });
@@ -223,7 +224,7 @@ describe('offsetOpenPath', () => {
     const line = P(pts);
     const t0 = performance.now();
     const r = offsetOpenPath(line, 'left', 0.5, tol);
-    expect(performance.now() - t0).toBeLessThan(1000);
+    expectWithin(performance.now() - t0, 1000);
     expect(r).not.toBeNull();
   });
 });

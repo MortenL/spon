@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { layoutText, pathArea, loadBundledFont, newTextItem, parseFontFile, type LoadedFont, type TextItem, type TextLayout } from '../src';
 import { testFontBytes } from './fixtures/testFont';
+import { expectWithin } from './fixtures/perf';
 
 const font = parseFontFile(testFontBytes(), 'TestSans.otf');
 // The test font has no kerning table (opentype.js cannot write one), so wrap it with a kerning pair A-V of -100 units.
@@ -184,15 +185,15 @@ describe('text layout', () => {
     const it0 = item({ text, size: 12, font: { kind: 'bundled', id: 'sansBold' } });
     let t = performance.now();
     layoutText(it0, bold, 0.002);
-    expect(performance.now() - t).toBeLessThan(300);
+    expectWithin(performance.now() - t, 300);
     t = performance.now();
     layoutText(it0, bold, 0.002);
-    expect(performance.now() - t).toBeLessThan(5);
+    expectWithin(performance.now() - t, 5);
     const line = item({ text: 'Spon CAM: text in Spon, 40 characters!!', font: { kind: 'bundled', id: 'sans' } });
     const sans = await loadBundledFont('sans');
     t = performance.now();
     layoutText(line, sans, 0.002);
-    expect(performance.now() - t).toBeLessThan(50);
+    expectWithin(performance.now() - t, 50);
   });
 });
 
