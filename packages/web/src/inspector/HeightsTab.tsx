@@ -37,6 +37,7 @@ export function HeightsTab({ op }: { op: Operation }) {
 
         if (name === 'bottom' && (op.type === 'engrave' || op.type === 'vcarve' || op.type === 'vclear' || op.type === 'vplug')) return null;
         if (name === 'top' && op.type === 'vclear') return null;
+        if ((name === 'top' || name === 'bottom') && op.type === 'thread') return null;
 
         if (op.type === 'chamfer' && name === 'bottom') {
           return (

@@ -10,6 +10,7 @@ import {
   deleteLibraryTool, exportLibraryFile, importLibraryFile, resetStarterLibrary, saveLibraryTool, ToolNumberTakenError, useToolLibrary,
 } from '@/state/toolLibrary';
 import { useApp } from '@/state/store';
+import { parseToothAngle } from '@/inspector/threadInfo';
 import { ToolSketch } from './ToolSketch';
 import { importSummary } from './toolTableImport';
 
@@ -305,9 +306,32 @@ export function ToolLibraryDialog() {
                     onCommit={(v) => setDraft({ ...draft, cornerRadius: v })}
                   />
                   <NumericField
-                    label="Tip angle" value={draft.tipAngleDeg} suffix="°" testId="tool-field-tipAngleDeg" {...decField(0, 1)}
+                    label={draft.type === 'threadmill' ? 'Tooth angle' : 'Tip angle'} value={draft.tipAngleDeg} suffix="°" testId="tool-field-tipAngleDeg"
+                    {...(draft.type === 'threadmill' ? { format: (v: number) => v.toFixed(1), parse: parseToothAngle } : decField(0, 1))}
                     onCommit={(v) => setDraft({ ...draft, tipAngleDeg: v })}
                   />
+                  {draft.thread && draft.type === 'threadmill' && (
+                    <>
+                      <LengthField
+                        label="Neck diameter" valueMm={draft.thread.neckDiameter} testId="tool-thread-neck-d" min={0.01}
+                        onCommit={(v) => setDraft({ ...draft, thread: { ...draft.thread!, neckDiameter: v } })}
+                      />
+                      <LengthField
+                        label="Neck length" valueMm={draft.thread.neckLength} testId="tool-thread-neck-l" min={0.01}
+                        onCommit={(v) => setDraft({ ...draft, thread: { ...draft.thread!, neckLength: v } })}
+                      />
+                      <NumericField
+                        label="Pitch (blank = single-point)" value={draft.thread.pitch ?? 0} suffix="mm" testId="tool-thread-pitch"
+                        format={(v) => (v > 0 ? String(v) : '')}
+                        parse={(t) => { const s = t.trim(); if (s === '') return 0; const n = Number(s.replace(',', '.')); return Number.isFinite(n) && n > 0 ? n : null; }}
+                        onCommit={(v) => setDraft({ ...draft, thread: { ...draft.thread!, pitch: v > 0 ? v : null } })}
+                      />
+                      <NumericField
+                        label="Teeth" value={draft.thread.teeth} testId="tool-thread-teeth" {...intField(1)}
+                        onCommit={(v) => setDraft({ ...draft, thread: { ...draft.thread!, teeth: v } })}
+                      />
+                    </>
+                  )}
                   <LengthField
                     label="Flute length" valueMm={draft.fluteLength} testId="tool-field-fluteLength" min={0.01}
                     onCommit={(v) => setDraft({ ...draft, fluteLength: v })}

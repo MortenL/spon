@@ -89,3 +89,36 @@ describe('slot picking', () => {
     expect(pickMesh(slotOp, ctx, top.seed, far, false)).toEqual({ error: 'Click a slot, or pick drawn centrelines' });
   });
 });
+
+describe('thread picking', () => {
+  const r = importFile('thread-plate.stl', readFileSync(new URL('../../../core/test/fixtures/thread-plate.stl', import.meta.url)));
+  if (!r.ok || r.kind !== 'mesh') throw new Error('fixture did not import');
+  const geometry: CamGeometry = { kind: 'mesh', mesh: r.mesh, adjacency: r.adjacency, rawPoints: r.mesh.positions };
+  let job = setModel(createJob(), { sourceName: 'thread-plate.stl', blobId: 'm1', kind: 'mesh', importUnits: 'mm' });
+  job = setStock(job, { mode: 'auto', margin: { xy: 5, zTop: 0, zBottom: 0 } });
+  const ctx = camContext(job, geometry);
+  const cat = describeGeometry(job, geometry);
+  const threadOp = (kind: 'internal' | 'external') =>
+    ({ ...op(job, 'thread'), kind }) as Operation;
+
+  it('picks a round boss for an external thread', () => {
+    const boss = cat.bosses[0].ref;
+    if (boss.kind !== 'meshBoss') throw new Error('expected a mesh boss');
+    const res = pickMesh(threadOp('external'), ctx, boss.face.seed, { x: 45, y: 35 }, false);
+    expect(res).toEqual({ refs: [{ kind: 'meshBoss', face: boss.face }] });
+  });
+
+  it('refuses a face without a round outline for an external thread', () => {
+    const plateTop = cat.holes[0].ref;
+    if (plateTop.kind !== 'meshHole') throw new Error('expected a mesh hole');
+    expect(pickMesh(threadOp('external'), ctx, plateTop.face.seed, { x: 10, y: 10 }, false)).toMatchObject({ error: expect.any(String) });
+  });
+
+  it('picks a round hole for an internal thread without Alt', () => {
+    const hole = cat.holes[0].ref;
+    if (hole.kind !== 'meshHole') throw new Error('expected a mesh hole');
+    const c = cat.holes[0].center;
+    const res = pickMesh(threadOp('internal'), ctx, hole.face.seed, { x: c.x + 3.4, y: c.y }, false);
+    expect('refs' in res && res.refs[0]).toMatchObject({ kind: 'meshHole' });
+  });
+});

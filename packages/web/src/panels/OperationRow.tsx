@@ -16,7 +16,7 @@ import { formatDuration } from './format';
 import { duplicateShortcutLabel, firstProblem } from './listShortcuts';
 
 export const TYPE_ICON: Record<OperationType, typeof Scissors> = { profile: Scissors, pocket: SquareDashed, drill: Circle, face: Layers, chamfer: Triangle, slot: RectangleHorizontal, engrave: PenLine, vcarve: ChevronsDown, vclear: Eraser, vplug: Layers, thread: Cog };
-export const OP_TYPES: readonly OperationType[] = ['profile', 'pocket', 'drill', 'face', 'chamfer', 'slot', 'engrave', 'vcarve'];
+export const OP_TYPES: readonly OperationType[] = ['profile', 'pocket', 'drill', 'face', 'chamfer', 'slot', 'engrave', 'vcarve', 'thread'];
 
 /** The list actions, shared by the ⋯ menu and the keyboard shortcuts. */
 export function duplicateOperation(id: string): void {

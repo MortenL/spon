@@ -99,6 +99,7 @@ export function exportLibraryFile(): void {
 
 /** Profile and pocket default to the 6 mm starter flat (or the first flat/bull/ball tool); drill defaults to the 6 mm starter drill. */
 export function defaultToolFor(type: OperationType, tools: readonly Tool[]): Tool | null {
+  if (type === 'thread') return tools.find((t) => t.id === 'starter-thread-sp6') ?? tools.find((t) => t.type === 'threadmill') ?? null;
   if (type === 'drill') return tools.find((t) => t.id === 'starter-drill-6') ?? tools.find((t) => t.type === 'drill') ?? null;
   return tools.find((t) => t.id === 'starter-flat-6') ?? tools.find((t) => t.type === 'flat' || t.type === 'bull' || t.type === 'ball') ?? null;
 }

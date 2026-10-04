@@ -41,7 +41,7 @@ export function pickDxf(op: Operation, ctx: CamContext, q: Vec2, hidden: Readonl
   if (op.type === 'face' && op.area === 'stock') return { error: STOCK_FACING };
   const g = ctx.geometry;
   if (!g || g.kind !== 'drawing') return { error: 'Nothing to pick here' };
-  if (op.type === 'drill') {
+  if (op.type === 'drill' || op.type === 'thread') {
     let best = null as DxfPathRef | null;
     let bestD = PICK_DISTANCE;
     g.drawing.layers.forEach((l, layer) => {
@@ -54,7 +54,7 @@ export function pickDxf(op: Operation, ctx: CamContext, q: Vec2, hidden: Readonl
       });
     });
     if (best) return { refs: [best] };
-    return nearestDxfPath(ctx, q, PICK_DISTANCE, hidden) ? { error: 'Only circles can be drilled' } : { error: 'Nothing to pick here' };
+    return nearestDxfPath(ctx, q, PICK_DISTANCE, hidden) ? { error: op.type === 'thread' ? 'Only circles can be threaded' : 'Only circles can be drilled' } : { error: 'Nothing to pick here' };
   }
   const ref = nearestDxfPath(ctx, q, PICK_DISTANCE, hidden);
   if (!ref) return { error: 'Nothing to pick here' };
@@ -79,17 +79,22 @@ export function pickMesh(op: Operation, ctx: CamContext, tri: number, q: Vec2, a
   const face = faceRefFromTriangle(g.mesh, ctx.job.model.blobId, tri);
   const res = resolveFaceRef(ctx, face);
   if (!res.ok) return { error: res.message };
-  if (!alt || op.type === 'pocket' || op.type === 'face') return { refs: [face] };
+  if (op.type === 'thread' && op.kind === 'external') {
+    // a round boss: clicking its top face (or its edge) picks the boss
+    return res.face.circles[0] ? { refs: [{ kind: 'meshBoss', face }] } : { error: 'Click the top of a round boss' };
+  }
+  const isHoleOp = op.type === 'drill' || op.type === 'thread'; // an internal thread picks one round hole, with or without Alt
+  if ((!alt && !isHoleOp) || op.type === 'pocket' || op.type === 'face') return { refs: [face] };
   let best = -1;
   let bestD = Infinity;
   res.face.loops.forEach((loop, i) => {
-    if (op.type === 'drill' && (i === 0 || !res.face.circles[i])) return;
+    if (isHoleOp && (i === 0 || !res.face.circles[i])) return;
     const d = nearestS(loop, q).distance;
     if (d < bestD) { bestD = d; best = i; }
   });
   if (best < 0) return { error: 'This face has no round holes' };
   // a chamfer treats a round inner loop as a hole (a countersink) and any other loop as an edge
-  const asHole = op.type === 'drill' || (op.type === 'chamfer' && best > 0 && res.face.circles[best] !== null);
+  const asHole = isHoleOp || (op.type === 'chamfer' && best > 0 && res.face.circles[best] !== null);
   return { refs: [asHole ? { kind: 'meshHole', face, loop: best } : { kind: 'meshLoop', face, loop: best }] };
 }
 
