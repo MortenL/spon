@@ -2,7 +2,7 @@ import { type AutoStock, bboxSize, DEFAULT_AUTO_STOCK, fixedStockFromBox, setSto
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { usePlacement, useStockBox } from '@/state/selectors';
 import { appStore, useApp } from '@/state/store';
-import { formatSize } from './format';
+import { formatPoint, formatSize } from './format';
 import { LengthField } from './NumericField';
 import { PanelBody } from './PanelBody';
 import { fixedStockPatch } from './stockNoModel';
@@ -85,6 +85,8 @@ export function StockPanel() {
 
       <p className="mt-3 text-xs text-muted-foreground">
         Stock: <span className="font-mono" data-testid="stock-size">{formatSize(bboxSize(box), job.displayUnits)}</span>
+        <br />
+        Min / max: <span className="font-mono" data-testid="stock-bounds">{formatPoint(box.min, job.displayUnits)} / {formatPoint(box.max, job.displayUnits)}</span>
       </p>
     </PanelBody>
   );

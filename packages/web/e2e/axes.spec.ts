@@ -63,7 +63,21 @@ test('Reverse Y flips the posted Y and leaves the preview on the part', async ({
   expect(after.y).toBeCloseTo(-before.y, 3);
   expect(after.x).toBeCloseTo(before.x, 3);
 
-  // the preview is in Spon's frame: the toolpath extents (and so their place in the stock) do not move
+  // The preview is drawn in Spon's frame, so it must not move. The extents are tool-centre positions: the profile runs outside
+  // the outline, so X and Y may reach one tool radius (3 mm) past the stock; the top is the safe height and the bottom a small overcut, so Z is not compared.
+  const radius = 3;
+  await openPanel(page, 'stock');
+  const stock = numbers(await page.getByTestId('stock-bounds').textContent());
   await page.getByTestId('dock-tab-analysis').click();
-  await expect(page.getByTestId('analysis-extents-job')).toHaveText(extentsBefore!);
+  // the re-analysis follows the flip asynchronously: poll until the extents lie on the stock
+  await expect.poll(async () => {
+    const [x0, y0, , x1, y1] = numbers(await page.getByTestId('analysis-extents-job').textContent());
+    return x0 >= stock[0] - radius && y0 >= stock[1] - radius && x1 <= stock[3] + radius && y1 <= stock[4] + radius;
+  }).toBe(true);
+  await expect(page.getByTestId('analysis-extents-job')).toHaveText(extentsBefore!); // and they are where they were before the flip
 });
+
+/** The numbers of a "X 1.00, Y 2.00, Z 3.00 mm" text, in order; a min and a max point give six. */
+function numbers(text: string | null): number[] {
+  return [...(text ?? '').matchAll(/[XYZ] (-?\d+(?:\.\d+)?)/g)].map((m) => Number(m[1]));
+}

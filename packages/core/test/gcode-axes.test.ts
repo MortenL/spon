@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  arcGeometry, arcPointInto, axisMap, interpretProgram, mapTableToSpon, type MotionTable, type Plane,
-  applyCommand, type Job, type JobCommand, MoveKind, parseProgram, programContext, runPipeline, type WcsAxes, vec3, machinePreset,
+  applyCommand, arcGeometry, arcPointInto, axisMap, interpretProgram, type Job, type JobCommand, machinePreset, mapTableToSpon, MoveKind,
+  type MotionTable, parseProgram, type Plane, programContext, runPipeline, vec3, type WcsAxes,
 } from '../src';
 import { camPartSetup, tool6 } from './fixtures/camSetup';
 
@@ -129,12 +129,13 @@ describe('mapTableToSpon tessellation', () => {
     return out;
   }
 
-  it.each(layouts.flatMap((axes) => programs.map((text) => [axes, text.slice(0, 3), text] as const)))(
-    'tessellates like the unmapped table sent through toSpon (%j, %s)',
-    (axes, _plane, text) => {
+  it.each(layouts.flatMap((axes) => programs.map((text) => ({ axes, plane: text.slice(0, 3), text }))))(
+    'tessellates like the unmapped table sent through toSpon ($plane, $axes)',
+    ({ axes, text }) => {
       const map = axisMap(axes);
-      const unmapped = interpretProgram(text, { jobWorkOffset: 'G54' } as never).table;
-      const mapped = interpretProgram(text, { jobWorkOffset: 'G54' } as never).table;
+      // interpreted twice: mapTableToSpon mutates its table, and the reference must stay in the program's own frame
+      const unmapped = interpretProgram(text, ctx()).table;
+      const mapped = interpretProgram(text, ctx()).table;
       const expected = points(unmapped).map(([x, y, z]) => {
         const s = map.toSpon({ x, y });
         return [s.x, s.y, z];
