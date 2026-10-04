@@ -7,6 +7,7 @@ import { tool6 } from './fixtures/camSetup';
 import { terracedSetup, uncovered } from './fixtures/slotSetup';
 import { rectPts } from './fixtures/terraced.mjs';
 import { drawingJob, polysOf, vSwept } from './fixtures/vcarveSetup';
+import { expectWithin } from './fixtures/perf';
 
 const vbit90: Tool = { ...tool6, id: 'v90', number: 8, type: 'vbit', tipAngleDeg: 90, cornerRadius: 0, fluteLength: 6 };
 const tanHalf = 1; // 90 degrees
@@ -145,7 +146,7 @@ describe('V-carve toolpaths', () => {
     const ms = performance.now() - t0;
     console.log(`300 mm word: ${ms.toFixed(0)} ms`);
     expect(r.tp).toBeTruthy();
-    expect(ms).toBeLessThan(5000);
+    expectWithin(ms, 5000);
   });
 
   it('text recessed in a model top face, with an island', () => {

@@ -38,6 +38,7 @@ An MCP server lets Claude (or any MCP client) drive the same jobs: on `.spon` fi
   - Engrave lines and outlines by depth, or by V-bit line width.
   - V-carve closed outlines with the depth following the width and sharp corners.
   - A max depth with a linked clearing operation for wide letters.
+- **Thread milling:** internal and external straight threads (ISO metric, UNC/UNF or custom), single-point and multi-tooth thread mills, all hand/climb combinations, with cutter and hole checks.
 - **Text:** typed text in bundled or uploaded fonts (outline and single-line), on the stock or a model face, with multi-line, spacing, fit, arc, rotation and mirror; V-carve, engrave, pocket or profile it.
 - **Inlays:** Make inlay… turns a V-carve into an inlay pocket and writes a matching plug job (mirrored, V-carve plug + clearing) with inlay depth, start depth and glue gap; the toolpaths are computed so the plug fits the pocket, and the V-bit also cleans the floor corners and narrow gaps the clearing tool can't reach.
 - **Gouge check.** Toolpaths are checked against the model (chamfer depth and the facets of round walls are allowed for). A cut into it is an error that keeps the toolpath, shows red markers in the viewport and blocks export.
@@ -53,7 +54,7 @@ An MCP server lets Claude (or any MCP client) drive the same jobs: on `.spon` fi
 - Export refuses on errors. Warnings ask for confirmation.
 
 **Claude integration (MCP)**
-- `packages/mcp` is a local stdio MCP server with tools for jobs, import, setup, geometry, operations (profile, pocket, drill, face and chamfer), generation, a PNG preview, export and the tool library.
+- `packages/mcp` is a local stdio MCP server with tools for jobs, import, setup, geometry, operations (profile, pocket, drill, face, chamfer and thread), round holes and bosses with handles, a `list_threads` table, generation, a PNG preview, export and the tool library.
 - **Live mode.** Click **Claude** in the app's status bar, and Claude drives the job open in that tab. Each change is one undo step.
 - See [`packages/mcp/README.md`](packages/mcp/README.md).
 
@@ -116,7 +117,8 @@ More detail is in [`.claude/skills/spon-dev/SKILL.md`](.claude/skills/spon-dev/S
 | 4.4 | Engraving and V-carve | Done |
 | 4.4b | Text in Spon | Done |
 | 4.4c | V-carve inlays | Done |
-| 4.5 | Thread milling | Next |
+| 4.5 | Thread milling | Done |
+| 4.5b | Tapered pipe threads | Next |
 | 4.6 | Automatic operation suggestions | Planned |
 
 Later: adaptive clearing, rest machining, cutter-compensation output, material-removal simulation, Heidenhain and Siemens dialects, and 3D operations.

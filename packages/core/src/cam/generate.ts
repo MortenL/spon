@@ -11,6 +11,7 @@ import { emptyOverlays, type OpOutput } from './ops/output';
 import { pocketToolpath } from './ops/pocket';
 import { profileToolpath } from './ops/profile';
 import { slotToolpath } from './ops/slot';
+import { threadToolpath } from './ops/thread';
 import { vcarveToolpath } from './ops/vcarve';
 import { vplugToolpath } from './ops/vplug';
 import { vclearToolpath } from './ops/vclear';
@@ -65,7 +66,7 @@ export function operationKey(op: Operation, job: Job, fonts: FontSet = EMPTY_FON
   return JSON.stringify([op, job.tools.find((t) => t.id === op.toolId) ?? null, job.tolerance, job.model, job.stock, job.wcs, job.machine.maxFeed, extra, texts]);
 }
 
-const emptyGeometry = (): ResolvedGeometry => ({ contours: [], shapes: [], holes: [], slots: [], diagnostics: [], sagitta: 0, faceZ: () => null });
+const emptyGeometry = (): ResolvedGeometry => ({ contours: [], shapes: [], holes: [], bosses: [], slots: [], diagnostics: [], sagitta: 0, faceZ: () => null });
 
 export function generateOperation(op: Operation, ctx: CamContext): OperationResult {
   const base: OperationResult = { operationId: op.id, key: '', toolpath: null, diagnostics: [], heights: null, overlays: emptyOverlays() };
@@ -91,17 +92,24 @@ export function generateOperation(op: Operation, ctx: CamContext): OperationResu
       : op.type === 'slot' ? slotToolpath(op, tool, ctx, geo)
       : op.type === 'engrave' ? engraveToolpath(op, tool, ctx, geo)
       : op.type === 'vcarve' ? vcarveToolpath(op, tool, ctx, geo)
+      : op.type === 'thread' ? threadToolpath(op, tool, ctx, geo)
       : chamferToolpath(op, tool, ctx, geo);
+    const gougePath = res.gougePath;
+    delete res.gougePath;
     const diagnostics: CamDiagnostic[] = [...geo.diagnostics, ...res.diagnostics];
     const warn = (code: CamDiagnostic['code'], message: string) => diagnostics.push({ operationId: op.id, severity: 'warning', code, message });
-    if (op.type !== 'drill' && op.type !== 'engrave' && (op.type as string) !== 'vcarve' && (op.type as string) !== 'vclear' && op.type !== 'vplug' && typeof op.stepdown === 'number' && !(op.type === 'slot' && op.strategy === 'trochoidal') && op.stepdown > tool.fluteLength) warn('stepdown-exceeds-flute', `Stepdown ${op.stepdown} mm is deeper than the ${tool.fluteLength} mm flutes`);
-    const maxFeed = op.type === 'drill' ? op.feeds.plungeFeed : op.feeds.feed;
+    if (op.type !== 'drill' && op.type !== 'thread' && op.type !== 'engrave' && (op.type as string) !== 'vcarve' && (op.type as string) !== 'vclear' && op.type !== 'vplug' && typeof op.stepdown === 'number' && !(op.type === 'slot' && op.strategy === 'trochoidal') && op.stepdown > tool.fluteLength) warn('stepdown-exceeds-flute', `Stepdown ${op.stepdown} mm is deeper than the ${tool.fluteLength} mm flutes`);
+    // a thread's feed compensation can raise the programmed feed above the set one
+    const cut = op.type === 'thread' ? (res.toolpath?.moves ?? []).flatMap((m) => (m.kind === 'arc' || m.kind === 'line' ? [m.feed] : [])) : [];
+    const maxFeed = op.type === 'drill' ? op.feeds.plungeFeed : Math.max(op.feeds.feed, ...cut);
     if (maxFeed > ctx.job.machine.maxFeed) warn('feed-exceeds-machine', `Feed ${maxFeed} mm/min is above the machine maximum of ${ctx.job.machine.maxFeed}`);
     // a gouge keeps its toolpath, so the user can see where it cuts into the model
-    const failed = diagnostics.some((d) => d.severity === 'error' && d.code !== 'gouge');
+    // a thread keeps the holes or bosses that are fine when another one has an error: its toolpath is null when none can be cut
+    const failed = op.type !== 'thread' && diagnostics.some((d) => d.severity === 'error' && d.code !== 'gouge');
     const toolpath = failed ? null : res.toolpath;
     const overlays = res.overlays;
-    if (toolpath) {
+    // an internal thread cuts the hole wall on purpose; an external one is checked along the boss surface (gougePath)
+    if (toolpath && !(op.type === 'thread' && op.kind === 'internal')) {
       // a chamfer cone sits width / tan(half-angle) below the edge by design, and a faceted wall sitting `sagitta`
       // inside its fitted circle lets the cone ride sagitta / tan(half-angle) deeper
       const tanHalf = op.type === 'chamfer' ? Math.tan(chamferGeometry(tool, op.width, op.tipOffset).halfAngle) : 0;
@@ -109,7 +117,7 @@ export function generateOperation(op: Operation, ctx: CamContext): OperationResu
       const engraved = op.type === 'engrave' ? engraveDepth(op, tool) : null;
       const allowance = op.type === 'chamfer' ? (op.width + geo.sagitta) / tanHalf : engraved && 'depth' in engraved ? Math.max(0, engraved.depth) : 0;
       // slots: straight walls fit no arcs, but a tool exactly as wide as the slot sits tangent to both walls, so allow the tolerance
-      const g = gougeCheck(toolpath, tool, ctx, { allowance, sagitta: op.type === 'slot' ? Math.max(geo.sagitta, ctx.tolerance) : geo.sagitta, intended: res.intended });
+      const g = gougeCheck(gougePath ?? toolpath, tool, ctx, { allowance, sagitta: op.type === 'slot' ? Math.max(geo.sagitta, ctx.tolerance) : geo.sagitta, intended: res.intended });
       diagnostics.push(...g.diagnostics);
       return { ...base, ...res, diagnostics, toolpath, overlays: { ...overlays, gouges: g.gouges } };
     }

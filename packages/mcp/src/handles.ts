@@ -1,14 +1,15 @@
-import type { CatalogContour, CatalogFace, CatalogHole, CatalogSlot, GeometryCatalog, GeometryRef } from '@sponcam/core';
+import type { CatalogBoss, CatalogContour, CatalogFace, CatalogHole, CatalogSlot, GeometryCatalog, GeometryRef } from '@sponcam/core';
 import { SessionError } from './session';
 
 export type HandledLoop = CatalogFace['loops'][number] & { handle: string };
 export type HandledFace = Omit<CatalogFace, 'loops'> & { handle: string; loops: HandledLoop[] };
 export type HandledHole = CatalogHole & { handle: string };
+export type HandledBoss = CatalogBoss & { handle: string };
 export type HandledContour = CatalogContour & { handle: string };
 export type HandledSlot = CatalogSlot & { handle: string };
-export interface HandledCatalog { faces: HandledFace[]; holes: HandledHole[]; contours: HandledContour[]; slots: HandledSlot[] }
+export interface HandledCatalog { faces: HandledFace[]; holes: HandledHole[]; contours: HandledContour[]; slots: HandledSlot[]; bosses: HandledBoss[] }
 
-/** Short names (F1, F1.L0, H1, C1, S1) for the latest describe_geometry catalog. Refs are raw-model based, so they survive reorienting. */
+/** Short names (F1, F1.L0, H1, B1, C1, S1) for the latest describe_geometry catalog. Refs are raw-model based, so they survive reorienting. */
 export class HandleMap {
   private refs = new Map<string, GeometryRef>();
 
@@ -27,7 +28,8 @@ export class HandleMap {
     const holes = catalog.holes.map((h, i) => name(`H${i + 1}`, h.ref, h));
     const contours = catalog.contours.map((c, i) => name(`C${i + 1}`, c.ref, c));
     const slots = catalog.slots.map((s, i) => name(`S${i + 1}`, s.ref, s));
-    return { faces, holes, contours, slots };
+    const bosses = catalog.bosses.map((b, i) => name(`B${i + 1}`, b.ref, b));
+    return { faces, holes, contours, slots, bosses };
   }
 
   resolve(item: string | GeometryRef): GeometryRef {
@@ -55,7 +57,7 @@ const mm = (v: number) => v.toFixed(3);
 const dim = (v: number) => String(+v.toFixed(1));
 const at = (c: { x: number; y: number }) => `(${mm(c.x)}, ${mm(c.y)})`;
 
-/** One line per face, hole and contour, in program coordinates (mm). */
+/** One line per face, hole, boss, slot and contour, in program coordinates (mm). */
 export function catalogText(c: HandledCatalog): string {
   const lines: string[] = [];
   for (const f of c.faces) {
@@ -63,6 +65,7 @@ export function catalogText(c: HandledCatalog): string {
     lines.push(`${f.handle} face z ${mm(f.z)}, area ${f.area.toFixed(1)} mm²; loops: ${loops.join(', ')}`);
   }
   for (const h of c.holes) lines.push(`${h.handle} ⌀${mm(h.diameter)} at ${at(h.center)}, z ${mm(h.bottom)} to ${mm(h.top)}, ${h.through ? 'through' : 'blind'}`);
+  for (const b of c.bosses) lines.push(`${b.handle} boss ⌀${mm(b.diameter)} at ${at(b.center)}, top z ${mm(b.top)}`);
   for (const s of c.slots) {
     const arc = s.kind === 'arc' && s.center && s.radius !== undefined ? `, radius ${dim(s.radius)} about ${at(s.center)}` : '';
     lines.push(`${s.handle} slot ${dim(s.width)} × ${dim(s.length)} (${s.kind}, ${s.ends[0]}/${s.ends[1]}) at ${at(s.start)} → ${at(s.end)}${arc}, z ${mm(s.bottom)} to ${mm(s.top)}, ${s.through ? 'through' : 'blind'}`);

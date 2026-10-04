@@ -1,5 +1,5 @@
 import type { OperationType } from '@sponcam/core';
-import { Circle, RectangleHorizontal, CircleX, Layers, Scissors, SquareDashed, Triangle, TriangleAlert, X, PenLine, ChevronsDown, Eraser } from 'lucide-react';
+import { Circle, RectangleHorizontal, CircleX, Layers, Scissors, SquareDashed, Triangle, TriangleAlert, X, PenLine, ChevronsDown, Eraser, Cog } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,7 +14,7 @@ import { PassesTab } from './PassesTab';
 import { TextInspector } from './TextInspector';
 import { ToolTab } from './ToolTab';
 
-const TYPE_ICON: Record<OperationType, typeof Scissors> = { profile: Scissors, pocket: SquareDashed, drill: Circle, face: Layers, chamfer: Triangle, slot: RectangleHorizontal, engrave: PenLine, vcarve: ChevronsDown, vclear: Eraser, vplug: Layers };
+const TYPE_ICON: Record<OperationType, typeof Scissors> = { profile: Scissors, pocket: SquareDashed, drill: Circle, face: Layers, chamfer: Triangle, slot: RectangleHorizontal, engrave: PenLine, vcarve: ChevronsDown, vclear: Eraser, vplug: Layers, thread: Cog };
 
 /** The right-hand inspector: the selected text's, else the selected operation's. */
 export function Inspector() {

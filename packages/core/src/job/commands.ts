@@ -1,6 +1,7 @@
 import { newOperation, OPERATION_LABELS } from '../cam/defaults';
 import type { Operation, OperationPatch, OperationType, TabSettings } from '../cam/types';
 import type { Vec3 } from '../geometry/vec3';
+import { type ThreadSpec, type ThreadStandard, threadRow } from '../thread/table';
 import type { PostSettings } from '../post/types';
 import { BUNDLED_FONT_IDS, newTextItem, TEXT_ANCHORS, type TextItem, type TextPatch } from '../text/types';
 import type { Tool } from '../tools/types';
@@ -56,20 +57,23 @@ const OP_KEYS: Readonly<Record<OperationType, readonly string[]>> = {
   engrave: [...COMMON_KEYS, 'depthMode', 'depth', 'lineWidth', 'stepdown'],
   vcarve: [...COMMON_KEYS, 'maxDepth', 'stepdown', 'inlay'],
   vplug: [...COMMON_KEYS, 'inlayDepth', 'startDepth', 'glueGap', 'stepdown'],
+  thread: [...COMMON_KEYS, 'kind', 'thread', 'hand', 'length', 'allowance', 'passes', 'springPass', 'direction', 'feedCompensation'],
   vclear: [...COMMON_KEYS, 'sourceId', 'stepoverPct', 'stepdown', 'direction', 'entry'],
 };
 const ENUMS: Readonly<Record<string, Partial<Record<OperationType, readonly string[]>>>> = {
   side: { profile: ['outside', 'inside', 'on'], chamfer: ['auto', 'outside', 'inside'] },
   openSide: { profile: ['left', 'on', 'right'], chamfer: ['left', 'right'] },
-  direction: { profile: ['climb', 'conventional'], pocket: ['climb', 'conventional'], face: ['climb', 'conventional'], chamfer: ['climb', 'conventional'], slot: ['climb', 'conventional'], vclear: ['climb', 'conventional'] },
+  direction: { profile: ['climb', 'conventional'], pocket: ['climb', 'conventional'], face: ['climb', 'conventional'], chamfer: ['climb', 'conventional'], slot: ['climb', 'conventional'], vclear: ['climb', 'conventional'], thread: ['climb', 'conventional'] },
   depthMode: { engrave: ['depth', 'width'] },
   area: { face: ['stock', 'picked'] },
   pattern: { face: ['zigzag', 'spiral'] },
   strategy: { slot: ['auto', 'toolWidth', 'wider', 'trochoidal'] },
   squareEnds: { slot: ['inside', 'endWall', 'dogbone'] },
+  kind: { thread: ['internal', 'external'] },
+  hand: { thread: ['right', 'left'] },
 };
 const NESTED = new Set(['heights', 'feeds', 'entry', 'leads', 'tabs', 'trochoidal']);
-const POSITIVE = ['stepdown', 'peck', 'width', 'depth', 'lineWidth', 'inlayDepth', 'startDepth', 'glueGap'];
+const POSITIVE = ['stepdown', 'peck', 'width', 'depth', 'lineWidth', 'inlayDepth', 'startDepth', 'glueGap', 'length'];
 const NON_NEGATIVE = ['stockRadial', 'stockAxial', 'dwellSeconds', 'overlap', 'tipOffset'];
 
 function findOp(job: Job, id: string): Operation {
@@ -164,6 +168,25 @@ function checkInlay(v: unknown): void {
   if (typeof v.plugFileName !== 'string') throw new CommandError('inlay.plugFileName must be a string');
 }
 
+const THREAD_STANDARDS = ['iso-coarse', 'iso-fine', 'unc', 'unf', 'custom'] as const;
+
+/** Validates a thread spec; a table standard takes its dimensions from the table. */
+function checkThread(v: unknown): ThreadSpec {
+  if (!isObj(v)) throw new CommandError('thread must be an object');
+  const standard = v.standard as ThreadStandard;
+  if (!THREAD_STANDARDS.includes(standard)) throw new CommandError(`thread.standard must be one of ${THREAD_STANDARDS.join(', ')}`);
+  if (standard !== 'custom') {
+    const row = typeof v.size === 'string' ? threadRow(standard, v.size) : null;
+    if (!row) throw new CommandError(typeof v.size === 'string' ? `Unknown thread size ${v.size}` : 'thread.size is required for a table standard');
+    return { standard, size: row.size, majorDiameter: row.majorDiameter, pitch: row.pitch, angle: row.angle };
+  }
+  if (v.size !== null) throw new CommandError('A custom thread has no size');
+  if (!positive(v.majorDiameter)) throw new CommandError('thread.majorDiameter must be greater than 0');
+  if (!positive(v.pitch)) throw new CommandError('thread.pitch must be greater than 0');
+  if (typeof v.angle !== 'number' || !(v.angle > 0 && v.angle < 180)) throw new CommandError('thread.angle must be between 0 and 180 degrees');
+  return { standard, size: null, majorDiameter: v.majorDiameter as number, pitch: v.pitch as number, angle: v.angle };
+}
+
 function patchOperation(job: Job, op: Operation, patch: OperationPatch): Operation {
   const allowed = OP_KEYS[op.type];
   const next: Record<string, unknown> = { ...op };
@@ -182,6 +205,10 @@ function patchOperation(job: Job, op: Operation, patch: OperationPatch): Operati
     if (NON_NEGATIVE.includes(key) && !((value as number) >= 0 && Number.isFinite(value))) throw new CommandError(`${key} must not be negative`);
     if ((key === 'stepoverPct' || key === 'finishStepoverPct') && !((value as number) > 0 && (value as number) <= 100)) throw new CommandError(`${key} must be in (0, 100]`);
     if (key === 'angleDeg' && !Number.isFinite(value)) throw new CommandError('angleDeg must be a finite number');
+    if (key === 'passes' && !(Number.isInteger(value) && (value as number) >= 1)) throw new CommandError('passes must be a whole number, 1 or more');
+    if (key === 'allowance' && !(typeof value === 'number' && Number.isFinite(value))) throw new CommandError('allowance must be a finite number');
+    if ((key === 'springPass' || key === 'feedCompensation') && typeof value !== 'boolean') throw new CommandError(`${key} must be true or false`);
+    if (key === 'thread') { next.thread = checkThread(value); continue; }
     if (key === 'toolId') checkTool(job, value as string | null);
     if (key === 'trochoidal') {
       const v = value as { stepPct?: number };

@@ -1,7 +1,7 @@
 # Spon MCP server
 
 Lets Claude (or any MCP client) create and edit Spon jobs on disk: import STL, STEP, IGES, DXF and SVG models, pick geometry,
-add profile, pocket, drill, face, chamfer, slot, engrave, V-carve and V-carve clearing operations, generate, preview, export G-code and save `.spon` files that open in the web app.
+add profile, pocket, drill, face, chamfer, slot, engrave, V-carve, V-carve clearing and thread operations, generate, preview, export G-code and save `.spon` files that open in the web app.
 
 ## Build and register
 
@@ -41,6 +41,8 @@ Slots: `describe_geometry` lists recognised slots as `S1…` (`filter: "slots"`)
 centrelines (each line end is the centre of a round end; set `width`). `strategy` is `auto`, `toolWidth`, `wider` or `trochoidal`. A square-ended slot needs
 `squareEnds` (`inside`, `endWall` or `dogbone`); `export_gcode` refuses until it is set, and `endWall`/`dogbone` overcuts give a `slot-overcut` warning.
 
+Threads: `add_operation` with `type: "thread"` and a thread mill (`list_tools`) mills an internal thread in a round hole (`H1…`, `kind: "internal"`, the default) or an external thread on a round boss (`B1…` from `describe_geometry`, `kind: "external"`). `list_threads` lists the ISO coarse and fine, UNC and UNF table; `params.thread` takes `{ standard, size }` for a table row or a `custom` thread with `majorDiameter`, `pitch` and `angle`. The length defaults to the picked hole's depth or boss's height.
+
 Text: `add_text` puts a text in the job (stock coordinates, mm from the stock's min corner); give an operation `geometry: [{ "kind": "text", "textId": ... }]`. Outline fonts serve profile, pocket, engrave and V-carve; single-line Hershey fonts serve engrave only. `load_font { path }` checks a .ttf, .otf or .woff outline font (.woff2 is refused) and returns a font ref for `add_text` / `update_text` (connected live, the font is loaded into the Spon tab as well).
 
 Inlays: `make_inlay { operationId, plugPath, ... }` turns a V-carve into an inlay: it sets the V-carve's depth `D`, adds its clearing here and writes a mirrored plug job to `plugPath` (open it with `open_job`). `S` is the plug's start depth, `g` the glue gap. `update: true` refreshes an existing plug file after the base changes.
@@ -48,7 +50,7 @@ Inlays: `make_inlay { operationId, plugPath, ... }` turns a V-carve into an inla
 ## Tools
 
 `status`, `new_job`, `open_job`, `use_live_tab`, `save_job`, `import_model`, `get_job`, `import_program`, `describe_geometry`,
-`apply_commands`, `add_operation`, `generate`, `render_preview`, `get_gcode`, `export_gcode`, `list_tools`,
+`apply_commands`, `add_operation`, `generate`, `render_preview`, `get_gcode`, `export_gcode`, `list_tools`, `list_threads`,
 `add_library_tool`, `import_tool_library`, and for text `list_fonts`, `load_font`, `add_text`, `update_text`, `remove_text`, and for inlays `make_inlay`. Resources: `spon://job`, `spon://catalog`, `spon://gcode/{file}`.
 Prompt: `spon-cam-basics`.
 

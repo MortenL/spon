@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseLinuxCncToolTable } from '../src';
 import { sanitizeName } from '../src/post/format';
+import { expectWithin } from './fixtures/perf';
 
 /** Hostile inputs for the patterns CodeQL flagged as polynomial (js/polynomial-redos). */
 const fast = (run: () => void) => {
@@ -17,11 +18,11 @@ describe('regexes stay linear on hostile input', () => {
     ['v and spaces with no number', 'v' + ' '.repeat(n) + 'x'],
     ['r and spaces with no number', 'r' + ' '.repeat(n) + 'x'],
   ])('tool table comment: %s', (_name, comment) => {
-    expect(fast(() => parseLinuxCncToolTable(`T1 P1 D6 ;${comment}`, 'mm'))).toBeLessThan(200);
+    expectWithin(fast(() => parseLinuxCncToolTable(`T1 P1 D6 ;${comment}`, 'mm')), 200);
   });
 
   it('job name of underscores', () => {
-    expect(fast(() => sanitizeName('a' + '_'.repeat(n) + 'a'))).toBeLessThan(200);
+    expectWithin(fast(() => sanitizeName('a' + '_'.repeat(n) + 'a')), 200);
   });
 });
 

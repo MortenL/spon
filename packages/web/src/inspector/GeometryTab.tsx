@@ -23,6 +23,7 @@ const PICK_HINT: Record<OperationType, string> = {
   engrave: 'Click paths, or edges and edge loops of the model',
   vcarve: 'Click closed paths, or faces and edge loops of the model',
   vclear: 'Clearing takes its outlines from the V-carve it clears',
+  thread: 'Click round holes (internal) or round bosses (external)',
   vplug: 'The plug takes its outlines from the V-carve it was made from',
 };
 
@@ -42,7 +43,7 @@ export function GeometryTab({ op }: { op: Operation }) {
 
   const setGeometry = (geo: typeof op.geometry) => runCommand({ type: 'updateOperation', id: op.id, patch: { geometry: geo } });
 
-  const contours = op.type === 'drill' ? (catalog?.contours ?? []).filter((c) => c.circle)
+  const contours = op.type === 'drill' || op.type === 'thread' ? (catalog?.contours ?? []).filter((c) => c.circle)
     : op.type === 'vcarve' ? (catalog?.contours ?? []).filter((c) => c.closed)
     : (catalog?.contours ?? []);
   const listed = listedTexts(op.type, texts);
@@ -150,7 +151,18 @@ export function GeometryTab({ op }: { op: Operation }) {
               );
             })}
 
-          {geometry?.kind === 'mesh' && (op.type === 'drill' || op.type === 'chamfer') &&
+          {geometry?.kind === 'mesh' && op.type === 'thread' && op.kind === 'external' &&
+            (catalog?.bosses ?? []).filter((b) => b.ref.kind === 'meshBoss').map((b, i) => {
+              const checked = op.geometry.some((r) => sameRef(r, b.ref));
+              return (
+                <label key={i} data-testid={`catalog-boss-${i}`} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" className="accent-primary" checked={checked} onChange={() => setGeometry(toggleRef(op.geometry, b.ref))} />
+                  <span className="min-w-0 flex-1 truncate">Boss Ø{formatLength(b.diameter, units)} · top Z {formatLength(b.top, units)}</span>
+                </label>
+              );
+            })}
+
+          {geometry?.kind === 'mesh' && (op.type === 'drill' || op.type === 'chamfer' || (op.type === 'thread' && op.kind === 'internal')) &&
             (catalog?.holes ?? []).map((h, i) => {
               const checked = op.geometry.some((r) => sameRef(r, h.ref));
               return (

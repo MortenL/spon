@@ -1,4 +1,4 @@
-import { bboxCenter, bboxSize, camContext } from '@sponcam/core';
+import { bboxCenter, bboxSize, camContext, describeGeometry, firstPickLength } from '@sponcam/core';
 import { GizmoHelper, GizmoViewport, OrbitControls } from '@react-three/drei';
 import { Canvas, type ThreeEvent } from '@react-three/fiber';
 import { toast } from 'sonner';
@@ -54,7 +54,8 @@ export function Viewport() {
       toast.error(res.error);
       return;
     }
-    runCommand({ type: 'updateOperation', id: pickOp.id, patch: { geometry: applyPick(pickOp, res.refs) } });
+    const geometryRefs = applyPick(pickOp, res.refs);
+    runCommand({ type: 'updateOperation', id: pickOp.id, patch: { geometry: geometryRefs, ...(geometry ? firstPickLength(pickOp, describeGeometry(job, geometry), geometryRefs) : {}) } });
   };
 
   return (

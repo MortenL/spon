@@ -1,5 +1,5 @@
-import { camContext, type ChamferOp, type DrillCycle, type DrillOp, CommandError, type EngraveOp, type EntrySettings, type FaceOp, formatLength, type Operation, type PocketOp, type ProfileOp, resolveGeometry, type SlotOp, type VCarveOp, type VClearOp, type VPlugOp } from '@sponcam/core';
-import { useMemo } from 'react';
+import { camContext, type ChamferOp, type DrillCycle, type DrillOp, CommandError, type EngraveOp, type EntrySettings, type FaceOp, formatLength, type Operation, type PocketOp, type ProfileOp, resolveGeometry, type SlotOp, type ThreadOp, type ThreadStandard, threadRow, type VCarveOp, type VClearOp, type VPlugOp } from '@sponcam/core';
+import { useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
@@ -12,6 +12,7 @@ import { addClearingBatch, clearingFor, engraveModeUi } from './vcarveInfo';
 import { chamferInfo } from './chamferInfo';
 import { slotView } from './slotInfo';
 import { contourKinds } from './openChains';
+import { kindSwitchPatch, pitchFromTpi, pitchToTpi, sizeOptions, THREAD_STANDARD_OPTIONS, parseToothAngle, threadReadouts } from './threadInfo';
 
 const pctField = (label: string, value: number, testId: string, onCommit: (v: number) => void) => (
   <NumericField
@@ -424,6 +425,87 @@ function SlotPasses({ op }: { op: SlotOp }) {
   );
 }
 
+function ThreadPasses({ op }: { op: ThreadOp }) {
+  const patch = (p: Partial<ThreadOp>) => runCommand({ type: 'updateOperation', id: op.id, patch: p });
+  const units = useApp((s) => s.job.displayUnits);
+  const [tpi, setTpi] = useState(false);
+  const { thread } = op;
+  const custom = thread.standard === 'custom';
+  const readouts = threadReadouts(thread, op.kind, units);
+  const select = (testId: string, label: string, value: string, options: readonly { value: string; label: string }[], onChange: (v: string) => void) => (
+    <label className="grid grid-cols-[1fr_10rem] items-center gap-2 text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <select data-testid={testId} value={value} className="h-8 rounded-md border bg-transparent px-2 text-sm" onChange={(e) => onChange(e.target.value)}>
+        {options.map((o) => <option key={o.value} value={o.value} className="bg-background">{o.label}</option>)}
+      </select>
+    </label>
+  );
+  const toggle = (testId: string, label: string, value: string, options: readonly [string, string][], onChange: (v: string) => void) => (
+    <label className="grid grid-cols-[1fr_10rem] items-center gap-2 text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <ToggleGroup type="single" variant="outline" size="sm" data-testid={testId} value={value} onValueChange={(v) => v && onChange(v)}>
+        {options.map(([v, text]) => <ToggleGroupItem key={v} value={v}>{text}</ToggleGroupItem>)}
+      </ToggleGroup>
+    </label>
+  );
+  const setStandard = (standard: ThreadStandard) => {
+    if (standard === 'custom') {
+      patch({ thread: { standard, size: null, majorDiameter: thread.majorDiameter, pitch: thread.pitch, angle: thread.angle } });
+      return;
+    }
+    const row = threadRow(standard, sizeOptions(standard)[0]);
+    if (row) patch({ thread: { standard, size: row.size, majorDiameter: row.majorDiameter, pitch: row.pitch, angle: row.angle } });
+  };
+
+  return (
+    <div className="space-y-3">
+      {toggle('thread-kind', 'Kind', op.kind, [['internal', 'Internal'], ['external', 'External']], (v) => runCommand({ type: 'updateOperation', id: op.id, patch: kindSwitchPatch(v as ThreadOp['kind'], op.geometry) }))}
+      {select('thread-standard', 'Standard', thread.standard, THREAD_STANDARD_OPTIONS, (v) => setStandard(v as ThreadStandard))}
+      {!custom && select('thread-size', 'Size', thread.size ?? '', sizeOptions(thread.standard).map((s) => ({ value: s, label: s })), (size) => {
+        const row = threadRow(thread.standard as Exclude<ThreadStandard, 'custom'>, size);
+        if (row) patch({ thread: { standard: row.standard, size: row.size, majorDiameter: row.majorDiameter, pitch: row.pitch, angle: row.angle } });
+      })}
+      {custom && (
+        <>
+          <LengthField label="Major Ø" valueMm={thread.majorDiameter} testId="thread-major" min={0.01} onCommit={(v) => patch({ thread: { ...thread, majorDiameter: v } })} />
+          <NumericField
+            label="Pitch" value={tpi ? pitchToTpi(thread.pitch) : thread.pitch} testId="thread-pitch" suffix={tpi ? 'TPI' : 'mm'}
+            format={(v) => (tpi ? v.toFixed(2) : v.toFixed(3))}
+            parse={(t) => { const n = Number(t.trim().replace(',', '.')); return Number.isFinite(n) && n > 0 ? n : null; }}
+            onCommit={(v) => patch({ thread: { ...thread, pitch: tpi ? pitchFromTpi(v) : v } })}
+          />
+          {toggle('thread-pitch-unit', 'Pitch unit', tpi ? 'tpi' : 'mm', [['mm', 'mm'], ['tpi', 'TPI']], (v) => setTpi(v === 'tpi'))}
+          <NumericField
+            label="Thread angle" value={thread.angle} suffix="°" testId="thread-angle"
+            format={(v) => v.toFixed(1)}
+            parse={parseToothAngle}
+            onCommit={(v) => patch({ thread: { ...thread, angle: v } })}
+          />
+        </>
+      )}
+      <div data-testid="thread-readouts" className="space-y-0.5 rounded-md border px-2 py-1.5 font-mono text-xs text-muted-foreground">
+        <div>Minor Ø {readouts.minor}</div>
+        <div>Thread depth {readouts.depth}</div>
+        {readouts.tapDrill && <div>Tap drill {readouts.tapDrill}</div>}
+      </div>
+
+      {toggle('thread-hand', 'Hand', op.hand, [['right', 'Right'], ['left', 'Left']], (v) => patch({ hand: v as ThreadOp['hand'] }))}
+      <LengthField label="Length" valueMm={op.length} testId="thread-length" min={0.01} onCommit={(v) => patch({ length: v })} />
+      <LengthField label="Allowance" valueMm={op.allowance} testId="thread-allowance" onCommit={(v) => patch({ allowance: v })} />
+      {intField('Passes', op.passes, 'thread-passes', 1, (v) => patch({ passes: v }))}
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" data-testid="thread-spring" className="accent-primary" checked={op.springPass} onChange={(e) => patch({ springPass: e.target.checked })} />
+        Spring pass
+      </label>
+      {toggle('thread-direction', 'Direction', op.direction, [['climb', 'Climb'], ['conventional', 'Conventional']], (v) => patch({ direction: v as ThreadOp['direction'] }))}
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" data-testid="thread-feed-comp" className="accent-primary" checked={op.feedCompensation} onChange={(e) => patch({ feedCompensation: e.target.checked })} />
+        Feed compensation
+      </label>
+    </div>
+  );
+}
+
 function EngravePasses({ op }: { op: EngraveOp }) {
   const patch = (p: Partial<EngraveOp>) => runCommand({ type: 'updateOperation', id: op.id, patch: p });
   const job = useApp((s) => s.job);
@@ -557,5 +639,6 @@ export function PassesTab({ op }: { op: Operation }) {
   if (op.type === 'vcarve') return <VCarvePasses op={op} />;
   if (op.type === 'vclear') return <VClearPasses op={op} />;
   if (op.type === 'vplug') return <VPlugPasses op={op} />;
+  if (op.type === 'thread') return <ThreadPasses op={op} />;
   return <ChamferPasses op={op} />;
 }

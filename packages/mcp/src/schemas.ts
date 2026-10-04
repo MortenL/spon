@@ -4,7 +4,7 @@ import { z } from 'zod';
 export const vec3Schema = z.strictObject({ x: z.number(), y: z.number(), z: z.number() });
 const vec3Partial = vec3Schema.partial();
 export const lengthUnitSchema = z.enum(['mm', 'in']);
-export const operationTypeSchema = z.enum(['profile', 'pocket', 'drill', 'face', 'chamfer', 'slot', 'engrave', 'vcarve', 'vclear', 'vplug']);
+export const operationTypeSchema = z.enum(['profile', 'pocket', 'drill', 'face', 'chamfer', 'slot', 'engrave', 'vcarve', 'vclear', 'vplug', 'thread']);
 export const dialectSchema = z.enum(['grbl', 'linuxcnc', 'fanuc']);
 export const machinePresetSchema = z.enum(['Hobby GRBL router', 'Generic VMC']);
 const delta = z.union([z.literal(-1), z.literal(1)]);
@@ -15,6 +15,7 @@ export const geometryRefSchema = z.discriminatedUnion('kind', [
   meshFaceRef,
   z.strictObject({ kind: z.literal('meshLoop'), face: meshFaceRef, loop: z.number().int() }),
   z.strictObject({ kind: z.literal('meshHole'), face: meshFaceRef, loop: z.number().int() }),
+  z.strictObject({ kind: z.literal('meshBoss'), face: meshFaceRef }),
   z.strictObject({ kind: z.literal('meshSlot'), face: meshFaceRef, loop: z.number().int().optional() }),
   z.strictObject({ kind: z.literal('text'), textId: z.string() }),
 ]);
@@ -92,6 +93,17 @@ export const operationPatchSchema = z.strictObject({
   lineWidth: z.number(),
   maxDepth: z.number().nullable(),
   sourceId: z.string(),
+  kind: z.enum(['internal', 'external']),
+  thread: z.strictObject({
+    standard: z.enum(['iso-coarse', 'iso-fine', 'unc', 'unf', 'custom']), size: z.string().nullable(),
+    majorDiameter: z.number().optional(), pitch: z.number().optional(), angle: z.number().optional(),
+  }),
+  hand: z.enum(['right', 'left']),
+  length: z.number(),
+  allowance: z.number(),
+  passes: z.number(),
+  springPass: z.boolean(),
+  feedCompensation: z.boolean(),
   inlayDepth: z.number(),
   startDepth: z.number(),
   glueGap: z.number(),
@@ -107,7 +119,7 @@ const presetSchema = z.strictObject({
 export const toolSchema = z.strictObject({
   id: z.string(),
   name: z.string(),
-  type: z.enum(['flat', 'ball', 'bull', 'vbit', 'drill', 'chamfer']),
+  type: z.enum(['flat', 'ball', 'bull', 'vbit', 'drill', 'chamfer', 'threadmill']),
   number: z.number().int(),
   diameter: z.number(),
   cornerRadius: z.number(),
@@ -116,6 +128,7 @@ export const toolSchema = z.strictObject({
   stickout: z.number(),
   flutes: z.number().int(),
   presets: z.array(presetSchema),
+  thread: z.strictObject({ neckDiameter: z.number(), neckLength: z.number(), pitch: z.number().nullable(), teeth: z.number().int() }).optional(),
   vendor: z.string().optional(),
   productId: z.string().optional(),
 });

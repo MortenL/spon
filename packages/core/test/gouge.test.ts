@@ -5,6 +5,7 @@ import {
 } from '../src';
 import { faceAt, plateSetup, tool6 } from './fixtures/camSetup';
 import { steppedMesh } from './fixtures/stepped';
+import { expectWithin } from './fixtures/perf';
 
 function steppedSetup() {
   const mesh = steppedMesh();
@@ -180,6 +181,6 @@ describe('gouge check', () => {
     const r = gougeCheck(handPath(moves), tool6, ctx);
     const ms = performance.now() - t0;
     expect(r.gouges.length).toBeLessThanOrEqual(200);
-    expect(ms).toBeLessThan(2000);
+    expectWithin(ms, 2000);
   }, 60_000);
 });

@@ -4,6 +4,7 @@ import { bboxOfPoints, bboxSize, type Drawing, pathsToPoints, segmentEnd, segmen
 import { parseSvg, resolveSvgScale, SvgParseError } from '../src/import/svg/svg';
 import { svgViewport } from '../src/import/svg/units';
 import { parseXml } from '../src/import/svg/xml';
+import { expectWithin } from './fixtures/perf';
 
 const fixture = (name: string) => readFileSync(new URL(`./fixtures/svg/${name}`, import.meta.url), 'utf8');
 const size = (d: Drawing) => bboxSize(bboxOfPoints(pathsToPoints(d.layers.flatMap((l) => l.paths)))!);
@@ -123,7 +124,7 @@ describe('parseSvg', () => {
     it('does not blow up on exponentially self-referencing groups', () => {
       const t = Date.now();
       const r = drawing(parseSvg(svg('<g id="g"><rect width="5" height="5"/><use href="#g"/><use href="#g"/><use href="#g"/></g>'), { svgScale: 1 }));
-      expect(Date.now() - t).toBeLessThan(1000);
+      expectWithin(Date.now() - t, 1000);
       expect(count(r)).toBe(1);
       expect(r.warnings).toContain('3 circular references were ignored');
     });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applyCommand, camContext, flattenPath, type Move, newOperation, type PocketOp, pocketToolpath, type ResolvedShape, v2 } from '../src';
 import { camPartSetup, cutMoves, geoOf, rectPath, tool6 } from './fixtures/camSetup';
+import { expectWithin } from './fixtures/perf';
 
 /**
  * Every move of `moves` (including rapids), whose straight segment (or, for an arc, whose end points) runs below
@@ -136,7 +137,7 @@ describe('pocketToolpath', () => {
     const shape: ResolvedShape = { shape: { outer: rectPath(0, 0, 120, 80), islands: [circle(60, 40, 4)] }, z: 0, ref: 0 };
     const started = performance.now();
     const out = pocketToolpath(pocket({ stepoverPct }), tool6, ctx, geoOf({ shapes: [shape] }));
-    expect(performance.now() - started).toBeLessThan(3000);
+    expectWithin(performance.now() - started, 3000);
     expect(out.toolpath!.moves.length).toBeLessThan(1500);
     assertClearOfCenter(out.toolpath!.moves, { x: 60, y: 40 }, 7 - 1e-3);
     for (const m of cutMoves(out.toolpath!.moves)) {
@@ -161,7 +162,7 @@ describe('pocketToolpath', () => {
     const outer = { closed: true, segments: pts.map((from, i) => ({ kind: 'line' as const, from, to: pts[(i + 1) % pts.length] })) };
     const started = performance.now();
     const out = pocketToolpath(pocket(), tool6, ctx, geoOf({ shapes: [{ shape: { outer, islands: [] }, z: 0, ref: 0 }] }));
-    expect(performance.now() - started).toBeLessThan(2000);
+    expectWithin(performance.now() - started, 2000);
     const wall = (p: { x: number; y: number }) => Math.min(...pts.map((a, i) => {
       const b = pts[(i + 1) % pts.length];
       const dx = b.x - a.x, dy = b.y - a.y;

@@ -223,6 +223,13 @@ writeFileSync(join(here, 'slot-plate.stl'), binaryStl(terracedTriangles(rectPts(
   { poly: obroundPts(20, 33.5, 30, 6.5), z: 0 },
   { poly: rectPts(50, 41, 90, 49), z: 6 },
 ]), 'Spon fixture: slot plate'));
+// 60 x 40 x 10 plate with a D20 boss (top Z 18) at (40, 20) and a D6.8 through hole at (15, 20), 128 chords each (thread milling)
+const circlePts = (cx, cy, d, n = 128) => Array.from({ length: n }, (_, i) => [cx + (d / 2) * Math.cos((2 * Math.PI * i) / n), cy + (d / 2) * Math.sin((2 * Math.PI * i) / n)]);
+writeFileSync(join(here, 'thread-plate.stl'), binaryStl(terracedTriangles(rectPts(0, 0, 60, 40), 18, [
+  { poly: rectPts(0, 0, 60, 40), z: 10 },
+  { poly: circlePts(40, 20, 20), z: 18 },
+  { poly: circlePts(15, 20, 6.8), z: 0 },
+]), 'Spon fixture: thread plate'));
 writeFileSync(join(here, 'slot-lines.dxf'), slotLinesDxf());
 // STEP and IGES fixtures (Milestone 3.2). Their recorded reader output (*.occt.json) is written by
 // packages/web/scripts/record-occt.mjs, which runs the real occt-import-js reader (a dependency of @sponcam/web only).

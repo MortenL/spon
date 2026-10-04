@@ -5,6 +5,7 @@ import {
   setModel, simplifyPolyline, type Toolpath,
 } from '../src';
 import { camPartSetup, tool6 } from './fixtures/camSetup';
+import { expectWithin } from './fixtures/perf';
 
 function profiled() {
   const { job: base, geometry, layer } = camPartSetup();
@@ -108,7 +109,7 @@ describe('renderPreviewSvg', () => {
     const big: Toolpath = { operationId: 'big', operationName: 'Big', toolId: 't6', rpm: 1, coolant: 'off', clearance: 5, moves: [{ kind: 'rapid', to: { x: 20, y: 0, z: 5 } }, ...moves] };
     const started = performance.now();
     const svg = renderPreviewSvg({ ...input, operations: [{ id: 'big', name: 'Big', toolpath: big, hasErrors: false, unmachined: [] }] });
-    expect(performance.now() - started).toBeLessThan(2000);
+    expectWithin(performance.now() - started, 2000);
     expect(count(pathOf(svg, 'feed'), 'L')).toBeLessThan(20_000);
   });
 

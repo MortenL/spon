@@ -8,7 +8,7 @@ import { type CamContext, drawingPathToProgram } from '../context';
 import type { CamCode, CamDiagnostic, MeshFaceRef, Operation, SlotEnd } from '../types';
 import { chainPaths, nestLoops, type Shape } from './chain';
 import { circleOf, drawingPath } from './dxf';
-import { type FaceGeometry, faceGeometry, holeBottom, resolveFaceRef } from './mesh';
+import { type FaceGeometry, faceGeometry, holeBottom, resolveFaceRef, wallsDrop } from './mesh';
 import { closedSlotOf, openSlotOf, resolvedSlotOf } from './slots';
 import { resolveText } from '../../text/resolve';
 
@@ -20,6 +20,7 @@ export interface ResolvedContour {
 }
 export interface ResolvedShape { shape: Shape; z: number; ref: number }
 export interface ResolvedHole { center: Vec2; diameter: number; top: number; bottom: number; through: boolean; ref: number }
+export interface ResolvedBoss { center: Vec2; diameter: number; top: number; ref: number }
 export interface ResolvedSlot {
   centreline: Path2D; width: number; startEnd: SlotEnd; endEnd: SlotEnd; top: number; bottom: number | null; through: boolean; ref: number;
   /** Drawn open chains only: the geometry indices of every reference that makes up the chain; `ref` is its seed. */
@@ -29,6 +30,7 @@ export interface ResolvedGeometry {
   contours: ResolvedContour[];
   shapes: ResolvedShape[];
   holes: ResolvedHole[];
+  bosses: ResolvedBoss[];
   slots: ResolvedSlot[];
   diagnostics: CamDiagnostic[];
   /** Largest chord sagitta (mm) of the arcs fitted to the mesh loops this operation uses; 0 without any. */
@@ -57,7 +59,7 @@ function upFaceOutlines(ctx: CamContext): { z: number; outer: Path2D }[] {
 
 export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometry {
   const out: ResolvedGeometry = {
-    contours: [], shapes: [], holes: [], slots: [], diagnostics: [], sagitta: 0,
+    contours: [], shapes: [], holes: [], bosses: [], slots: [], diagnostics: [], sagitta: 0,
     faceZ: (ref) => {
       const r = resolveFaceRef(ctx, ref);
       return r.ok ? r.face.z : null;
@@ -131,6 +133,19 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
     const r = face(faceRef);
     if (!r.ok) return fail(i, r.code, r.message);
     const f = r.face;
+    if (op.type === 'thread') {
+      const internal = op.kind === 'internal';
+      if (g.kind === 'meshHole' && internal) {
+        if (!holeFromLoop(f, g.loop, i)) fail(i, 'ref-changed', 'The picked loop is not a round hole');
+      } else if (g.kind === 'meshBoss' && !internal) {
+        const c = f.circles[0];
+        if (!c || !wallsDrop(ctx, f, c)) return fail(i, 'ref-changed', 'The picked boss is no longer round');
+        out.sagitta = Math.max(out.sagitta, f.circleSagittas[0] ?? 0);
+        out.bosses.push({ center: c.center, diameter: c.diameter, top: f.z, ref: i });
+      } else fail(i, 'wrong-geometry', internal ? 'Internal threads need round holes' : 'External threads need round bosses');
+      return;
+    }
+    if (g.kind === 'meshBoss') return fail(i, 'wrong-geometry', 'A boss can only be threaded');
     if (g.kind === 'meshSlot' && op.type === 'engrave') return fail(i, 'wrong-geometry', 'Engraving needs lines or outlines');
     if ((g.kind === 'meshSlot' || g.kind === 'meshHole') && (op.type === 'vcarve' || op.type === 'vplug')) return fail(i, 'wrong-geometry', `${carveName} needs outlines`);
     if (g.kind === 'meshSlot' || op.type === 'slot') {
@@ -183,7 +198,14 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
 
   if (dxf.length) {
     const firstRef = dxf[0].ref;
-    if (op.type === 'drill') {
+    if (op.type === 'thread') {
+      for (const d of dxf) {
+        const c = circleOf(d.path);
+        if (!c) fail(d.ref, 'no-geometry', 'Only circles can be threaded; this path is skipped', 'warning');
+        else if (op.kind === 'internal') out.holes.push({ center: c.center, diameter: c.diameter, top: drawingZ, bottom: ctx.stock?.min.z ?? drawingZ, through: true, ref: d.ref });
+        else out.bosses.push({ center: c.center, diameter: c.diameter, top: drawingZ, ref: d.ref });
+      }
+    } else if (op.type === 'drill') {
       for (const d of dxf) {
         const c = circleOf(d.path);
         if (!c) fail(d.ref, 'no-geometry', 'Only circles can be drilled; this path is skipped', 'warning');

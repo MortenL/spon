@@ -21,17 +21,17 @@ const fusion = {
 };
 
 describe('starter library', () => {
-  it('has 10 valid tools with unique ids and numbers and a preset per material', () => {
+  it('has 12 valid tools with unique ids and numbers and a preset per material', () => {
     const tools = starterLibrary();
-    expect(tools).toHaveLength(10);
-    expect(new Set(tools.map((t) => t.id)).size).toBe(10);
-    expect(new Set(tools.map((t) => t.number)).size).toBe(10);
+    expect(tools).toHaveLength(12);
+    expect(new Set(tools.map((t) => t.id)).size).toBe(12);
+    expect(new Set(tools.map((t) => t.number)).size).toBe(12);
     for (const t of tools) {
       expect(validateTool(t), t.name).toBe(true);
       expect(t.presets.map((p) => p.name)).toEqual([...MATERIALS]);
     }
     expect(tools.map((t) => `${t.type}:${t.diameter}`)).toEqual([
-      'flat:3', 'flat:6', 'flat:8', 'ball:6', 'vbit:12', 'vbit:12', 'drill:3', 'drill:5', 'drill:6', 'drill:8',
+      'flat:3', 'flat:6', 'flat:8', 'ball:6', 'vbit:12', 'vbit:12', 'drill:3', 'drill:5', 'drill:6', 'drill:8', 'threadmill:6', 'threadmill:6.2',
     ]);
   });
 });
@@ -68,6 +68,34 @@ describe('Spon tool library files', () => {
     expect(validateTool(badRpm)).toBe(false);
     expect(validateTool(badFlutes)).toBe(false);
     expect(validateTool(badStickout)).toBe(false);
+  });
+});
+
+describe('thread mills in a Spon tool library', () => {
+  const mills = starterLibrary().filter((t) => t.type === 'threadmill');
+  it('has the two starter thread mills', () => {
+    expect(mills.map((t) => t.id).sort()).toEqual(['starter-thread-m8', 'starter-thread-sp6']);
+  });
+  it('round-trips through export and import with their thread data and tooth angle', () => {
+    const back = importToolLibrary(exportToolLibrary(mills));
+    expect(back).toEqual(mills);
+    for (const t of back) {
+      expect(t.thread).toBeDefined();
+      expect(t.tipAngleDeg).toBe(60);
+    }
+    expect(back.find((t) => t.id === 'starter-thread-m8')!.thread).toEqual({ neckDiameter: 4.8, neckLength: 15, pitch: 1.25, teeth: 8 });
+  });
+  it('survives a library file parse', () => {
+    const bytes = new TextEncoder().encode(exportToolLibrary(mills));
+    expect(parseToolLibraryFile(bytes, 'lib.json').tools).toEqual(mills);
+  });
+  it('refuses a thread mill without its thread data and thread data on other tools', () => {
+    const [sp6] = mills;
+    const bare: Tool = { ...sp6 };
+    delete bare.thread;
+    expect(validateTool(bare)).toBe(false);
+    const flat: Tool = { ...starterLibrary().find((t) => t.type === 'flat')!, thread: sp6.thread };
+    expect(validateTool(flat)).toBe(false);
   });
 });
 

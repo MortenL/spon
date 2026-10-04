@@ -10,6 +10,7 @@ import {
   deleteLibraryTool, exportLibraryFile, importLibraryFile, resetStarterLibrary, saveLibraryTool, ToolNumberTakenError, useToolLibrary,
 } from '@/state/toolLibrary';
 import { useApp } from '@/state/store';
+import { parseToothAngle } from '@/inspector/threadInfo';
 import { ToolSketch } from './ToolSketch';
 import { importSummary } from './toolTableImport';
 
@@ -27,6 +28,13 @@ function blankTool(tools: readonly Tool[]): Tool {
     id: crypto.randomUUID(), name: '', type: 'flat', number: nextToolNumber(tools),
     diameter: 6, cornerRadius: 0, tipAngleDeg: 0, fluteLength: 20, stickout: 30, flutes: 2, presets: [],
   };
+}
+
+/** Switching to or from a thread mill adds or drops its thread data so the tool stays valid. */
+function withType(tool: Tool, type: ToolType): Tool {
+  const { thread: _drop, ...rest } = tool;
+  if (type !== 'threadmill') return { ...rest, type };
+  return { ...rest, type, tipAngleDeg: tool.tipAngleDeg > 0 && tool.tipAngleDeg < 180 ? tool.tipAngleDeg : 60, thread: tool.thread ?? { neckDiameter: tool.diameter * 0.75, neckLength: 20, pitch: null, teeth: 1 } };
 }
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
@@ -280,7 +288,7 @@ export function ToolLibraryDialog() {
                     <span className="text-muted-foreground">Type</span>
                     <select
                       data-testid="tool-field-type" value={draft.type} className="h-8 rounded-md border bg-transparent px-2 text-sm"
-                      onChange={(e) => setDraft({ ...draft, type: e.target.value as ToolType })}
+                      onChange={(e) => setDraft(withType(draft, e.target.value as ToolType))}
                     >
                       {TOOL_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                     </select>
@@ -298,9 +306,32 @@ export function ToolLibraryDialog() {
                     onCommit={(v) => setDraft({ ...draft, cornerRadius: v })}
                   />
                   <NumericField
-                    label="Tip angle" value={draft.tipAngleDeg} suffix="°" testId="tool-field-tipAngleDeg" {...decField(0, 1)}
+                    label={draft.type === 'threadmill' ? 'Tooth angle' : 'Tip angle'} value={draft.tipAngleDeg} suffix="°" testId="tool-field-tipAngleDeg"
+                    {...(draft.type === 'threadmill' ? { format: (v: number) => v.toFixed(1), parse: parseToothAngle } : decField(0, 1))}
                     onCommit={(v) => setDraft({ ...draft, tipAngleDeg: v })}
                   />
+                  {draft.thread && draft.type === 'threadmill' && (
+                    <>
+                      <LengthField
+                        label="Neck diameter" valueMm={draft.thread.neckDiameter} testId="tool-thread-neck-d" min={0.01}
+                        onCommit={(v) => setDraft({ ...draft, thread: { ...draft.thread!, neckDiameter: v } })}
+                      />
+                      <LengthField
+                        label="Neck length" valueMm={draft.thread.neckLength} testId="tool-thread-neck-l" min={0.01}
+                        onCommit={(v) => setDraft({ ...draft, thread: { ...draft.thread!, neckLength: v } })}
+                      />
+                      <NumericField
+                        label="Pitch (blank = single-point)" value={draft.thread.pitch ?? 0} suffix="mm" testId="tool-thread-pitch"
+                        format={(v) => (v > 0 ? String(v) : '')}
+                        parse={(t) => { const s = t.trim(); if (s === '') return 0; const n = Number(s.replace(',', '.')); return Number.isFinite(n) && n > 0 ? n : null; }}
+                        onCommit={(v) => setDraft({ ...draft, thread: { ...draft.thread!, pitch: v > 0 ? v : null } })}
+                      />
+                      <NumericField
+                        label="Teeth" value={draft.thread.teeth} testId="tool-thread-teeth" {...intField(1)}
+                        onCommit={(v) => setDraft({ ...draft, thread: { ...draft.thread!, teeth: v } })}
+                      />
+                    </>
+                  )}
                   <LengthField
                     label="Flute length" valueMm={draft.fluteLength} testId="tool-field-fluteLength" min={0.01}
                     onCommit={(v) => setDraft({ ...draft, fluteLength: v })}

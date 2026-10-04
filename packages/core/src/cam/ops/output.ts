@@ -21,6 +21,8 @@ export interface OpOutput {
   /** Heights of the first feature (for the heights planes in the viewport). */
   heights: ResolvedHeights | null;
   overlays: OpOverlays;
+  /** External threads: the path the gouge check runs instead (the real path cuts into the boss on purpose). */
+  gougePath?: Toolpath;
   /** Areas (tool-centre XY) where cutting into the model is intended, e.g. square slot ends cut to the wall (spec §3.8). */
   intended?: { zone: Poly[]; message: string; minZ?: number }[];
 }
