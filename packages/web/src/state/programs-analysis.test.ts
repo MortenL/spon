@@ -1,4 +1,4 @@
-import { addProgram, type AnalysisResult, createJob, type MotionTable, type ParsedProgram } from '@sponcam/core';
+import { addProgram, type AnalysisResult, createJob, type MotionTable, type ParsedProgram, setMachineProfile } from '@sponcam/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { analyzeInWorker, parseProgramInWorker } from '../workers/importClient';
 import { loadPrograms, reanalyzeAll } from './programs';
@@ -159,6 +159,31 @@ describe('startProgramAnalysis — axis switches', () => {
     expect(appStore.getState().past.length).toBe(pastBefore + 1);
     await vi.waitFor(() => expect(yOf()).toEqual([-5, -20]));
     expect(parseProgramInWorker).toHaveBeenCalledTimes(2);
+    stop();
+  });
+
+  it('undo re-parses back to the original table, and a machine-only change does not re-parse', async () => {
+    const { parseProgram, setWcs } = await import('@sponcam/core');
+    const { startProgramAnalysis } = await import('./programs');
+    vi.mocked(parseProgramInWorker).mockImplementation(async (bytes, ctx) => parseProgram(bytes, ctx));
+    vi.mocked(analyzeInWorker).mockResolvedValue({ analysis: fakeAnalysis(1), t: new Float64Array(2) });
+    const blobId = 'p1';
+    appStore.getState().setProgramBytes(blobId, new TextEncoder().encode('G21 G90\nG0 X10 Y5\nG1 X10 Y20 F100\n'));
+    appStore.getState().commit((job) => addProgram(job, { name: 'a.nc', blobId }));
+    await loadPrograms();
+    const yOf = () => Array.from(appStore.getState().programData[blobId].parsed!.table.end).filter((_, i) => i % 3 === 1);
+    const stop = startProgramAnalysis(appStore, 5);
+
+    appStore.getState().commit((job) => setWcs(job, { axes: { reverseY: true } }));
+    await vi.waitFor(() => expect(yOf()).toEqual([-5, -20]));
+    appStore.getState().undo();
+    await vi.waitFor(() => expect(yOf()).toEqual([5, 20]));
+
+    const parses = vi.mocked(parseProgramInWorker).mock.calls.length;
+    const analyses = vi.mocked(analyzeInWorker).mock.calls.length;
+    appStore.getState().commit((job) => setMachineProfile(job, { maxFeed: job.machine.maxFeed + 100 }));
+    await vi.waitFor(() => expect(vi.mocked(analyzeInWorker).mock.calls.length).toBeGreaterThan(analyses)); // re-timed...
+    expect(parseProgramInWorker).toHaveBeenCalledTimes(parses); // ...but not re-parsed
     stop();
   });
 });

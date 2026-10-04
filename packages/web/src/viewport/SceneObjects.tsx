@@ -68,9 +68,15 @@ function TriadArrow({ dir, length, color, label }: { dir: THREE.Vector3; length:
     a.traverse((o) => { o.raycast = noRaycast; });
     return a;
   }, [dir, length, color]);
+  useEffect(() => () => {
+    arrow.line.geometry.dispose();
+    (arrow.line.material as THREE.Material).dispose();
+    arrow.cone.geometry.dispose();
+    (arrow.cone.material as THREE.Material).dispose();
+  }, [arrow]);
   return (
     <>
-      <primitive object={arrow} />
+      <primitive object={arrow} dispose={null} />
       <Html position={dir.clone().multiplyScalar(length * 1.12)} center className="pointer-events-none select-none font-mono text-[11px] font-semibold" style={{ color: `#${color.toString(16).padStart(6, '0')}` }}>
         {label}
       </Html>

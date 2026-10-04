@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  arcGeometry, arcPointInto, axisMap, interpretProgram, mapTableToSpon, type MotionTable, type Plane,
   applyCommand, type Job, type JobCommand, MoveKind, parseProgram, programContext, runPipeline, type WcsAxes, vec3, machinePreset,
 } from '../src';
 import { camPartSetup, tool6 } from './fixtures/camSetup';
@@ -78,7 +79,7 @@ describe('imported programs', () => {
     const prog = enc('G90 G0 X0 Y0\nG0 Y500\n');
     const off = parseProgram(prog, { ...ctx(), profile }).analysis.summary.totalSeconds;
     const on = parseProgram(enc('G90 G0 X0 Y0\nG0 X500\n'), { ...ctx({ reverseX: false, reverseY: false, swapXY: true }), profile }).analysis.summary.totalSeconds;
-    // off: Spon Y is machine Y (2000 mm/min); on: the machine's X move is Spon Y but the machine X rate (10000) applies... 
+    // off: Spon Y is machine Y (2000 mm/min); on: the program's X move runs at the machine X rate (10000 mm/min)
     expect(off).toBeGreaterThan((500 / (2000 / 60)) * 0.8);
     expect(off).toBeLessThan((500 / (2000 / 60)) * 1.2);
     expect(on).toBeGreaterThan((500 / (10000 / 60)) * 0.8);
@@ -97,4 +98,51 @@ G1 Z-1 F300
     expect(flagged(body('X5 Y25') + 'G0 Y26\n', { reverseX: false, reverseY: false, swapXY: true })).toContain('rapid-into-stock');
     expect(flagged(body('X5 Y-10') + 'G0 Y-11\n', { reverseX: false, reverseY: true, swapXY: false })).toContain('rapid-into-stock');
   });
+});
+
+describe('mapTableToSpon tessellation', () => {
+  const programs = [
+    'G18\nG0 X3 Y7 Z10\nG2 X13 Y9 Z0 I0 K-10\nG3 X3 Y2 Z-10 I-10 K0\nG2 X3 Y2 Z-10 I-5 K3\n',
+    'G19\nG0 X3 Y7 Z10\nG2 X3 Y17 Z0 J0 K-10\nG3 X5 Y7 Z-10 J-10 K0\nG3 X5 Y7 Z-10 J4 K3\n',
+    'G17\nG0 X3 Y7 Z0\nG2 X13 Y17 Z-2 I10 J0\nG3 X-7 Y-3 Z-3 I-10 J-10\nG2 X-7 Y-3 Z-3 I4 J3\n',
+  ];
+  const ARC_STEPS = 8;
+
+  /** Move end points, with each arc tessellated into ARC_STEPS + 1 points. */
+  function points(t: MotionTable): number[][] {
+    const out: number[][] = [];
+    let from = [t.start.x, t.start.y, t.start.z];
+    for (let i = 0; i < t.count; i++) {
+      const to = [t.end[i * 3], t.end[i * 3 + 1], t.end[i * 3 + 2]];
+      const kind = t.kind[i];
+      if (kind === MoveKind.ArcCW || kind === MoveKind.ArcCCW) {
+        const centre = [t.arc[i * 3], t.arc[i * 3 + 1], t.arc[i * 3 + 2]];
+        const geometry = arcGeometry(from, to, centre, t.plane[i] as Plane, kind === MoveKind.ArcCW);
+        for (let f = 0; f <= ARC_STEPS; f++) {
+          const p = [0, 0, 0];
+          arcPointInto(geometry, from, f / ARC_STEPS, p);
+          out.push(p);
+        }
+      } else out.push(to);
+      from = to;
+    }
+    return out;
+  }
+
+  it.each(layouts.flatMap((axes) => programs.map((text) => [axes, text.slice(0, 3), text] as const)))(
+    'tessellates like the unmapped table sent through toSpon (%j, %s)',
+    (axes, _plane, text) => {
+      const map = axisMap(axes);
+      const unmapped = interpretProgram(text, { jobWorkOffset: 'G54' } as never).table;
+      const mapped = interpretProgram(text, { jobWorkOffset: 'G54' } as never).table;
+      const expected = points(unmapped).map(([x, y, z]) => {
+        const s = map.toSpon({ x, y });
+        return [s.x, s.y, z];
+      });
+      mapTableToSpon(mapped, map);
+      const actual = points(mapped);
+      expect(actual.length).toBe(expected.length);
+      expected.forEach((p, i) => p.forEach((v, k) => expect(Math.abs(v - actual[i][k])).toBeLessThan(1e-3)));
+    },
+  );
 });

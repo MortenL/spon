@@ -111,7 +111,7 @@ export function AnalysisView() {
           {s.extents && <Row label="Extents">{formatSize(bboxSize(s.extents), units)}</Row>}
           {s.extents && <Row label="Min / max (program)">{formatPoint(s.extents.min, units)}<br />{formatPoint(s.extents.max, units)}</Row>}
           {s.extents && (
-            <Row label="Min / max (job)">
+            <Row label="Min / max (job)" testId="analysis-extents-job">
               {formatPoint(v3add(s.extents.min, origin), units)}
               <br />
               {formatPoint(v3add(s.extents.max, origin), units)}
