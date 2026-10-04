@@ -34,6 +34,8 @@ e2e tests reach the left panels through `openPanel(page, id)` in `e2e/helpers.ts
 
 Inlays (milestone 4.4c): `packages/core/test/inlay-fit.test.ts` (3 mm clearing) and `inlay-fit-6mm.test.ts` (6 mm clearing) prove the plug fits the pocket, with the cases in `packages/core/test/fixtures/inlayFit.ts` and the sweep helpers in `fixtures/sweep.ts`; `vplug.test.ts` holds the golden G-code of a rectangle plug (`fixtures/vplug-rectangle.nc`); `packages/web/e2e/inlay.spec.ts` drives Make inlay… and Update inlay (it removes the File System Access pickers so the download and file-input fallbacks run, and accepts the discard confirmation when opening the plug job).
 
+Thread milling (milestone 4.5): `thread-plate.stl` (a 60×40×10 plate with a Ø20 boss topping at Z 18 and a Ø6.8 through hole, built by `make-fixtures.mjs`) is used by `packages/web/e2e/thread.spec.ts` (internal M8, external M20, custom TPI); the core thread tests are `thread-table`, `thread-tools`, `thread-model`, `thread-geometry` and `thread-toolpath` in `packages/core/test/`.
+
 Before claiming a change works: run the focused tests for the files you touched, then `pnpm typecheck && pnpm test` once. UI changes also need `pnpm build`, and user flows need `pnpm e2e`.
 
 ## Rules that are easy to break
