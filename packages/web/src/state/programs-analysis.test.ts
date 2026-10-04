@@ -139,3 +139,26 @@ describe('loadPrograms / parseBlob — overlapping loads of the same blob', () =
     expect(stored.parsed).toBe(parsedB);
   });
 });
+
+describe('startProgramAnalysis — axis switches', () => {
+  it('re-parses an imported program when wcs.axes changes (one undo step) and keeps timing-only changes as re-timing', async () => {
+    const { parseProgram, setWcs } = await import('@sponcam/core');
+    const { startProgramAnalysis } = await import('./programs');
+    vi.mocked(parseProgramInWorker).mockImplementation(async (bytes, ctx) => parseProgram(bytes, ctx));
+    vi.mocked(analyzeInWorker).mockResolvedValue({ analysis: fakeAnalysis(1), t: new Float64Array(2) });
+    const blobId = 'p1';
+    appStore.getState().setProgramBytes(blobId, new TextEncoder().encode('G21 G90\nG0 X10 Y5\nG1 X10 Y20 F100\n'));
+    appStore.getState().commit((job) => addProgram(job, { name: 'a.nc', blobId }));
+    await loadPrograms();
+    const yOf = () => Array.from(appStore.getState().programData[blobId].parsed!.table.end).filter((_, i) => i % 3 === 1);
+    expect(yOf()).toEqual([5, 20]);
+
+    const stop = startProgramAnalysis(appStore, 5);
+    const pastBefore = appStore.getState().past.length;
+    appStore.getState().commit((job) => setWcs(job, { axes: { reverseY: true } }));
+    expect(appStore.getState().past.length).toBe(pastBefore + 1);
+    await vi.waitFor(() => expect(yOf()).toEqual([-5, -20]));
+    expect(parseProgramInWorker).toHaveBeenCalledTimes(2);
+    stop();
+  });
+});

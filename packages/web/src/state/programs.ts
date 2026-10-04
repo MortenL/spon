@@ -118,16 +118,36 @@ export async function reanalyzeAll(): Promise<void> {
   }
 }
 
+/** Re-parses every imported program from its bytes, e.g. after the WCS axis switches changed how tables are mapped. */
+export async function reparseImported(): Promise<void> {
+  const { job, past, future, programBytes } = state();
+  const keep = new Set(referencedBlobIds(job, past, future));
+  for (const blobId of Object.keys(programBytes)) {
+    if (blobId.startsWith(GEN_PREFIX) || !keep.has(blobId) || !state().programData[blobId]) continue; // generated programs regenerate themselves
+    await parseBlob(blobId);
+  }
+}
+
+const axesChanged = (a: Job, b: Job): boolean =>
+  a.wcs.axes.reverseX !== b.wcs.axes.reverseX || a.wcs.axes.reverseY !== b.wcs.axes.reverseY || a.wcs.axes.swapXY !== b.wcs.axes.swapXY;
+
 /** Re-analyses programs `delayMs` after the machine, stock, WCS or model changes. Returns a stop function. */
 export function startProgramAnalysis(store: StoreApi<AppState>, delayMs = 300): () => void {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let reparse = false;
   const unsubscribe = store.subscribe((s, prev) => {
     const changed =
       s.job.machine !== prev.job.machine || s.job.stock !== prev.job.stock || s.job.wcs !== prev.job.wcs ||
       s.job.model !== prev.job.model || s.geometry !== prev.geometry;
     if (!changed) return;
+    // Tables are stored in Spon's frame: a new axis layout needs the bytes parsed again, not just re-timed.
+    if (axesChanged(s.job, prev.job)) reparse = true;
     clearTimeout(timer);
-    timer = setTimeout(() => void reanalyzeAll(), delayMs);
+    timer = setTimeout(() => {
+      const again = reparse;
+      reparse = false;
+      void (again ? reparseImported() : reanalyzeAll());
+    }, delayMs);
   });
   return () => {
     clearTimeout(timer);
