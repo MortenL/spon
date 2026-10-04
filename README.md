@@ -42,7 +42,7 @@ An MCP server lets Claude (or any MCP client) drive the same jobs: on `.spon` fi
 - **Text:** typed text in bundled or uploaded fonts (outline and single-line), on the stock or a model face, with multi-line, spacing, fit, arc, rotation and mirror; V-carve, engrave, pocket or profile it.
 - **Inlays:** Make inlay… turns a V-carve into an inlay pocket and writes a matching plug job (mirrored, V-carve plug + clearing) with inlay depth, start depth and glue gap; the toolpaths are computed so the plug fits the pocket, and the V-bit also cleans the floor corners and narrow gaps the clearing tool can't reach.
 - **Gouge check.** Toolpaths are checked against the model (chamfer depth and the facets of round walls are allowed for). A cut into it is an error that keeps the toolpath, shows red markers in the viewport and blocks export.
-- **Axis switches.** The WCS panel can reverse X, reverse Y or swap X and Y so Spon matches a machine whose axes run the other way; posted G-code, imported programs, timing and the 3D axis triad follow the switches.
+- **Machine axis layout.** Reverse X, Reverse Y and Swap X/Y in the work origin panel: G-code output and imported programs follow the machine's axes.
 - Geometry is picked in the viewport, or from a catalog of faces, edge loops, holes and drawing contours.
 
 **Tools**
