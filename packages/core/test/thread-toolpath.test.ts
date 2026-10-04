@@ -17,6 +17,7 @@ const withNeck = (t: Tool, neckDiameter: number, neckLength = t.thread!.neckLeng
 const M8: ThreadSpec = { standard: 'iso-coarse', size: 'M8', majorDiameter: 8, pitch: 1.25, angle: 60 };
 const M10: ThreadSpec = { standard: 'iso-coarse', size: 'M10', majorDiameter: 10, pitch: 1.5, angle: 60 };
 const M5: ThreadSpec = { standard: 'iso-coarse', size: 'M5', majorDiameter: 5, pitch: 0.8, angle: 60 };
+const M12: ThreadSpec = { standard: 'iso-coarse', size: 'M12', majorDiameter: 12, pitch: 1.75, angle: 60 };
 const M20: ThreadSpec = { standard: 'iso-coarse', size: 'M20', majorDiameter: 20, pitch: 2.5, angle: 60 };
 const minorExt = (t: ThreadSpec) => t.majorDiameter - 2 * (17 / 24) * (t.pitch / (2 * Math.tan(Math.PI / 6)));
 
@@ -192,9 +193,9 @@ describe('external thread on the fixture boss', () => {
   });
 
   /** The thread plate's boss (D20, top Z 18) with a block of the same height whose face is `face` mm from the boss axis. */
-  const walled = (face: number) => {
+  const walled = (face: number, wallZ = 18) => {
     const circle = Array.from({ length: 128 }, (_, i) => [30 + 10 * Math.cos((2 * Math.PI * i) / 128), 20 + 10 * Math.sin((2 * Math.PI * i) / 128)] as [number, number]);
-    const s = terracedSetup(rectPts(0, 0, 60, 40), 18, [{ poly: rectPts(0, 0, 60, 40), z: 10 }, { poly: circle, z: 18 }, { poly: rectPts(30 + face, 0, 60, 40), z: 18 }]);
+    const s = terracedSetup(rectPts(0, 0, 60, 40), wallZ, [{ poly: rectPts(0, 0, 60, 40), z: 10 }, { poly: circle, z: 18 }, { poly: rectPts(30 + face, 0, 60, 40), z: wallZ }]);
     const boss = s.catalog().bosses.find((b) => Math.abs(b.diameter - 20) < 0.1)!;
     const job: Job = applyCommands(s.job, [
       { type: 'addTool', tool: sp6 },
@@ -207,8 +208,11 @@ describe('external thread on the fixture boss', () => {
   it('reports a wall 3 mm from the boss surface (radial)', () => {
     expect(codes(walled(13))).toContain('gouge');
   });
-  it('reports a wall the plunge and entry reach but the helix does not (face 8 mm from the boss surface)', () => {
-    expect(codes(walled(18))).toContain('gouge');
+  it('is clean for a same-height wall the helix cannot reach (the approach stays above the top)', () => {
+    expect(codes(walled(18)).filter((c) => c === 'gouge')).toEqual([]);
+  });
+  it('reports a taller wall the plunge and entry reach but the helix does not (face 8 mm from the boss surface)', () => {
+    expect(codes(walled(18, 22))).toContain('gouge');
   });
   it('is clean with the wall far enough away', () => {
     expect(codes(walled(25)).filter((c) => c === 'gouge')).toEqual([]);
@@ -217,6 +221,37 @@ describe('external thread on the fixture boss', () => {
   it('warns about the boss size', () => {
     const r = run('external', sp6, { thread: { ...M20, standard: 'custom', size: null, majorDiameter: 22 }, length: 6 });
     expect(r.result.diagnostics.find((d) => d.code === 'boss-size')).toMatchObject({ severity: 'warning', message: "The boss is 20.00 mm; the thread's major diameter is 22.00 mm" });
+  });
+
+  it.each([['M8', M8], ['M12', M12]])('refuses a %s external thread on the oversized D20 boss (boss-size error, no plunge into it)', (_n, thread) => {
+    const r = run('external', sp6, { thread, length: 6 });
+    expect(r.result.diagnostics.find((d) => d.code === 'boss-size')).toMatchObject({
+      severity: 'error', message: `The boss is 20.00 mm; the thread's major diameter is ${thread.majorDiameter.toFixed(2)} mm`,
+    });
+    expect(r.tp).toBeUndefined();
+  });
+
+  it('approaches outside the boss even when the allowance pulls the helix inside it', () => {
+    const r = run('external', sp6, { thread: M20, length: 6, allowance: 2.5 });
+    const helixR = at(helixArcs(r.tp!, centre)[0], centre);
+    expect(helixR).toBeLessThan(10); // the helix cuts into the boss on purpose
+    const firstArc = r.tp!.moves.findIndex((m) => m.kind === 'arc');
+    const before = r.tp!.moves[firstArc - 1] as Extract<Move, { kind: 'line' }>;
+    expect(Math.hypot(before.to.x - centre.x, before.to.y - centre.y)).toBeGreaterThanOrEqual(10 + 3 + 2 - 1e-6);
+  });
+
+  it('gives no false gouge on a boss with a chamfered (stepped) top', () => {
+    const circle = (r: number) => Array.from({ length: 128 }, (_, i) => [30 + r * Math.cos((2 * Math.PI * i) / 128), 20 + r * Math.sin((2 * Math.PI * i) / 128)] as [number, number]);
+    const s = terracedSetup(rectPts(0, 0, 60, 40), 18, [{ poly: rectPts(0, 0, 60, 40), z: 10 }, { poly: circle(10), z: 17.5 }, { poly: circle(9.5), z: 18 }]);
+    const boss = s.catalog().bosses.find((b) => Math.abs(b.diameter - 19) < 0.1)!;
+    const job: Job = applyCommands(s.job, [
+      { type: 'addTool', tool: sp6 },
+      { type: 'addOperation', opType: 'thread', toolId: sp6.id, id: 'o' },
+      { type: 'updateOperation', id: 'o', patch: { kind: 'external', geometry: [boss.ref], thread: M20, length: 6 } as never },
+    ]);
+    const res = runPipeline(job, s.geometry as never, programContext(job, s.geometry as never), new PipelineCache(), { date: '2026-01-01' }).run.results[0];
+    expect(codes(res)).not.toContain('gouge');
+    expect(res.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
   });
 
   it('posts the golden G-code of M20x2.5 external on the boss', async () => {
@@ -256,7 +291,7 @@ describe('feed and passes', () => {
   });
 
   it('never goes to a negative radius', () => {
-    const r = drawn(2, sp6, { thread: { ...M8, standard: 'custom', size: null, majorDiameter: 6.6, pitch: 0.5 }, passes: 2 }); // the hole is smaller than the tool: the start is the centre, never a negative radius
+    const r = drawn(6.1, sp6, { thread: { ...M8, standard: 'custom', size: null, majorDiameter: 6.6, pitch: 0.5 }, passes: 2 }); // the hole is barely wider than the tool: the start is almost the centre, never a negative radius
     for (const m of arcs(r.tp!)) expect(Math.hypot(m.to.x - m.center.x, m.to.y - m.center.y)).toBeGreaterThanOrEqual(0);
     expect(helixArcs(r.tp!, r.centre).every((m) => at(m, r.centre) > 0)).toBe(true);
   });
@@ -306,9 +341,30 @@ describe('thread diagnostics', () => {
     expect(helixArcs(two.toolpath!, { x: 0, y: 0 }).length).toBeGreaterThan(0);
   });
   it('hole-small names the tap drill', () => {
-    const r = drawn(6, sp6);
+    const r = drawn(6.4, sp6);
     expect(only(r, 'hole-small')).toMatchObject({ severity: 'warning', message: "The hole is smaller than the thread's minor diameter (6.65 mm); drill 6.8 mm first" });
     expect(r.tp).toBeDefined();
+  });
+  it('tool-too-big when the hole is not wider than the cutter (no plunge into solid)', () => {
+    for (const hole of [2, 5, 6]) {
+      const r = drawn(hole, sp6);
+      expect(only(r, 'tool-too-big')).toMatchObject({ severity: 'error', message: 'The thread mill is too big for this hole' });
+      expect(r.tp).toBeUndefined();
+    }
+    expect(only(drawn(6.4, sp6), 'tool-too-big')).toBeUndefined();
+  });
+  it('thread-too-deep on a through hole longer than the stock is thick', () => {
+    const long = withNeck(sp6, 2.8, 60);
+    const probe = drawn(6.8, long);
+    const thickness = probe.geo.holes[0].top - probe.cam.stock!.min.z;
+    expect(codes(drawn(6.8, long, { length: thickness }))).not.toContain('thread-too-deep');
+    const r = drawn(6.8, long, { length: thickness + 1 });
+    expect(only(r, 'thread-too-deep')).toMatchObject({ severity: 'error', message: 'The thread runs below the bottom of the hole' });
+  });
+  it('thread-allowance when an external allowance eats the whole core', () => {
+    const r = drawn(20, sp6, { kind: 'external', thread: M20, length: 6, allowance: 9 });
+    expect(only(r, 'thread-allowance')).toMatchObject({ severity: 'error', message: 'The allowance is too large for this thread' });
+    expect(r.tp).toBeUndefined();
   });
   it('hole-large', () => {
     const r = drawn(8.5, sp6);

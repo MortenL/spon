@@ -82,7 +82,7 @@ function orbitEnd(h: HelixPlan): { angle: number; point: Vec2 } {
 }
 
 /**
- * An external orbit with its approach: plunge at `rOut` from the axis, a tangent S-curve in to the orbit radius (opposite in sense
+ * An external orbit with its approach: plunge at `rOut` (the tool centre's distance from the axis), a tangent S-curve in to the orbit radius (opposite in sense
  * to the orbit), the helix, and the mirrored exit back out to `rOut`.
  */
 function externalOrbit(w: MoveWriter, h: HelixPlan, rOut: number, plungeFeed: number, feed: number, moveTo: (xy: Vec2) => void): void {
@@ -126,6 +126,7 @@ export function threadToolpath(op: ThreadOp, tool: Tool, ctx: CamContext, geo: R
     diag('error', 'thread-pitch', `This multi-tooth cutter cuts ${fmt(spec.pitch)} mm pitch; the thread needs ${fmt(P)} mm`);
     return out;
   }
+  if (!internal && dims.minorExternal / 2 - op.allowance <= EPS) { diag('error', 'thread-allowance', 'The allowance is too large for this thread'); return out; }
   const rFinal = internal ? major / 2 + op.allowance - d / 2 : dims.minorExternal / 2 - op.allowance + d / 2;
   if (rFinal <= 0 || (internal && d >= dims.minorInternal)) { diag('error', 'tool-too-big', 'The thread mill is too big for this hole'); return out; }
   const depth = internal ? dims.depthInternal : dims.depthExternal;
@@ -140,19 +141,24 @@ export function threadToolpath(op: ThreadOp, tool: Tool, ctx: CamContext, geo: R
   }
 
   const stockTop = ctx.stock?.max.z ?? ctx.model?.max.z ?? null;
+  const stockBottom = ctx.stock?.min.z ?? null;
   const ok: Feature[] = [];
   for (const f of features) {
     const bottom = f.top - op.length;
     const reach = op.length + (stockTop === null ? 0 : Math.max(0, stockTop - f.top));
     if (spec.neckLength < reach - EPS) { diag('error', 'thread-reach', `The thread mill cannot reach ${fmt(reach)} mm deep`, f.ref); continue; }
-    if (internal && !f.through && bottom < f.bottom - EPS) { diag('error', 'thread-too-deep', 'The thread runs below the bottom of the hole', f.ref); continue; }
+    if (internal && (f.through ? stockBottom !== null && bottom < stockBottom - EPS : bottom < f.bottom - EPS)) { diag('error', 'thread-too-deep', 'The thread runs below the bottom of the hole', f.ref); continue; }
     if (internal) {
+      if (f.diameter <= d + EPS) { diag('error', 'tool-too-big', 'The thread mill is too big for this hole', f.ref); continue; }
       if (f.diameter < dims.minorInternal - 0.01) {
         diag('warning', 'hole-small', `The hole is smaller than the thread's minor diameter (${fmt(dims.minorInternal)} mm); drill ${dims.tapDrill.toFixed(1)} mm first`, f.ref);
       } else if (f.diameter > major + 0.01) {
         diag('error', 'hole-large', `The hole is larger than the thread (${fmt(major)} mm)`, f.ref);
         continue;
       }
+    } else if (f.diameter > major + 2 * dims.depthExternal + EPS) {
+      diag('error', 'boss-size', `The boss is ${fmt(f.diameter)} mm; the thread's major diameter is ${fmt(major)} mm`, f.ref);
+      continue;
     } else if (Math.abs(f.diameter - major) > 0.1) {
       diag('warning', 'boss-size', `The boss is ${fmt(f.diameter)} mm; the thread's major diameter is ${fmt(major)} mm`, f.ref);
     }
@@ -184,13 +190,17 @@ export function threadToolpath(op: ThreadOp, tool: Tool, ctx: CamContext, geo: R
     out.heights ??= v;
     clearance = Math.max(clearance, v.clearance);
     const R = f.diameter / 2;
-    const start = internal ? Math.max(0, R - d / 2) : R + d / 2;
+    // the surface the external cutter has to clear: the boss, or the thread crest when a chamfer or step makes the top face narrower
+    const Renv = Math.max(R, major / 2);
+    const start = internal ? Math.max(0, R - d / 2) : Renv + d / 2;
     const c = f.center;
     /** Over to `xy` at or above `safe`, then down to the retract height. */
     const moveTo = (xy: Vec2, safe: number) => {
       if (!w.pos) w.travel(xy, v.clearance, v.retract);
       else if (Math.hypot(w.pos.x - xy.x, w.pos.y - xy.y) > EPS) w.travel(xy, Math.max(w.pos.z, safe), v.retract);
     };
+    /** The tool centre's distance from the axis at the plunge: 2 mm clear of the boss (or crest) and of the pass's own orbit. */
+    const approach = (r: number) => Math.max(r, Renv) + d / 2 + 2;
     const radii = passRadii(start, rFinal, op.passes, op.springPass);
     for (const r of radii) {
       const feed = op.feeds.feed * (op.feedCompensation ? r / refRadius : 1);
@@ -206,22 +216,20 @@ export function threadToolpath(op: ThreadOp, tool: Tool, ctx: CamContext, geo: R
             w.arc(p3(c.x, c.y, h.zEnd), { x: (e.point.x + c.x) / 2, y: (e.point.y + c.y) / 2 }, h.ccw, feed);
           }
         } else {
-          externalOrbit(w, h, r + d / 2 + 2, op.feeds.plungeFeed, feed, (xy) => moveTo(xy, v.retract));
+          externalOrbit(w, h, approach(r), op.feeds.plungeFeed, feed, (xy) => moveTo(xy, v.retract));
+        }
+        if (!internal) {
+          // the shadow: the same plunge, entry and exit as this pass, with the helix moved out to the boss surface (the real one cuts into it on purpose)
+          for (const h of planOrbits(op, tool, c, Renv + d / 2, f.top)) {
+            externalOrbit(shadow, h, approach(r), op.feeds.plungeFeed, op.feeds.feed, (xy) => {
+              if (!shadow.pos) shadow.travel(xy, v.clearance, v.retract);
+              else if (Math.hypot(shadow.pos.x - xy.x, shadow.pos.y - xy.y) > EPS) shadow.travel(xy, Math.max(shadow.pos.z, v.retract), v.retract);
+            });
+          }
         }
       }
     }
-    if (!internal) {
-      // the tool at the boss surface: the helix without the radial cut, but the real plunge and entry/exit arcs
-      const rs = R + d / 2;
-      const rOut = Math.max(rs, ...radii) + d / 2 + 2;
-      for (const h of planOrbits(op, tool, c, rs, f.top)) {
-        externalOrbit(shadow, h, rOut, op.feeds.plungeFeed, op.feeds.feed, (xy) => {
-          if (!shadow.pos) shadow.travel(xy, v.clearance, v.retract);
-          else if (Math.hypot(shadow.pos.x - xy.x, shadow.pos.y - xy.y) > EPS) shadow.travel(xy, Math.max(shadow.pos.z, v.retract), v.retract);
-        });
-      }
-      shadow.up(v.clearance);
-    }
+    if (!internal) shadow.up(v.clearance);
     w.up(v.clearance);
   }
   if (!w.moves.length) return out;

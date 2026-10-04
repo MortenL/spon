@@ -243,7 +243,7 @@ export type CamCode =
   | 'flute-exceeded' | 'vcarve-uncleared' | 'source-missing' | 'source-incomplete' | 'internal'
   | 'font-unreadable' | 'font-missing' | 'text-empty' | 'text-missing-glyphs' | 'text-fit' | 'text-arc' | 'text-no-stock' | 'text-single-line'
   | 'inlay-settings' | 'plug-board-thin' | 'plug-board-small'
-  | 'thread-angle' | 'thread-pitch' | 'tool-too-big' | 'thread-neck' | 'thread-reach' | 'thread-too-deep' | 'hole-small' | 'hole-large' | 'boss-size';
+  | 'thread-angle' | 'thread-pitch' | 'tool-too-big' | 'thread-neck' | 'thread-reach' | 'thread-too-deep' | 'hole-small' | 'hole-large' | 'boss-size' | 'thread-allowance';
 export interface CamDiagnostic {
   operationId: string;
   severity: CamSeverity;
