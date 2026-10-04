@@ -83,8 +83,8 @@ export function pickMesh(op: Operation, ctx: CamContext, tri: number, q: Vec2, a
     // a round boss: clicking its top face (or its edge) picks the boss
     return res.face.circles[0] ? { refs: [{ kind: 'meshBoss', face }] } : { error: 'Click the top of a round boss' };
   }
-  const isHoleOp = op.type === 'drill' || op.type === 'thread'; // an internal thread picks one round hole, with or without Alt
-  if ((!alt && !isHoleOp) || op.type === 'pocket' || op.type === 'face') return { refs: [face] };
+  const isHoleOp = op.type === 'drill' || op.type === 'thread'; // an internal thread picks one round hole even without Alt
+  if ((!alt && op.type !== 'thread') || op.type === 'pocket' || op.type === 'face') return { refs: [face] };
   let best = -1;
   let bestD = Infinity;
   res.face.loops.forEach((loop, i) => {

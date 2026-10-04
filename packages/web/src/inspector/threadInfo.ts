@@ -40,7 +40,7 @@ export function kindSwitchPatch(kind: ThreadOp['kind'], geometry: readonly Geome
   return { kind, geometry: geometry.filter((g) => g.kind !== drop) };
 }
 
-/** A thread mill's tooth angle must stay strictly between 0 and 180 degrees. */
+/** An angle strictly between 0 and 180 degrees: a thread mill's tooth angle or a custom thread's flank angle. */
 export function parseToothAngle(text: string): number | null {
   const n = Number(text.trim().replace(',', '.'));
   return Number.isFinite(n) && n > 0 && n < 180 ? n : null;

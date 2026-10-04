@@ -38,6 +38,10 @@ describe('mesh picking', () => {
     expect('refs' in loop && loop.refs[0]).toMatchObject({ kind: 'meshLoop', loop: 0 });
   });
 
+  it('adds the whole face for a drill without Alt', () => {
+    expect(pickMesh(op(job, 'drill'), ctx, top.seed, { x: 64, y: 20 }, false)).toEqual({ refs: [top] });
+  });
+
   it('toggles references', () => {
     const o = { ...op(job, 'pocket'), geometry: [top] };
     expect(applyPick(o, [top])).toEqual([]);

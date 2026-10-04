@@ -12,7 +12,7 @@ import { addClearingBatch, clearingFor, engraveModeUi } from './vcarveInfo';
 import { chamferInfo } from './chamferInfo';
 import { slotView } from './slotInfo';
 import { contourKinds } from './openChains';
-import { kindSwitchPatch, pitchFromTpi, pitchToTpi, sizeOptions, THREAD_STANDARD_OPTIONS, threadReadouts } from './threadInfo';
+import { kindSwitchPatch, pitchFromTpi, pitchToTpi, sizeOptions, THREAD_STANDARD_OPTIONS, parseToothAngle, threadReadouts } from './threadInfo';
 
 const pctField = (label: string, value: number, testId: string, onCommit: (v: number) => void) => (
   <NumericField
@@ -478,7 +478,7 @@ function ThreadPasses({ op }: { op: ThreadOp }) {
           <NumericField
             label="Thread angle" value={thread.angle} suffix="°" testId="thread-angle"
             format={(v) => v.toFixed(1)}
-            parse={(t) => { const n = Number(t.trim().replace(',', '.')); return Number.isFinite(n) && n > 0 && n < 180 ? n : null; }}
+            parse={parseToothAngle}
             onCommit={(v) => patch({ thread: { ...thread, angle: v } })}
           />
         </>

@@ -80,4 +80,11 @@ describe('tool library', () => {
     expect(defaultToolFor('drill', lib)?.id).toBe('starter-drill-6');
     expect(defaultToolFor('drill', lib.filter((t) => t.type !== 'drill'))).toBeNull();
   });
+
+  it('picks a thread mill for thread operations', () => {
+    const lib = starterLibrary();
+    expect(defaultToolFor('thread', lib)?.id).toBe('starter-thread-sp6');
+    expect(defaultToolFor('thread', lib.filter((t) => t.id !== 'starter-thread-sp6'))?.id).toBe('starter-thread-m8');
+    expect(defaultToolFor('thread', lib.filter((t) => t.type !== 'threadmill'))).toBeNull();
+  });
 });
