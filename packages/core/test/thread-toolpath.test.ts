@@ -70,7 +70,7 @@ describe('single-point internal thread', () => {
     expect(entry.to.z).toBeCloseTo(bottom - 0.3125, 9);
     expect(helix[helix.length - 1].to.z).toBeCloseTo(top + 0.3125, 9);
   });
-  it('stays wisp6 r of the axis during entry and exit', () => {
+  it('stays within r of the axis during entry and exit', () => {
     for (const m of arcs(tp).filter((x) => !helix.includes(x))) {
       // the half circle about the midpoint of the centre and the orbit
       const radius = Math.hypot(m.to.x - m.center.x, m.to.y - m.center.y);

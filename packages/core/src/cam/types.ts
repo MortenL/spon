@@ -193,7 +193,7 @@ export interface ThreadOp extends OperationBase {
   hand: 'right' | 'left';
   /** Threaded length along the axis. */
   length: number;
-  /** Radial allowance (positive leaves material). */
+  /** Radial allowance: positive loosens the fit (internal larger, external smaller). */
   allowance: number;
   passes: number;
   springPass: boolean;
