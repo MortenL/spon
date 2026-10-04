@@ -27,6 +27,8 @@ export interface JobSession {
   readonly tools: ToolLibraryAccess;
   describe(): Promise<SessionInfo>;
   job(): Promise<Job>;
+  /** The current job as .spon bytes, without saving it or marking it saved. */
+  spon(): Promise<Uint8Array>;
   /** Atomic: all commands apply or none do. */
   apply(commands: readonly JobCommand[], label?: string): Promise<Job>;
   importModel(input: ModelInput): Promise<ImportOutcome>;

@@ -63,6 +63,7 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
       return r.ok ? r.face.z : null;
     },
   };
+  const carveName = op.type === 'vplug' ? 'The plug' : 'V-carve';
   const fail = (ref: number, code: CamCode, message: string, severity: 'error' | 'warning' = 'error') =>
     out.diagnostics.push({ operationId: op.id, severity, code, message, ref });
   let faceOutlines: ReturnType<typeof upFaceOutlines> | undefined;
@@ -113,7 +114,7 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
           out.contours.push({ path: sh.outer, z: r.z, ref: i, kind: 'outer' });
           for (const isl of sh.islands) out.contours.push({ path: isl, z: r.z, ref: i, kind: 'inner' });
         }
-      } else if (op.type === 'pocket' || op.type === 'vcarve') {
+      } else if (op.type === 'pocket' || op.type === 'vcarve' || op.type === 'vplug') {
         for (const shape of r.shapes) out.shapes.push({ shape, z: r.z, ref: i });
       } else fail(i, 'wrong-geometry', "Text can't be used by this operation");
       return;
@@ -131,7 +132,7 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
     if (!r.ok) return fail(i, r.code, r.message);
     const f = r.face;
     if (g.kind === 'meshSlot' && op.type === 'engrave') return fail(i, 'wrong-geometry', 'Engraving needs lines or outlines');
-    if ((g.kind === 'meshSlot' || g.kind === 'meshHole') && op.type === 'vcarve') return fail(i, 'wrong-geometry', 'V-carve needs outlines');
+    if ((g.kind === 'meshSlot' || g.kind === 'meshHole') && (op.type === 'vcarve' || op.type === 'vplug')) return fail(i, 'wrong-geometry', `${carveName} needs outlines`);
     if (g.kind === 'meshSlot' || op.type === 'slot') {
       if (g.kind !== 'meshSlot') return fail(i, 'wrong-geometry', 'Slots need a centreline or a recognised slot');
       if (op.type !== 'slot') return fail(i, 'wrong-geometry', 'A recognised slot can only be cut by a Slot operation');
@@ -142,11 +143,11 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
       return;
     }
     if (g.kind === 'meshFace') {
-      if (op.type !== 'drill' && op.type !== 'pocket' && op.type !== 'engrave' && op.type !== 'vcarve') usesLoops(f, [0]);
-      if (op.type === 'pocket' || op.type === 'engrave' || op.type === 'vcarve') usesLoops(f, f.loops.keys());
-      if (op.type === 'vcarve') {
+      if (op.type !== 'drill' && op.type !== 'pocket' && op.type !== 'engrave' && op.type !== 'vcarve' && op.type !== 'vplug') usesLoops(f, [0]);
+      if (op.type === 'pocket' || op.type === 'engrave' || op.type === 'vcarve' || op.type === 'vplug') usesLoops(f, f.loops.keys());
+      if (op.type === 'vcarve' || op.type === 'vplug') {
         // spec §2.2: each recess of the face is a shape; faces at the same height inside it are islands left standing
-        if (f.loops.length < 2) return fail(i, 'no-geometry', 'This face has no recessed outlines to V-carve', 'warning');
+        if (f.loops.length < 2) return fail(i, 'no-geometry', `This face has no recessed outlines to ${op.type === 'vplug' ? 'inlay' : 'V-carve'}`, 'warning');
         faceOutlines ??= upFaceOutlines(ctx);
         for (let k = 1; k < f.loops.length; k++) {
           const outer = orientPath(f.loops[k], true);
@@ -221,7 +222,7 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
         });
       } else {
         for (const shape of nestLoops(closed, ctx.tolerance)) out.shapes.push({ shape, z: drawingZ, ref: firstRef });
-        if (open.length) fail(firstRef, 'open-contour', op.type === 'face' ? 'Facing needs closed areas' : op.type === 'vcarve' ? 'V-carve needs closed outlines' : 'Pockets need closed contours; open chains are skipped');
+        if (open.length) fail(firstRef, 'open-contour', op.type === 'face' ? 'Facing needs closed areas' : op.type === 'vcarve' || op.type === 'vplug' ? `${carveName} needs closed outlines` : 'Pockets need closed contours; open chains are skipped');
       }
     }
   }

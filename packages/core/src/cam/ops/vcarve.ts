@@ -3,6 +3,7 @@ import { flattenPath, orientPath, polyArea } from '../../geometry/offset/pathOps
 import type { Vec2 } from '../../geometry/path2d';
 import type { Tool } from '../../tools/types';
 import type { CamContext } from '../context';
+import { floorResidue, linkedClearingTools, residuePasses } from '../inlay/residue';
 import type { Shape } from '../features/chain';
 import type { ResolvedGeometry } from '../features/resolve';
 import { resolveHeights, type ResolvedHeights } from '../heights';
@@ -13,12 +14,14 @@ import { type Stroke, vcarveStrokes } from '../vcarve/strokes';
 import { emptyOverlays, type OpOutput } from './output';
 import { MoveWriter } from './writer';
 
+/** A polygon wound counter-clockwise (`ccw`) or clockwise. */
+export const orientPoly = (poly: Vec2[], ccw: boolean): Vec2[] => ((polyArea(poly) > 0) === ccw ? poly : [...poly].reverse());
+
 /** A shape as flattened polygons (within `tol / 4`): the outline counter-clockwise, the islands clockwise. */
 export function shapePolys(shape: Shape, tol: number): Vec2[][] {
-  const orient = (poly: Vec2[], ccw: boolean) => ((polyArea(poly) > 0) === ccw ? poly : [...poly].reverse());
   return [
-    orient(flattenPath(orientPath(shape.outer, true), tol / 4), true),
-    ...shape.islands.map((i) => orient(flattenPath(orientPath(i, false), tol / 4), false)),
+    orientPoly(flattenPath(orientPath(shape.outer, true), tol / 4), true),
+    ...shape.islands.map((i) => orientPoly(flattenPath(orientPath(i, false), tol / 4), false)),
   ];
 }
 
@@ -50,6 +53,8 @@ export function vcarveToolpath(op: VCarveOp, tool: Tool, ctx: CamContext, geo: R
   let clearance = -Infinity;
   let deepest = 0;
   let hasFlat = false;
+  // an inlay pocket's floor must be flat to within the glue gap: the V-bit cleans what its clearing tools can't reach
+  const cleanup = op.inlay && op.maxDepth !== null && op.inlay.glueGap > 0 ? linkedClearingTools(ctx.job, op.id) : [];
 
   for (const sh of geo.shapes) {
     const hr = resolveHeights(op.heights, ctx, { contourZ: sh.z, holeBottom: null, faceZ: geo.faceZ });
@@ -66,11 +71,15 @@ export function vcarveToolpath(op: VCarveOp, tool: Tool, ctx: CamContext, geo: R
     const flat = op.maxDepth === null ? [] : flatAreas(polys, R, tol);
     if (flat.length) hasFlat = true;
     const strokes = vcarveStrokes(g, { top: h.top, tanHalf, maxDepth: op.maxDepth, spacing: s, tol, flatLoops: flat, outline: polys });
+    if (cleanup.length && flat.length) {
+      // every floor point the clearing leaves is within g·t of a pass at max depth, so it is cut at least D − g deep
+      strokes.push(...residuePasses(floorResidue(flat, cleanup, tol), h.top - (op.maxDepth as number), op.inlay!.glueGap * tanHalf, tol));
+    }
     let shapeDeepest = 0;
     for (const st of strokes) for (const p of st.points) shapeDeepest = Math.max(shapeDeepest, h.top - p.z);
     deepest = Math.max(deepest, shapeDeepest);
     if (shapeDeepest <= EPS) continue; // the deepest point is at the surface: nothing to cut
-    emitShape(w, strokes, h, shapeDeepest, op.stepdown, 2 * s, feed, plunge);
+    emitStrokes(w, strokes, h, shapeDeepest, op.stepdown, 2 * s, feed, plunge);
   }
 
   if (deepest > tool.fluteLength + EPS) diag('warning', 'flute-exceeded', `V-carve depth reaches ${deepest.toFixed(2)} mm, beyond the bit's ${tool.fluteLength.toFixed(2)} mm cutting length`);
@@ -83,8 +92,8 @@ export function vcarveToolpath(op: VCarveOp, tool: Tool, ctx: CamContext, geo: R
   return out;
 }
 
-/** One shape's strokes, in depth passes of at most `stepdown` each, each pass visiting the strokes nearest-first. */
-function emitShape(w: MoveWriter, strokes: Stroke[], h: ResolvedHeights, deepest: number, stepdown: number | null, link: number, feed: number, plunge: number): void {
+/** One shape's (or plug's) strokes, in depth passes of at most `stepdown` each, each pass visiting the strokes nearest-first. */
+export function emitStrokes(w: MoveWriter, strokes: Stroke[], h: ResolvedHeights, deepest: number, stepdown: number | null, link: number, feed: number, plunge: number): void {
   if (!strokes.length) return;
   const limits: number[] = [];
   if (stepdown === null || !(stepdown > 0)) limits.push(deepest);

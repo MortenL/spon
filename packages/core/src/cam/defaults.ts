@@ -2,7 +2,7 @@ import type { ModelKind } from '../import/importFile';
 import type { Tool } from '../tools/types';
 import type { Feeds, Heights, Operation, OperationType } from './types';
 
-export const OPERATION_LABELS: Readonly<Record<OperationType, string>> = { profile: 'Profile', pocket: 'Pocket', drill: 'Drill', face: 'Face', chamfer: 'Chamfer', slot: 'Slot', engrave: 'Engrave', vcarve: 'V-carve', vclear: 'V-carve clearing' };
+export const OPERATION_LABELS: Readonly<Record<OperationType, string>> = { profile: 'Profile', pocket: 'Pocket', drill: 'Drill', face: 'Face', chamfer: 'Chamfer', slot: 'Slot', engrave: 'Engrave', vcarve: 'V-carve', vclear: 'V-carve clearing', vplug: 'V-carve plug' };
 
 export function defaultHeights(type: OperationType, modelKind: ModelKind | null): Heights {
   if (type === 'chamfer') {
@@ -15,14 +15,14 @@ export function defaultHeights(type: OperationType, modelKind: ModelKind | null)
     };
   }
   const bottom =
-    type === 'engrave' || type === 'vcarve' || type === 'vclear' ? { from: 'contour' as const, offset: -1 } // unused: only `top` counts
+    type === 'engrave' || type === 'vcarve' || type === 'vclear' || type === 'vplug' ? { from: 'contour' as const, offset: -1 } // unused: only `top` counts
     : type === 'face' ? (modelKind === 'mesh' ? { from: 'modelTop' as const, offset: 0 } : { from: 'stockTop' as const, offset: 0 })
     : type === 'profile' ? { from: 'stockBottom' as const, offset: -0.2 }
     : type === 'drill' ? { from: 'holeBottom' as const, offset: 0 }
     : type === 'slot' && modelKind === 'mesh' ? { from: 'slotBottom' as const, offset: 0 }
     : modelKind === 'drawing' ? { from: 'stockTop' as const, offset: -3 } // a drawing's contours lie at the stock top
     : { from: 'contour' as const, offset: 0 };
-  const top = type === 'engrave' || type === 'vcarve' || type === 'vclear'
+  const top = type === 'engrave' || type === 'vcarve' || type === 'vclear' || type === 'vplug'
     ? { from: 'contour' as const, offset: 0 } // mesh contours and shapes sit at their face's Z
     : { from: 'stockTop' as const, offset: 0 };
   return {
@@ -80,6 +80,7 @@ export function newOperation(type: OperationType, opts: { id: string; name: stri
     return { ...base, type, depthMode: tool?.type === 'vbit' ? 'width' : 'depth', depth: 0.2, lineWidth: 0.5, stepdown: preset?.stepdown ?? 0.5 };
   }
   if (type === 'vcarve') return { ...base, type, maxDepth: null, stepdown: null };
+  if (type === 'vplug') return { ...base, type, inlayDepth: 4, startDepth: 2, glueGap: 0.5, stepdown: null };
   if (type === 'vclear') {
     return { ...base, type, sourceId: '', stepoverPct: preset?.stepoverPct ?? 40, stepdown, direction: 'climb', entry };
   }

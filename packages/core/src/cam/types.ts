@@ -2,7 +2,7 @@ import type { Vec2 } from '../geometry/path2d';
 import type { Vec3 } from '../geometry/vec3';
 
 export type Coolant = 'off' | 'flood' | 'mist';
-export type OperationType = 'profile' | 'pocket' | 'drill' | 'face' | 'chamfer' | 'slot' | 'engrave' | 'vcarve' | 'vclear';
+export type OperationType = 'profile' | 'pocket' | 'drill' | 'face' | 'chamfer' | 'slot' | 'engrave' | 'vcarve' | 'vclear' | 'vplug';
 
 /** A planar face of the mesh, in model-local (raw, pre-orientation) coordinates. */
 export interface MeshFaceRef { kind: 'meshFace'; blobId: string; seed: number; normal: Vec3; point: Vec3 }
@@ -148,10 +148,28 @@ export interface EngraveOp extends OperationBase {
   lineWidth: number;
   stepdown: number;
 }
+/** Inlay settings stored on a base V-carve (Milestone 4.4c). */
+export interface InlaySettings {
+  startDepth: number;
+  glueGap: number;
+  margin: number;
+  plugBoard: { x: number; y: number; z: number };
+  plugFileName: string;
+}
 export interface VCarveOp extends OperationBase {
   type: 'vcarve';
   /** null = no limit (the shape's own depth). */
   maxDepth: number | null;
+  /** null = one pass. */
+  stepdown: number | null;
+  inlay?: InlaySettings;
+}
+/** The V-carve plug of an inlay: cut in the mirrored plug stock. */
+export interface VPlugOp extends OperationBase {
+  type: 'vplug';
+  inlayDepth: number;
+  startDepth: number;
+  glueGap: number;
   /** null = one pass. */
   stepdown: number | null;
 }
@@ -164,15 +182,15 @@ export interface VClearOp extends OperationBase {
   direction: 'climb' | 'conventional';
   entry: EntrySettings;
 }
-export type Operation = ProfileOp | PocketOp | DrillOp | FaceOp | ChamferOp | SlotOp | EngraveOp | VCarveOp | VClearOp;
+export type Operation = ProfileOp | PocketOp | DrillOp | FaceOp | ChamferOp | SlotOp | EngraveOp | VCarveOp | VClearOp | VPlugOp;
 
 type FieldsOf<T> = T extends unknown ? Omit<T, 'id' | 'type'> : never;
 /** The type of field K over every operation type that has it (a union where the types differ). */
 type FieldValue<K extends PropertyKey> = FieldsOf<Operation> extends infer F ? (F extends unknown ? (K extends keyof F ? F[K] : never) : never) : never;
-type AllKeys = keyof (FieldsOf<ProfileOp> & FieldsOf<PocketOp> & FieldsOf<DrillOp> & FieldsOf<FaceOp> & FieldsOf<ChamferOp> & FieldsOf<SlotOp> & FieldsOf<EngraveOp> & FieldsOf<VCarveOp> & FieldsOf<VClearOp>);
+type AllKeys = keyof (FieldsOf<ProfileOp> & FieldsOf<PocketOp> & FieldsOf<DrillOp> & FieldsOf<FaceOp> & FieldsOf<ChamferOp> & FieldsOf<SlotOp> & FieldsOf<EngraveOp> & FieldsOf<VCarveOp> & FieldsOf<VClearOp> & FieldsOf<VPlugOp>);
 /** Any operation field; object-valued fields are merged one level deep. */
 export type OperationPatch = {
-  [K in AllKeys]?: K extends 'heights' ? Partial<Heights> : K extends 'feeds' | 'entry' | 'leads' | 'tabs' | 'trochoidal' ? Partial<FieldValue<K>> : FieldValue<K>;
+  [K in AllKeys]?: K extends 'heights' ? Partial<Heights> : K extends 'feeds' | 'entry' | 'leads' | 'tabs' | 'trochoidal' ? Partial<FieldValue<K>> : K extends 'inlay' ? FieldValue<K> | null : FieldValue<K>;
 };
 
 // ── toolpaths ────────────────────────────────────────────────────────────
@@ -205,7 +223,8 @@ export type CamCode =
   | 'tab-skipped' | 'stepdown-exceeds-flute' | 'feed-exceeds-machine' | 'tool-number-duplicate' | 'bend-rounded' | 'gouge' | 'facing-depth' | 'wrong-tool'
   | 'slot-width-mismatch' | 'slot-too-narrow' | 'slot-ends-unset' | 'slot-overcut' | 'wrong-geometry'
   | 'flute-exceeded' | 'vcarve-uncleared' | 'source-missing' | 'source-incomplete' | 'internal'
-  | 'font-unreadable' | 'font-missing' | 'text-empty' | 'text-missing-glyphs' | 'text-fit' | 'text-arc' | 'text-no-stock' | 'text-single-line';
+  | 'font-unreadable' | 'font-missing' | 'text-empty' | 'text-missing-glyphs' | 'text-fit' | 'text-arc' | 'text-no-stock' | 'text-single-line'
+  | 'inlay-settings' | 'plug-board-thin' | 'plug-board-small';
 export interface CamDiagnostic {
   operationId: string;
   severity: CamSeverity;

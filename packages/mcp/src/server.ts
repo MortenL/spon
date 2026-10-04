@@ -3,6 +3,7 @@ import { createContext, type ServerDeps } from './context';
 import { INSTRUCTIONS } from './instructions';
 import { registerResources } from './resources';
 import { registerEditTools } from './tools/edit';
+import { registerInlayTools } from './tools/inlay';
 import { registerLibraryTools } from './tools/library';
 import { registerOutputTools } from './tools/output';
 import { registerSessionTools } from './tools/session';
@@ -17,6 +18,7 @@ export function createSponServer(deps: ServerDeps): McpServer {
   registerSessionTools(server, ctx);
   registerEditTools(server, ctx);
   registerTextTools(server, ctx);
+  registerInlayTools(server, ctx);
   registerOutputTools(server, ctx);
   registerLibraryTools(server, ctx);
   registerResources(server, ctx);

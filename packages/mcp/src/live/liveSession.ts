@@ -32,6 +32,10 @@ export class LiveSession implements JobSession {
     return this.tab.request('job', {});
   }
 
+  async spon(): Promise<Uint8Array> {
+    return fromBase64((await this.tab.request('saveBytes', {})).bytes);
+  }
+
   apply(commands: readonly JobCommand[], label?: string): Promise<Job> {
     return this.tab.request('apply', { commands: [...commands], label: label ?? `${commands.length} change(s)` });
   }

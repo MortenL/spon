@@ -4,7 +4,7 @@ import { z } from 'zod';
 export const vec3Schema = z.strictObject({ x: z.number(), y: z.number(), z: z.number() });
 const vec3Partial = vec3Schema.partial();
 export const lengthUnitSchema = z.enum(['mm', 'in']);
-export const operationTypeSchema = z.enum(['profile', 'pocket', 'drill', 'face', 'chamfer', 'slot', 'engrave', 'vcarve', 'vclear']);
+export const operationTypeSchema = z.enum(['profile', 'pocket', 'drill', 'face', 'chamfer', 'slot', 'engrave', 'vcarve', 'vclear', 'vplug']);
 export const dialectSchema = z.enum(['grbl', 'linuxcnc', 'fanuc']);
 export const machinePresetSchema = z.enum(['Hobby GRBL router', 'Generic VMC']);
 const delta = z.union([z.literal(-1), z.literal(1)]);
@@ -92,6 +92,13 @@ export const operationPatchSchema = z.strictObject({
   lineWidth: z.number(),
   maxDepth: z.number().nullable(),
   sourceId: z.string(),
+  inlayDepth: z.number(),
+  startDepth: z.number(),
+  glueGap: z.number(),
+  inlay: z.strictObject({
+    startDepth: z.number(), glueGap: z.number(), margin: z.number(),
+    plugBoard: z.strictObject({ x: z.number(), y: z.number(), z: z.number() }), plugFileName: z.string(),
+  }).nullable(),
 }).partial();
 
 const presetSchema = z.strictObject({

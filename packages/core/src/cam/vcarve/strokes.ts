@@ -6,8 +6,8 @@ export interface Stroke { points: StrokePoint[]; closed: boolean }
 
 /** Spec §3.4–3.6: depths, max-depth clipping, the flat-area loops, and the graph walked into strokes. */
 export function vcarveStrokes(g: MedialGraph, o: { top: number; tanHalf: number; maxDepth: number | null; spacing: number; tol: number; flatLoops: Vec2[][]; outline?: Vec2[][] }): Stroke[] {
-  const dist = o.outline ? outlineDistance(o.outline, 4 * o.spacing) : null;
   const R = o.maxDepth === null ? Infinity : o.maxDepth * o.tanHalf;
+  const dist = o.outline ? outlineDistance(o.outline, 4 * o.spacing, 3 * R) : null;
   const zAt = (r: number) => o.top - Math.min(r, R) / o.tanHalf;
   const nodeCache = new Map<number, number>();
   const nodeR = (i: number) => {
@@ -86,8 +86,12 @@ export function vcarveStrokes(g: MedialGraph, o: { top: number; tanHalf: number;
   });
 }
 
-/** Distance from a point to the nearest outline segment, through a grid of segments (expanding ring search). */
-export function outlineDistance(polys: Vec2[][], minCell: number): (x: number, y: number) => number {
+/**
+ * Distance from a point to the nearest outline segment, through a grid of segments (expanding ring search).
+ * A point farther than `cap` from the outline's bounding box returns its box distance (a lower bound above `cap`) without searching,
+ * so far-away graph nodes (the plug's Delaunay hull circumcentres) cost nothing.
+ */
+export function outlineDistance(polys: Vec2[][], minCell: number, cap = Infinity): (x: number, y: number) => number {
   // about one segment per cell on average, so long straight outlines get big cells and a ring search stays short
   let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity, n = 0;
   for (const poly of polys) for (const p of poly) { bx0 = Math.min(bx0, p.x); by0 = Math.min(by0, p.y); bx1 = Math.max(bx1, p.x); by1 = Math.max(by1, p.y); n++; }
@@ -118,6 +122,8 @@ export function outlineDistance(polys: Vec2[][], minCell: number): (x: number, y
   };
   const maxRing = Math.max(x1 - x0, y1 - y0) + 2;
   return (x, y) => {
+    const box = Math.hypot(Math.max(bx0 - x, 0, x - bx1), Math.max(by0 - y, 0, y - by1));
+    if (box > cap) return box;
     const cx = Math.floor(x / cell), cy = Math.floor(y / cell);
     let best = Infinity;
     for (let ring = 0; ring <= maxRing + Math.max(Math.abs(cx - x0), Math.abs(cx - x1), Math.abs(cy - y0), Math.abs(cy - y1)); ring++) {

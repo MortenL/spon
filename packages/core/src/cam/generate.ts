@@ -12,6 +12,7 @@ import { pocketToolpath } from './ops/pocket';
 import { profileToolpath } from './ops/profile';
 import { slotToolpath } from './ops/slot';
 import { vcarveToolpath } from './ops/vcarve';
+import { vplugToolpath } from './ops/vplug';
 import { vclearToolpath } from './ops/vclear';
 import type { CamDiagnostic, Operation } from './types';
 
@@ -46,12 +47,15 @@ function textKeys(op: Operation, job: Job, fonts: FontSet): unknown[] {
 }
 
 export function operationKey(op: Operation, job: Job, fonts: FontSet = EMPTY_FONTS): string {
-  // a clearing depends on its source operation and that operation's tool; a V-carve's warning on whether an enabled clearing exists
+  // a clearing depends on its source operation and that operation's tool; a V-carve or plug on its enabled clearings and their tools
   let extra: unknown = null;
   if (op.type === 'vclear') {
     const src = job.operations.find((o) => o.id === op.sourceId) ?? null;
     extra = [src, src ? job.tools.find((t) => t.id === src.toolId) ?? null : null];
-  } else if (op.type === 'vcarve') extra = job.operations.some((o) => o.enabled && o.type === 'vclear' && o.sourceId === op.id);
+  } else if (op.type === 'vcarve' || op.type === 'vplug') {
+    // whether an enabled clearing exists, and its tool: an inlay's V-bit cleans the floor that tool can't reach
+    extra = job.operations.filter((o) => o.enabled && o.type === 'vclear' && o.sourceId === op.id).map((o) => job.tools.find((t) => t.id === o.toolId) ?? null);
+  }
   // a picked text (and the state of its font) changes the geometry; a clearing also depends on its source's texts
   const texts = textKeys(op, job, fonts);
   if (op.type === 'vclear') {
@@ -78,7 +82,8 @@ export function generateOperation(op: Operation, ctx: CamContext): OperationResu
     // a V-carve clearing builds its own geometry from its source operation
     const geo = op.type === 'vclear' ? emptyGeometry() : resolveGeometry(op.type === 'face' && op.area === 'stock' ? { ...op, geometry: [] } : op, ctx);
     const res =
-      op.type === 'vclear' ? vclearToolpath(op, tool, ctx)
+      op.type === 'vplug' ? vplugToolpath(op, tool, ctx, geo)
+      : op.type === 'vclear' ? vclearToolpath(op, tool, ctx)
       : op.type === 'profile' ? profileToolpath(op, tool, ctx, geo)
       : op.type === 'pocket' ? pocketToolpath(op, tool, ctx, geo)
       : op.type === 'drill' ? drillToolpath(op, tool, ctx, geo)
@@ -89,7 +94,7 @@ export function generateOperation(op: Operation, ctx: CamContext): OperationResu
       : chamferToolpath(op, tool, ctx, geo);
     const diagnostics: CamDiagnostic[] = [...geo.diagnostics, ...res.diagnostics];
     const warn = (code: CamDiagnostic['code'], message: string) => diagnostics.push({ operationId: op.id, severity: 'warning', code, message });
-    if (op.type !== 'drill' && op.type !== 'engrave' && (op.type as string) !== 'vcarve' && (op.type as string) !== 'vclear' && typeof op.stepdown === 'number' && !(op.type === 'slot' && op.strategy === 'trochoidal') && op.stepdown > tool.fluteLength) warn('stepdown-exceeds-flute', `Stepdown ${op.stepdown} mm is deeper than the ${tool.fluteLength} mm flutes`);
+    if (op.type !== 'drill' && op.type !== 'engrave' && (op.type as string) !== 'vcarve' && (op.type as string) !== 'vclear' && op.type !== 'vplug' && typeof op.stepdown === 'number' && !(op.type === 'slot' && op.strategy === 'trochoidal') && op.stepdown > tool.fluteLength) warn('stepdown-exceeds-flute', `Stepdown ${op.stepdown} mm is deeper than the ${tool.fluteLength} mm flutes`);
     const maxFeed = op.type === 'drill' ? op.feeds.plungeFeed : op.feeds.feed;
     if (maxFeed > ctx.job.machine.maxFeed) warn('feed-exceeds-machine', `Feed ${maxFeed} mm/min is above the machine maximum of ${ctx.job.machine.maxFeed}`);
     // a gouge keeps its toolpath, so the user can see where it cuts into the model

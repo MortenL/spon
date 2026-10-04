@@ -35,7 +35,7 @@ export function HeightsTab({ op }: { op: Operation }) {
             patch: { heights: { [name]: { from: spec.from, offset: spec.offset, ...(spec.face ? { face: spec.face } : {}), ...patch } } },
           });
 
-        if (name === 'bottom' && (op.type === 'engrave' || op.type === 'vcarve' || op.type === 'vclear')) return null;
+        if (name === 'bottom' && (op.type === 'engrave' || op.type === 'vcarve' || op.type === 'vclear' || op.type === 'vplug')) return null;
         if (name === 'top' && op.type === 'vclear') return null;
 
         if (op.type === 'chamfer' && name === 'bottom') {
