@@ -1,5 +1,5 @@
 import {
-  alignEdgeToX, camContext, faceRefFromTriangle, faceRegion, type LengthUnit, layFlat, nearestTriangleEdge, regionNormal, resolveFaceRef, unitScale, type Vec3,
+  alignEdgeToX, camContext, describeGeometry, faceRefFromTriangle, firstPickLength, faceRegion, type LengthUnit, layFlat, nearestTriangleEdge, regionNormal, resolveFaceRef, unitScale, type Vec3,
 } from '@sponcam/core';
 import { Edges, Line } from '@react-three/drei';
 import type { ThreeEvent } from '@react-three/fiber';
@@ -109,7 +109,8 @@ function ModelMesh({ geometry, importUnits }: { geometry: MeshGeometry; importUn
         return;
       }
       if (camPick.target === 'geometry') {
-        runCommand({ type: 'updateOperation', id: op.id, patch: { geometry: applyPick(op, res.refs) } });
+        const geometryRefs = applyPick(op, res.refs);
+        runCommand({ type: 'updateOperation', id: op.id, patch: { geometry: geometryRefs, ...firstPickLength(op, describeGeometry(job, geometry), geometryRefs) } });
         return;
       }
       const face = res.refs[0];

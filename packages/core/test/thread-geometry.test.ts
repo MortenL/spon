@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { applyCommand, camContext, type CamGeometry, describeGeometry, importFile, type Job, resolveGeometry, setModel, createJob, setStock, type GeometryRef } from '../src';
+import { applyCommand, camContext, defaultThreadLength, firstPickLength, type CamGeometry, describeGeometry, importFile, type Job, resolveGeometry, setModel, createJob, setStock, type GeometryRef } from '../src';
 import { camPartSetup } from './fixtures/camSetup';
 import { terracedSetup } from './fixtures/slotSetup';
 import { rectPts } from './fixtures/terraced.mjs';
@@ -81,5 +81,26 @@ describe('a meshBoss needs walls that drop', () => {
     const r = threadOp(s.job, s.geometry, 'external', [{ kind: 'meshBoss', face: floor.ref }]);
     expect(r.bosses).toHaveLength(0);
     expect(r.diagnostics).toMatchObject([{ severity: 'error', code: 'ref-changed' }]);
+  });
+});
+
+describe('default thread length', () => {
+  const { job, geometry } = threadPlate();
+  const cat = describeGeometry(job, geometry);
+  const op = (length: number, geometryRefs: GeometryRef[] = []) => {
+    let j = applyCommand(job, { type: 'addOperation', opType: 'thread', toolId: null, id: 't' });
+    if (geometryRefs.length) j = applyCommand(j, { type: 'updateOperation', id: 't', patch: { geometry: geometryRefs } });
+    if (length !== 10) j = applyCommand(j, { type: 'updateOperation', id: 't', patch: { length } });
+    return j.operations[0];
+  };
+  it('is the boss height or the hole depth of the first pick', () => {
+    expect(defaultThreadLength(cat, [cat.bosses[0].ref])).toBeCloseTo(8, 6);
+    expect(defaultThreadLength(cat, [cat.holes[0].ref])).toBeCloseTo(10, 6);
+    expect(defaultThreadLength(cat, [])).toBeNull();
+  });
+  it('applies only to a default length on an operation without geometry', () => {
+    expect(firstPickLength(op(10), cat, [cat.bosses[0].ref])).toEqual({ length: 8 });
+    expect(firstPickLength(op(7), cat, [cat.bosses[0].ref])).toEqual({});
+    expect(firstPickLength(op(10, [cat.holes[0].ref]), cat, [cat.bosses[0].ref])).toEqual({});
   });
 });

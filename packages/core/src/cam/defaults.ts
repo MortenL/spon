@@ -5,6 +5,9 @@ import type { Feeds, Heights, Operation, OperationType } from './types';
 
 export const OPERATION_LABELS: Readonly<Record<OperationType, string>> = { profile: 'Profile', pocket: 'Pocket', drill: 'Drill', face: 'Face', chamfer: 'Chamfer', slot: 'Slot', engrave: 'Engrave', vcarve: 'V-carve', vclear: 'V-carve clearing', vplug: 'V-carve plug', thread: 'Thread' };
 
+/** The length of a new Thread operation until a hole or boss is picked (then it follows the feature). */
+export const THREAD_DEFAULT_LENGTH = 10;
+
 export function defaultHeights(type: OperationType, modelKind: ModelKind | null): Heights {
   if (type === 'chamfer') {
     return {
@@ -86,7 +89,7 @@ export function newOperation(type: OperationType, opts: { id: string; name: stri
     const m8 = threadRow('iso-coarse', 'M8')!;
     return {
       ...base, type, kind: 'internal', thread: { standard: m8.standard, size: m8.size, majorDiameter: m8.majorDiameter, pitch: m8.pitch, angle: m8.angle },
-      hand: 'right', length: 10, allowance: 0, passes: 1, springPass: false, direction: 'climb', feedCompensation: true,
+      hand: 'right', length: THREAD_DEFAULT_LENGTH, allowance: 0, passes: 1, springPass: false, direction: 'climb', feedCompensation: true,
     };
   }
   if (type === 'vclear') {

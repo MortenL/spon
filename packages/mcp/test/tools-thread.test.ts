@@ -52,4 +52,17 @@ describe('thread tools', () => {
     const gen = data(await call('generate')) as Gen;
     expect(gen.operations[0].diagnostics.map((d) => d.code)).toContain('wrong-geometry');
   });
+
+  it('starts with the length of the picked boss or hole unless one is given', async () => {
+    const { call } = await connect({}, ['thread-plate.stl']);
+    await call('new_job');
+    await call('import_model', { path: 'thread-plate.stl', units: 'mm' });
+    await call('describe_geometry');
+    const boss = await call('add_operation', { type: 'thread', tool: 'starter-thread-sp6', geometry: ['B1'], params: { kind: 'external' } });
+    expect(data(boss).operation).toMatchObject({ length: 8 }); // the Z 18 boss on the Z 10 plate
+    const hole = await call('add_operation', { type: 'thread', tool: 'starter-thread-sp6', geometry: ['H1'] });
+    expect(data(hole).operation).toMatchObject({ length: 10 });
+    const given = await call('add_operation', { type: 'thread', tool: 'starter-thread-sp6', geometry: ['B1'], params: { kind: 'external', length: 5 } });
+    expect(data(given).operation).toMatchObject({ length: 5 });
+  });
 });

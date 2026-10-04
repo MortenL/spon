@@ -1,5 +1,5 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { type BBox, type Job, type JobCommand, OPERATION_LABELS } from '@sponcam/core';
+import { type BBox, defaultThreadLength, type GeometryRef, type Job, type JobCommand, OPERATION_LABELS } from '@sponcam/core';
 import { z } from 'zod';
 import type { ToolContext } from '../context';
 import { catalogText, type HandledCatalog } from '../handles';
@@ -51,6 +51,14 @@ const addOperationShape = {
   name: z.string().optional(),
 };
 
+/** A Thread operation without a length of its own starts as long as the first picked hole is deep or boss is tall. */
+async function fillThreadLength(commands: JobCommand[], id: string, a: Args<typeof addOperationShape>, refs: GeometryRef[], session: JobSession): Promise<void> {
+  if (a.type !== 'thread' || (a.params as { length?: unknown } | undefined)?.length !== undefined) return;
+  const catalog = await session.catalog();
+  const length = catalog ? defaultThreadLength(catalog, refs) : null;
+  if (length !== null) commands.push({ type: 'updateOperation', id, patch: { length } as never });
+}
+
 export function registerEditTools(server: McpServer, ctx: ToolContext): void {
   const { state } = ctx;
 
@@ -99,6 +107,7 @@ export function registerEditTools(server: McpServer, ctx: ToolContext): void {
       { type: 'addOperation', opType: a.type, toolId, id, ...(a.name ? { name: a.name } : {}) },
       { type: 'updateOperation', id, patch: { ...(a.params ?? {}), geometry: refs } },
     );
+    await fillThreadLength(commands, id, a, refs, session);
     // a clearing runs before the V-carve it clears: move it up past its source in the same batch (one undo step)
     const sourceId = (a.params as { sourceId?: unknown } | undefined)?.sourceId;
     const sourceAt = a.type === 'vclear' && typeof sourceId === 'string' ? job.operations.findIndex((o) => o.id === sourceId) : -1;
