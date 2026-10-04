@@ -80,6 +80,7 @@ export function generateOperation(op: Operation, ctx: CamContext): OperationResu
     if (!op.geometry.length && op.type !== 'vclear' && !(op.type === 'face' && op.area === 'stock')) return err('no-geometry', 'Pick geometry for this operation');
     // facing the whole stock top needs no geometry; stale references are ignored
     // a V-carve clearing builds its own geometry from its source operation
+    if (op.type === 'thread') return err('internal', 'Not implemented yet');
     const geo = op.type === 'vclear' ? emptyGeometry() : resolveGeometry(op.type === 'face' && op.area === 'stock' ? { ...op, geometry: [] } : op, ctx);
     const res =
       op.type === 'vplug' ? vplugToolpath(op, tool, ctx, geo)

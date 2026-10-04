@@ -6,10 +6,10 @@ const vbit = { ...tool6, id: 'v60', number: 7, type: 'vbit' as const, tipAngleDe
 const withV = () => applyCommand(createJob(), { type: 'addTool', tool: vbit });
 
 describe('inlay job model', () => {
-  it('is schema 7 and migrates schema 6 jobs unchanged', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(7);
+  it('is schema 8 and migrates schema 6 jobs unchanged', () => {
+    expect(CURRENT_SCHEMA_VERSION).toBe(8);
     const v6 = { ...createJob(), schemaVersion: 6 };
-    expect(migrateJob(v6)).toEqual({ ...v6, schemaVersion: 7 });
+    expect(migrateJob(v6)).toEqual({ ...v6, schemaVersion: 8 });
   });
 
   it('adds a V-carve plug with defaults and validates it', () => {

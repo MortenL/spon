@@ -131,6 +131,8 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
     const r = face(faceRef);
     if (!r.ok) return fail(i, r.code, r.message);
     const f = r.face;
+    // Task 4 resolves bosses for thread operations; until then no operation can use them
+    if (g.kind === 'meshBoss') return fail(i, 'wrong-geometry', 'A boss can only be threaded');
     if (g.kind === 'meshSlot' && op.type === 'engrave') return fail(i, 'wrong-geometry', 'Engraving needs lines or outlines');
     if ((g.kind === 'meshSlot' || g.kind === 'meshHole') && (op.type === 'vcarve' || op.type === 'vplug')) return fail(i, 'wrong-geometry', `${carveName} needs outlines`);
     if (g.kind === 'meshSlot' || op.type === 'slot') {

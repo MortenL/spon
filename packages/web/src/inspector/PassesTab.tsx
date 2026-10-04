@@ -557,5 +557,6 @@ export function PassesTab({ op }: { op: Operation }) {
   if (op.type === 'vcarve') return <VCarvePasses op={op} />;
   if (op.type === 'vclear') return <VClearPasses op={op} />;
   if (op.type === 'vplug') return <VPlugPasses op={op} />;
+  if (op.type === 'thread') return null; // thread fields arrive with the Thread inspector
   return <ChamferPasses op={op} />;
 }

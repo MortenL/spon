@@ -1,6 +1,6 @@
 import { type Operation, type OperationType } from '@sponcam/core';
 import {
-  Check, Circle, CircleX, Layers, Loader2, MoreHorizontal, Scissors, SquareDashed, Triangle, TriangleAlert, RectangleHorizontal, PenLine, ChevronsDown, Eraser,
+  Check, Circle, CircleX, Layers, Loader2, MoreHorizontal, Scissors, SquareDashed, Triangle, TriangleAlert, RectangleHorizontal, PenLine, ChevronsDown, Eraser, Cog,
 } from 'lucide-react';
 import type React from 'react';
 import { useState, type ReactNode } from 'react';
@@ -15,7 +15,7 @@ import { InlayDialog } from '@/inspector/InlayDialog';
 import { formatDuration } from './format';
 import { duplicateShortcutLabel, firstProblem } from './listShortcuts';
 
-export const TYPE_ICON: Record<OperationType, typeof Scissors> = { profile: Scissors, pocket: SquareDashed, drill: Circle, face: Layers, chamfer: Triangle, slot: RectangleHorizontal, engrave: PenLine, vcarve: ChevronsDown, vclear: Eraser, vplug: Layers };
+export const TYPE_ICON: Record<OperationType, typeof Scissors> = { profile: Scissors, pocket: SquareDashed, drill: Circle, face: Layers, chamfer: Triangle, slot: RectangleHorizontal, engrave: PenLine, vcarve: ChevronsDown, vclear: Eraser, vplug: Layers, thread: Cog };
 export const OP_TYPES: readonly OperationType[] = ['profile', 'pocket', 'drill', 'face', 'chamfer', 'slot', 'engrave', 'vcarve'];
 
 /** The list actions, shared by the ⋯ menu and the keyboard shortcuts. */

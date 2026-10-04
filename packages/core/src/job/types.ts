@@ -70,7 +70,7 @@ export interface ProgramRef {
 
 /** All lengths in mm, angles in degrees. */
 export interface Job {
-  schemaVersion: 7;
+  schemaVersion: 8;
   id: string;
   name: string;
   displayUnits: LengthUnit;

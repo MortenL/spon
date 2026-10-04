@@ -23,6 +23,7 @@ const PICK_HINT: Record<OperationType, string> = {
   engrave: 'Click paths, or edges and edge loops of the model',
   vcarve: 'Click closed paths, or faces and edge loops of the model',
   vclear: 'Clearing takes its outlines from the V-carve it clears',
+  thread: 'Click round holes (internal) or round bosses (external)',
   vplug: 'The plug takes its outlines from the V-carve it was made from',
 };
 

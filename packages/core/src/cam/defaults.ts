@@ -1,8 +1,9 @@
 import type { ModelKind } from '../import/importFile';
+import { threadRow } from '../thread/table';
 import type { Tool } from '../tools/types';
 import type { Feeds, Heights, Operation, OperationType } from './types';
 
-export const OPERATION_LABELS: Readonly<Record<OperationType, string>> = { profile: 'Profile', pocket: 'Pocket', drill: 'Drill', face: 'Face', chamfer: 'Chamfer', slot: 'Slot', engrave: 'Engrave', vcarve: 'V-carve', vclear: 'V-carve clearing', vplug: 'V-carve plug' };
+export const OPERATION_LABELS: Readonly<Record<OperationType, string>> = { profile: 'Profile', pocket: 'Pocket', drill: 'Drill', face: 'Face', chamfer: 'Chamfer', slot: 'Slot', engrave: 'Engrave', vcarve: 'V-carve', vclear: 'V-carve clearing', vplug: 'V-carve plug', thread: 'Thread' };
 
 export function defaultHeights(type: OperationType, modelKind: ModelKind | null): Heights {
   if (type === 'chamfer') {
@@ -81,6 +82,13 @@ export function newOperation(type: OperationType, opts: { id: string; name: stri
   }
   if (type === 'vcarve') return { ...base, type, maxDepth: null, stepdown: null };
   if (type === 'vplug') return { ...base, type, inlayDepth: 4, startDepth: 2, glueGap: 0.5, stepdown: null };
+  if (type === 'thread') {
+    const m8 = threadRow('iso-coarse', 'M8')!;
+    return {
+      ...base, type, kind: 'internal', thread: { standard: m8.standard, size: m8.size, majorDiameter: m8.majorDiameter, pitch: m8.pitch, angle: m8.angle },
+      hand: 'right', length: 10, allowance: 0, passes: 1, springPass: false, direction: 'climb', feedCompensation: true,
+    };
+  }
   if (type === 'vclear') {
     return { ...base, type, sourceId: '', stepoverPct: preset?.stepoverPct ?? 40, stepdown, direction: 'climb', entry };
   }

@@ -143,7 +143,7 @@ function refLoops(ctx: CamContext, ref: GeometryRef): Point3[][] {
   if (!res.ok) return [];
   const { face } = res;
   if (ref.kind === 'meshFace') return face.loops.map((loop) => closedLoopPoints(loop, face.z));
-  const loop = face.loops[ref.loop];
+  const loop = face.loops[ref.kind === 'meshBoss' ? 0 : ref.loop];
   if (!loop) return [];
   if (ref.kind === 'meshHole') {
     const circle = face.circles[ref.loop];

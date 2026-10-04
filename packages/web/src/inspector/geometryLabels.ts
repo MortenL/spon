@@ -8,6 +8,7 @@ export function sameRef(a: GeometryRef, b: GeometryRef): boolean {
   if (a.kind === 'meshFace' && b.kind === 'meshFace') return sameFace(a, b);
   if ((a.kind === 'meshLoop' || a.kind === 'meshHole') && (b.kind === 'meshLoop' || b.kind === 'meshHole')) return sameFace(a.face, b.face) && a.loop === b.loop;
   if (a.kind === 'text' && b.kind === 'text') return a.textId === b.textId;
+  if (a.kind === 'meshBoss' && b.kind === 'meshBoss') return sameFace(a.face, b.face);
   if (a.kind === 'meshSlot' && b.kind === 'meshSlot') return sameFace(a.face, b.face) && a.loop === b.loop;
   return false;
 }
@@ -23,6 +24,12 @@ export function refLabel(ref: GeometryRef, catalog: GeometryCatalog | null, laye
   if (ref.kind === 'text') {
     const t = texts.find((x) => x.id === ref.textId);
     return t ? `Text: ${t.name}` : 'Text (deleted)';
+  }
+  if (ref.kind === 'meshBoss') {
+    const boss = catalog?.faces.find((f) => sameFace(f.ref, ref.face));
+    if (!boss) return 'Boss (not found)';
+    const circle = boss.loops[0]?.circle;
+    return circle ? `Boss Ø${L(circle.diameter)}` : 'Boss';
   }
   if (ref.kind === 'meshSlot') {
     const slot = catalog?.slots.find((s) => sameRef(s.ref, ref));

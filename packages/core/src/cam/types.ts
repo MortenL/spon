@@ -1,8 +1,9 @@
 import type { Vec2 } from '../geometry/path2d';
 import type { Vec3 } from '../geometry/vec3';
+import type { ThreadSpec } from '../thread/table';
 
 export type Coolant = 'off' | 'flood' | 'mist';
-export type OperationType = 'profile' | 'pocket' | 'drill' | 'face' | 'chamfer' | 'slot' | 'engrave' | 'vcarve' | 'vclear' | 'vplug';
+export type OperationType = 'profile' | 'pocket' | 'drill' | 'face' | 'chamfer' | 'slot' | 'engrave' | 'vcarve' | 'vclear' | 'vplug' | 'thread';
 
 /** A planar face of the mesh, in model-local (raw, pre-orientation) coordinates. */
 export interface MeshFaceRef { kind: 'meshFace'; blobId: string; seed: number; normal: Vec3; point: Vec3 }
@@ -17,7 +18,9 @@ export type SlotEnd = 'round' | 'square' | 'open';
 export interface MeshSlotRef { kind: 'meshSlot'; face: MeshFaceRef; loop?: number }
 /** A text item of the job (outline or single-line letters). */
 export interface TextRef { kind: 'text'; textId: string }
-export type GeometryRef = DxfPathRef | MeshFaceRef | MeshLoopRef | MeshHoleRef | MeshSlotRef | TextRef;
+/** A round boss (outer cylinder) of the mesh, for external threads: one boundary loop of a face. */
+export interface MeshBossRef { kind: 'meshBoss'; face: MeshFaceRef }
+export type GeometryRef = DxfPathRef | MeshFaceRef | MeshLoopRef | MeshHoleRef | MeshSlotRef | MeshBossRef | TextRef;
 
 export type HeightFrom =
   | 'stockTop' | 'stockBottom' | 'modelTop' | 'modelBottom' | 'contour' | 'face' | 'origin' | 'holeBottom' | 'slotBottom'
@@ -182,12 +185,27 @@ export interface VClearOp extends OperationBase {
   direction: 'climb' | 'conventional';
   entry: EntrySettings;
 }
-export type Operation = ProfileOp | PocketOp | DrillOp | FaceOp | ChamferOp | SlotOp | EngraveOp | VCarveOp | VClearOp | VPlugOp;
+/** Thread milling of a round hole (internal) or boss (external). */
+export interface ThreadOp extends OperationBase {
+  type: 'thread';
+  kind: 'internal' | 'external';
+  thread: ThreadSpec;
+  hand: 'right' | 'left';
+  /** Threaded length along the axis. */
+  length: number;
+  /** Radial allowance (positive leaves material). */
+  allowance: number;
+  passes: number;
+  springPass: boolean;
+  direction: 'climb' | 'conventional';
+  feedCompensation: boolean;
+}
+export type Operation = ProfileOp | PocketOp | DrillOp | FaceOp | ChamferOp | SlotOp | EngraveOp | VCarveOp | VClearOp | VPlugOp | ThreadOp;
 
 type FieldsOf<T> = T extends unknown ? Omit<T, 'id' | 'type'> : never;
 /** The type of field K over every operation type that has it (a union where the types differ). */
 type FieldValue<K extends PropertyKey> = FieldsOf<Operation> extends infer F ? (F extends unknown ? (K extends keyof F ? F[K] : never) : never) : never;
-type AllKeys = keyof (FieldsOf<ProfileOp> & FieldsOf<PocketOp> & FieldsOf<DrillOp> & FieldsOf<FaceOp> & FieldsOf<ChamferOp> & FieldsOf<SlotOp> & FieldsOf<EngraveOp> & FieldsOf<VCarveOp> & FieldsOf<VClearOp> & FieldsOf<VPlugOp>);
+type AllKeys = keyof (FieldsOf<ProfileOp> & FieldsOf<PocketOp> & FieldsOf<DrillOp> & FieldsOf<FaceOp> & FieldsOf<ChamferOp> & FieldsOf<SlotOp> & FieldsOf<EngraveOp> & FieldsOf<VCarveOp> & FieldsOf<VClearOp> & FieldsOf<VPlugOp> & FieldsOf<ThreadOp>);
 /** Any operation field; object-valued fields are merged one level deep. */
 export type OperationPatch = {
   [K in AllKeys]?: K extends 'heights' ? Partial<Heights> : K extends 'feeds' | 'entry' | 'leads' | 'tabs' | 'trochoidal' ? Partial<FieldValue<K>> : K extends 'inlay' ? FieldValue<K> | null : FieldValue<K>;
@@ -224,7 +242,8 @@ export type CamCode =
   | 'slot-width-mismatch' | 'slot-too-narrow' | 'slot-ends-unset' | 'slot-overcut' | 'wrong-geometry'
   | 'flute-exceeded' | 'vcarve-uncleared' | 'source-missing' | 'source-incomplete' | 'internal'
   | 'font-unreadable' | 'font-missing' | 'text-empty' | 'text-missing-glyphs' | 'text-fit' | 'text-arc' | 'text-no-stock' | 'text-single-line'
-  | 'inlay-settings' | 'plug-board-thin' | 'plug-board-small';
+  | 'inlay-settings' | 'plug-board-thin' | 'plug-board-small'
+  | 'thread-angle' | 'thread-pitch' | 'tool-too-big' | 'thread-neck' | 'thread-reach' | 'thread-too-deep' | 'hole-small' | 'hole-large' | 'boss-size';
 export interface CamDiagnostic {
   operationId: string;
   severity: CamSeverity;
