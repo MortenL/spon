@@ -28,7 +28,7 @@ describe('thread mill tools', () => {
     const lib = starterLibrary();
     const sp6 = lib.find((t) => t.id === 'starter-thread-sp6')!;
     const m8 = lib.find((t) => t.id === 'starter-thread-m8')!;
-    expect(sp6).toMatchObject({ name: 'Thread mill 60° single-point 6 mm', type: 'threadmill', diameter: 6, tipAngleDeg: 60, thread: { neckDiameter: 4.5, neckLength: 20, pitch: null, teeth: 1 } });
+    expect(sp6).toMatchObject({ name: 'Thread mill 60° single-point 6 mm', type: 'threadmill', diameter: 6, tipAngleDeg: 60, thread: { neckDiameter: 2.8, neckLength: 20, pitch: null, teeth: 1 } });
     expect(m8).toMatchObject({ name: 'Thread mill M8×1.25 multi-tooth', type: 'threadmill', diameter: 6.2, tipAngleDeg: 60, thread: { neckDiameter: 4.8, neckLength: 15, pitch: 1.25, teeth: 8 } });
     expect(sp6.presets).toHaveLength(4);
     expect(validateTool(sp6) && validateTool(m8)).toBe(true);

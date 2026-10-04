@@ -34,7 +34,7 @@ export function starterLibrary(): Tool[] {
     ...[3, 5, 6, 8].map((d, i) =>
       tool(`starter-drill-${d}`, `${d} mm drill`, 'drill', 7 + i, d, { tipAngleDeg: 118, fluteLength: [20, 30, 35, 40][i], stickout: [30, 40, 45, 50][i] }, drill(d))),
     tool('starter-thread-sp6', 'Thread mill 60° single-point 6 mm', 'threadmill', 11, 6,
-      { tipAngleDeg: 60, fluteLength: 6, stickout: 30, flutes: 1, thread: { neckDiameter: 4.5, neckLength: 20, pitch: null, teeth: 1 } }, threadRows(6)),
+      { tipAngleDeg: 60, fluteLength: 6, stickout: 30, flutes: 1, thread: { neckDiameter: 2.8, neckLength: 20, pitch: null, teeth: 1 } }, threadRows(6)),
     tool('starter-thread-m8', 'Thread mill M8×1.25 multi-tooth', 'threadmill', 12, 6.2,
       { tipAngleDeg: 60, fluteLength: 10, stickout: 30, flutes: 3, thread: { neckDiameter: 4.8, neckLength: 15, pitch: 1.25, teeth: 8 } }, threadRows(6.2)),
   ];

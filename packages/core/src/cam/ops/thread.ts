@@ -46,7 +46,7 @@ function planOrbits(op: ThreadOp, tool: Tool, center: Vec2, radius: number, top:
   const turns = 370 / 360;
   const lo0 = bottom - P / 4;
   if (L >= op.length + P / 2 - EPS) return [mk(lo0, lo0 + P * turns, turns)];
-  const k = Math.ceil(op.length / L - EPS);
+  const k = Math.ceil((op.length + P / 2) / L - EPS); // the last orbit's teeth must still pass the P/4 above the top
   const shift = Math.floor(L / P + EPS) * P;
   return Array.from({ length: k }, (_, j) => mk(lo0 + j * shift, lo0 + j * shift + P * turns, turns));
 }
@@ -79,6 +79,27 @@ function emitOrbit(w: MoveWriter, h: HelixPlan, feed: number): void {
 function orbitEnd(h: HelixPlan): { angle: number; point: Vec2 } {
   const angle = (h.ccw ? 1 : -1) * h.turns * 2 * Math.PI;
   return { angle, point: { x: h.center.x + h.radius * Math.cos(angle), y: h.center.y + h.radius * Math.sin(angle) } };
+}
+
+/**
+ * An external orbit with its approach: plunge at `rOut` from the axis, a tangent S-curve in to the orbit radius (opposite in sense
+ * to the orbit), the helix, and the mirrored exit back out to `rOut`.
+ */
+function externalOrbit(w: MoveWriter, h: HelixPlan, rOut: number, plungeFeed: number, feed: number, moveTo: (xy: Vec2) => void): void {
+  const c = h.center;
+  const rho = Math.max(0, (rOut - h.radius) / 2);
+  const s: Vec2 = { x: c.x + rOut, y: c.y };
+  moveTo(s);
+  if (Math.abs(w.pos!.z - h.zStart) > EPS) w.line(p3(s.x, s.y, h.zStart), plungeFeed);
+  const into = p3(c.x + h.radius, c.y, h.zStart);
+  if (rho > 1e-6) w.arc(into, { x: c.x + h.radius + rho, y: c.y }, !h.ccw, feed);
+  else w.line(into, feed);
+  emitOrbit(w, h, feed);
+  const e = orbitEnd(h);
+  const ux = Math.cos(e.angle), uy = Math.sin(e.angle);
+  const out = p3(c.x + rOut * ux, c.y + rOut * uy, h.zEnd);
+  if (rho > 1e-6) w.arc(out, { x: e.point.x + rho * ux, y: e.point.y + rho * uy }, !h.ccw, feed);
+  else w.line(out, feed);
 }
 
 const fmt = (x: number) => x.toFixed(2);
@@ -170,7 +191,8 @@ export function threadToolpath(op: ThreadOp, tool: Tool, ctx: CamContext, geo: R
       if (!w.pos) w.travel(xy, v.clearance, v.retract);
       else if (Math.hypot(w.pos.x - xy.x, w.pos.y - xy.y) > EPS) w.travel(xy, Math.max(w.pos.z, safe), v.retract);
     };
-    for (const r of passRadii(start, rFinal, op.passes, op.springPass)) {
+    const radii = passRadii(start, rFinal, op.passes, op.springPass);
+    for (const r of radii) {
       const feed = op.feeds.feed * (op.feedCompensation ? r / refRadius : 1);
       for (const h of planOrbits(op, tool, c, r, f.top)) {
         if (internal) {
@@ -184,28 +206,19 @@ export function threadToolpath(op: ThreadOp, tool: Tool, ctx: CamContext, geo: R
             w.arc(p3(c.x, c.y, h.zEnd), { x: (e.point.x + c.x) / 2, y: (e.point.y + c.y) / 2 }, h.ccw, feed);
           }
         } else {
-          const rho = (d / 2 + 2) / 2;
-          const s: Vec2 = { x: c.x + r + 2 * rho, y: c.y };
-          moveTo(s, v.retract);
-          if (Math.abs(w.pos!.z - h.zStart) > EPS) w.line(p3(s.x, s.y, h.zStart), op.feeds.plungeFeed);
-          // a tangent S-curve in and out, opposite in sense to the orbit
-          w.arc(p3(c.x + r, c.y, h.zStart), { x: c.x + r + rho, y: c.y }, !h.ccw, feed);
-          emitOrbit(w, h, feed);
-          const e = orbitEnd(h);
-          const ux = Math.cos(e.angle), uy = Math.sin(e.angle);
-          w.arc(p3(c.x + (r + 2 * rho) * ux, c.y + (r + 2 * rho) * uy, h.zEnd), { x: e.point.x + rho * ux, y: e.point.y + rho * uy }, !h.ccw, feed);
+          externalOrbit(w, h, r + d / 2 + 2, op.feeds.plungeFeed, feed, (xy) => moveTo(xy, v.retract));
         }
       }
     }
     if (!internal) {
-      // the tool at the boss surface: the same Z sweep without the radial cut
+      // the tool at the boss surface: the helix without the radial cut, but the real plunge and entry/exit arcs
       const rs = R + d / 2;
+      const rOut = Math.max(rs, ...radii) + d / 2 + 2;
       for (const h of planOrbits(op, tool, c, rs, f.top)) {
-        const s = { x: c.x + rs, y: c.y };
-        if (shadow.pos) shadow.travel(s, Math.max(shadow.pos.z, v.retract), v.retract);
-        else shadow.travel(s, v.clearance, v.retract);
-        shadow.line(p3(s.x, s.y, h.zStart), op.feeds.plungeFeed);
-        emitOrbit(shadow, h, op.feeds.feed);
+        externalOrbit(shadow, h, rOut, op.feeds.plungeFeed, op.feeds.feed, (xy) => {
+          if (!shadow.pos) shadow.travel(xy, v.clearance, v.retract);
+          else if (Math.hypot(shadow.pos.x - xy.x, shadow.pos.y - xy.y) > EPS) shadow.travel(xy, Math.max(shadow.pos.z, v.retract), v.retract);
+        });
       }
       shadow.up(v.clearance);
     }

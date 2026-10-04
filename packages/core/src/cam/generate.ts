@@ -99,7 +99,9 @@ export function generateOperation(op: Operation, ctx: CamContext): OperationResu
     const diagnostics: CamDiagnostic[] = [...geo.diagnostics, ...res.diagnostics];
     const warn = (code: CamDiagnostic['code'], message: string) => diagnostics.push({ operationId: op.id, severity: 'warning', code, message });
     if (op.type !== 'drill' && op.type !== 'thread' && op.type !== 'engrave' && (op.type as string) !== 'vcarve' && (op.type as string) !== 'vclear' && op.type !== 'vplug' && typeof op.stepdown === 'number' && !(op.type === 'slot' && op.strategy === 'trochoidal') && op.stepdown > tool.fluteLength) warn('stepdown-exceeds-flute', `Stepdown ${op.stepdown} mm is deeper than the ${tool.fluteLength} mm flutes`);
-    const maxFeed = op.type === 'drill' ? op.feeds.plungeFeed : op.feeds.feed;
+    // a thread's feed compensation can raise the programmed feed above the set one
+    const cut = op.type === 'thread' ? (res.toolpath?.moves ?? []).flatMap((m) => (m.kind === 'arc' || m.kind === 'line' ? [m.feed] : [])) : [];
+    const maxFeed = op.type === 'drill' ? op.feeds.plungeFeed : Math.max(op.feeds.feed, ...cut);
     if (maxFeed > ctx.job.machine.maxFeed) warn('feed-exceeds-machine', `Feed ${maxFeed} mm/min is above the machine maximum of ${ctx.job.machine.maxFeed}`);
     // a gouge keeps its toolpath, so the user can see where it cuts into the model
     // a thread keeps the holes or bosses that are fine when another one has an error: its toolpath is null when none can be cut

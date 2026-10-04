@@ -5,13 +5,13 @@ import {
   resolveGeometry, runPipeline, setModel, setStock, starterLibrary, type ThreadOp, type ThreadSpec, type Tool, type Toolpath, threadDirection, threadToolpath,
 } from '../src';
 import { geoOf, tool6 } from './fixtures/camSetup';
+import { terracedSetup } from './fixtures/slotSetup';
+import { rectPts } from './fixtures/terraced.mjs';
 import { drawingJob } from './fixtures/vcarveSetup';
 
 const lib = starterLibrary();
 const sp6 = lib.find((t) => t.id === 'starter-thread-sp6')!;
 const m8mill = lib.find((t) => t.id === 'starter-thread-m8')!;
-/** A single-point mill with a thin neck: the starter's neck is too thick for the deeper external thread forms. */
-const thin: Tool = { ...sp6, id: 'thin', thread: { ...sp6.thread!, neckDiameter: 2.5 } };
 const withNeck = (t: Tool, neckDiameter: number, neckLength = t.thread!.neckLength): Tool => ({ ...t, thread: { ...t.thread!, neckDiameter, neckLength } });
 
 const M8: ThreadSpec = { standard: 'iso-coarse', size: 'M8', majorDiameter: 8, pitch: 1.25, angle: 60 };
@@ -70,7 +70,7 @@ describe('single-point internal thread', () => {
     expect(entry.to.z).toBeCloseTo(bottom - 0.3125, 9);
     expect(helix[helix.length - 1].to.z).toBeCloseTo(top + 0.3125, 9);
   });
-  it('stays within r of the axis during entry and exit', () => {
+  it('stays wisp6 r of the axis during entry and exit', () => {
     for (const m of arcs(tp).filter((x) => !helix.includes(x))) {
       // the half circle about the midpoint of the centre and the orbit
       const radius = Math.hypot(m.to.x - m.center.x, m.to.y - m.center.y);
@@ -86,7 +86,7 @@ describe('all eight direction rows, end to end', () => {
     ['external', 'right', 'climb'], ['external', 'right', 'conventional'], ['external', 'left', 'climb'], ['external', 'left', 'conventional'],
   ] as const;
   it.each(rows)('%s %s %s', (kind, hand, direction) => {
-    const r = drawn(kind === 'internal' ? 6.8 : 8, thin, { kind, hand, direction });
+    const r = drawn(kind === 'internal' ? 6.8 : 8, sp6, { kind, hand, direction });
     expect(r.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
     const { ccw, up } = threadDirection(kind, hand, direction);
     const helix = helixArcs(r.tp!, r.centre);
@@ -120,6 +120,12 @@ describe('multi-tooth internal thread', () => {
   });
 });
 
+describe('multi-tooth coverage', () => {
+  it('adds an orbit when the last one would miss the P/4 above the top (length 9.6, L = 10)', () => {
+    expect(helixArcs(drawn(6.8, m8mill, { length: 9.6 }).tp!, drawn(6.8, m8mill).centre).length).toBe(10);
+  });
+});
+
 describe('external thread on the fixture boss', () => {
   const plate = (() => {
     const f = importFile('thread-plate.stl', readFileSync(new URL('./fixtures/thread-plate.stl', import.meta.url)));
@@ -141,8 +147,33 @@ describe('external thread on the fixture boss', () => {
   };
   const centre = { x: 45, y: 25 };
 
+  it('allowance 0.1 moves the final radius out (internal) or in (external) by 0.1', () => {
+    const base = drawn(6.8, sp6);
+    const more = drawn(6.8, sp6, { allowance: 0.1 });
+    expect(at(helixArcs(more.tp!, more.centre)[0], more.centre) - at(helixArcs(base.tp!, base.centre)[0], base.centre)).toBeCloseTo(0.1, 6);
+    const e0 = run('external', sp6, { thread: M20, length: 6 });
+    const e1 = run('external', sp6, { thread: M20, length: 6, allowance: 0.1 });
+    expect(at(helixArcs(e0.tp!, centre)[0], centre) - at(helixArcs(e1.tp!, centre)[0], centre)).toBeCloseTo(0.1, 4);
+  });
+
+  it('compensates the external helix feed as F x r / (minorExt/2 - allowance)', () => {
+    const r = run('external', sp6, { thread: M20, length: 6, allowance: 0.2 });
+    const F = (r.job.operations[0] as ThreadOp).feeds.feed;
+    const h = helixArcs(r.tp!, centre)[0];
+    const rad = at(h, centre);
+    expect(rad).toBeCloseTo(minorExt(M20) / 2 - 0.2 + 3, 4);
+    expect(h.feed).toBeCloseTo((F * rad) / (minorExt(M20) / 2 - 0.2), 3);
+  });
+
+  it('compares the compensated feed with the machine maximum', () => {
+    const max = (run('external', sp6, { thread: M20, length: 6 }).job.machine.maxFeed);
+    const feeds = { feed: max * 0.9 };
+    expect(codes(run('external', sp6, { thread: M20, length: 6, feeds }).result)).toContain('feed-exceeds-machine');
+    expect(codes(run('external', sp6, { thread: M20, length: 6, feeds, feedCompensation: false }).result)).not.toContain('feed-exceeds-machine');
+  });
+
   it('M20x2.5: radius minor/2 + d/2, clockwise for right-hand climb, Z falling, entry r + 5 out', () => {
-    const r = run('external', thin, { thread: M20, length: 6 });
+    const r = run('external', sp6, { thread: M20, length: 6 });
     expect(r.result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
     const helix = helixArcs(r.tp!, centre);
     const rad = minorExt(M20) / 2 + 3;
@@ -156,18 +187,40 @@ describe('external thread on the fixture boss', () => {
   });
 
   it('reports the gouge when the thread runs below the boss base into the plate', () => {
-    expect(codes(run('external', thin, { thread: M20, length: 6 }).result)).not.toContain('gouge');
-    const deep = run('external', thin, { thread: M20, length: 10 });
-    expect(codes(deep.result)).toContain('gouge');
+    expect(codes(run('external', sp6, { thread: M20, length: 6 }).result)).not.toContain('gouge');
+    expect(codes(run('external', sp6, { thread: M20, length: 10 }).result)).toContain('gouge');
+  });
+
+  /** The thread plate's boss (D20, top Z 18) with a block of the same height whose face is `face` mm from the boss axis. */
+  const walled = (face: number) => {
+    const circle = Array.from({ length: 128 }, (_, i) => [30 + 10 * Math.cos((2 * Math.PI * i) / 128), 20 + 10 * Math.sin((2 * Math.PI * i) / 128)] as [number, number]);
+    const s = terracedSetup(rectPts(0, 0, 60, 40), 18, [{ poly: rectPts(0, 0, 60, 40), z: 10 }, { poly: circle, z: 18 }, { poly: rectPts(30 + face, 0, 60, 40), z: 18 }]);
+    const boss = s.catalog().bosses.find((b) => Math.abs(b.diameter - 20) < 0.1)!;
+    const job: Job = applyCommands(s.job, [
+      { type: 'addTool', tool: sp6 },
+      { type: 'addOperation', opType: 'thread', toolId: sp6.id, id: 'o' },
+      { type: 'updateOperation', id: 'o', patch: { kind: 'external', geometry: [boss.ref], thread: M20, length: 6 } as never },
+    ]);
+    const out = runPipeline(job, s.geometry as never, programContext(job, s.geometry as never), new PipelineCache(), { date: '2026-01-01' });
+    return out.run.results[0];
+  };
+  it('reports a wall 3 mm from the boss surface (radial)', () => {
+    expect(codes(walled(13))).toContain('gouge');
+  });
+  it('reports a wall the plunge and entry reach but the helix does not (face 8 mm from the boss surface)', () => {
+    expect(codes(walled(18))).toContain('gouge');
+  });
+  it('is clean with the wall far enough away', () => {
+    expect(codes(walled(25)).filter((c) => c === 'gouge')).toEqual([]);
   });
 
   it('warns about the boss size', () => {
-    const r = run('external', thin, { thread: { ...M20, standard: 'custom', size: null, majorDiameter: 22 }, length: 6 });
+    const r = run('external', sp6, { thread: { ...M20, standard: 'custom', size: null, majorDiameter: 22 }, length: 6 });
     expect(r.result.diagnostics.find((d) => d.code === 'boss-size')).toMatchObject({ severity: 'warning', message: "The boss is 20.00 mm; the thread's major diameter is 22.00 mm" });
   });
 
   it('posts the golden G-code of M20x2.5 external on the boss', async () => {
-    const r = run('external', thin, { thread: M20, length: 6 });
+    const r = run('external', sp6, { thread: M20, length: 6 });
     expect(r.result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
     await expect(r.text).toMatchFileSnapshot('./fixtures/thread-external-m20.nc');
   });
@@ -263,7 +316,7 @@ describe('thread diagnostics', () => {
     expect(r.tp).toBeUndefined();
   });
   it('boss-size', () => {
-    const r = drawn(21, thin, { kind: 'external', thread: M20, length: 6 });
+    const r = drawn(21, sp6, { kind: 'external', thread: M20, length: 6 });
     expect(only(r, 'boss-size')).toMatchObject({ severity: 'warning', message: "The boss is 21.00 mm; the thread's major diameter is 20.00 mm" });
     expect(r.tp).toBeDefined();
   });
