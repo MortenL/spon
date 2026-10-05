@@ -68,7 +68,11 @@ async function platePart(page: Page) {
 test('toolpaths: profile with tabs and drill on a model', async ({ page }) => {
   await platePart(page);
   await openPanel(page, 'operations');
-  await shoot(page, 'toolpaths');
+  await rows(page).first().click(); // the profile selected: its tabs show as handles
+  await page.getByTestId('toggle-stock').click(); // the stock box hides the tab ridges
+  await page.getByRole('button', { name: 'Top', exact: true }).click();
+  await page.getByTestId('inspector-tab-passes').click();
+  await shoot(page, 'toolpaths', { keepInspector: true });
 });
 
 test('playback: the programs played back, with the analysis', async ({ page }) => {

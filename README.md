@@ -4,6 +4,8 @@ Spon is a browser-based CAM tool for 2.5D CNC machining. You import a model or d
 
 An MCP server lets Claude (or any MCP client) drive the same jobs: on `.spon` files from the terminal, or in the open browser tab.
 
+![Toolpaths: a profile with tabs and a drilled hole on a model](docs/screenshots/toolpaths.png)
+
 ## Features
 
 **Workspace**
@@ -25,8 +27,13 @@ An MCP server lets Claude (or any MCP client) drive the same jobs: on `.spon` fi
 - **Profile** outside, inside or on a contour.
   - Open lines can be cut on the line, or to its left or right, with a Reverse toggle.
   - Climb or conventional milling, stepdowns, radial and axial stock, and a finish pass.
-  - Ramp, helix or plunge entry; arc or line leads; and tabs you can drag in the viewport.
-- **Pocket** with islands, stepover, and wall and floor finishing; unmachined areas are shown. Tabs on the islands leave bridges to the wall (or the next island), so a through pocket keeps its islands.
+  - Ramp, helix or plunge entry; arc or line leads.
+  - Tabs on closed and open contours (see Tabs below).
+- **Pocket** with islands, stepover, and wall and floor finishing; unmachined areas are shown. Tabs on a through pocket are bridges that leave each island joined to the wall (or the next island), so the islands stay in place.
+- **Tabs** keep a through cut from freeing the part, on profile (closed and open lines), slot and pocket (bridges to islands).
+  - Shape, width, height, and a count or a spacing. Automatic tabs prefer straight edges, stay clear of corners and balance around the part.
+  - Edit them in the viewport: click a toolpath to add a tab, click a tab to select it, drag to move it, Del or × removes it, Esc deselects. A contour you edit turns manual (drawn in a second colour); "Automatic for this contour" and "Reset tab positions" in the inspector undo that.
+  - Tabs that do not fit or a bridge that would be too long are reported as warnings.
 - **Drill**: plain drilling, dwell, peck and chip-break cycles, with a diameter filter.
 - **Face** the whole stock or picked areas, zig-zag or spiral, with overlap, stepdown and a finish pass.
 - **Chamfer** an edge or contour with a chamfer mill or V-bit, countersink a hole, or cut an open line to its left or right. You give the chamfer width, and Spon computes the depth from the tool's tip angle. A deburr button sets a small edge break.
@@ -34,12 +41,15 @@ An MCP server lets Claude (or any MCP client) drive the same jobs: on `.spon` fi
   - Tool-width, wider and trochoidal slots along drawn lines and arcs.
   - Straight and arc slots found in STL, STEP and IGES models, closed or open, blind or through.
   - Square ends cut inside, to the wall, or with dogbones, as you choose.
-  - Tabs across the slot, placed along its centreline and draggable in the viewport; trochoidal loops at a tab are left out.
+  - Tabs across the slot, placed along its centreline; trochoidal loops at a tab are left out.
 - **Engraving and V-carve** from drawings and flat faces of models.
   - Engrave lines and outlines by depth, or by V-bit line width.
   - V-carve closed outlines with the depth following the width and sharp corners.
   - A max depth with a linked clearing operation for wide letters.
 - **Thread milling:** internal and external straight threads (ISO metric, UNC/UNF or custom), single-point and multi-tooth thread mills, all hand/climb combinations, with cutter and hole checks.
+
+![An external M20 thread milled on a boss](docs/screenshots/threads.png)
+
 - **Text:** typed text in bundled or uploaded fonts (outline and single-line), on the stock or a model face, with multi-line, spacing, fit, arc, rotation and mirror; V-carve, engrave, pocket or profile it.
 - **Inlays:** Make inlay… turns a V-carve into an inlay pocket and writes a matching plug job (mirrored, V-carve plug + clearing) with inlay depth, start depth and glue gap; the toolpaths are computed so the plug fits the pocket, and the V-bit also cleans the floor corners and narrow gaps the clearing tool can't reach.
 - **Gouge check.** Toolpaths are checked against the model (chamfer depth and the facets of round walls are allowed for). A cut into it is an error that keeps the toolpath, shows red markers in the viewport and blocks export.
@@ -52,10 +62,13 @@ An MCP server lets Claude (or any MCP client) drive the same jobs: on `.spon` fi
 **G-code**
 - Post-processors for GRBL / grblHAL / FluidNC, LinuxCNC / Mach, and Fanuc / Haas, with one file per tool if wanted.
 - Generated programs are played back, timed and analysed in the viewport, together with any G-code you import.
+
+![Playback of the generated programs with the analysis](docs/screenshots/playback.png)
+
 - Export refuses on errors. Warnings ask for confirmation.
 
 **Claude integration (MCP)**
-- `packages/mcp` is a local stdio MCP server with tools for jobs, import, setup, geometry, operations (profile, pocket, drill, face, chamfer and thread), round holes and bosses with handles, a `list_threads` table, generation, a PNG preview, export and the tool library.
+- `packages/mcp` is a local stdio MCP server with tools for jobs, import, setup, geometry, operations (profile, pocket, drill, face, chamfer and thread; tabs included, with `generate` listing each operation's tabs per contour), round holes and bosses with handles, a `list_threads` table, generation, a PNG preview, export and the tool library.
 - **Live mode.** Click **Claude** in the app's status bar, and Claude drives the job open in that tab. Each change is one undo step.
 - See [`packages/mcp/README.md`](packages/mcp/README.md).
 
