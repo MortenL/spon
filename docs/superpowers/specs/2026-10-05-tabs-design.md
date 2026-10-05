@@ -131,6 +131,7 @@ Same geometry and settings give the same tabs; no randomness. Freezing a contour
 |---|---|---|
 | `tab-skipped` (existing) | warning | `{n} tab(s) did not fit and were skipped` |
 | `tab-bridge-long` | warning | `A tab bridge would be longer than 50 mm; it was skipped` |
+| `tab-bridge-self` | warning | `A tab bridge would end on its own island; it was skipped` (a C-shaped island: the strip is not cast on past it) |
 | `tab-trochoid-skipped` | warning | `{n} trochoid loops were left out at tabs` |
 | `tab-no-islands` | info | `Tabs hold islands; this pocket has none` (only when tabs are enabled) |
 

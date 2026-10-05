@@ -11,7 +11,7 @@ import type { CamContext } from '../context';
 import type { ResolvedGeometry } from '../features/resolve';
 import { resolveHeights, type ResolvedHeights } from '../heights';
 import type { CamCode, CamSeverity, PocketOp } from '../types';
-import { bridgeZones } from './bridges';
+import { bridgeZones, MAX_BRIDGE } from './bridges';
 import { emptyOverlays, type OpOutput } from './output';
 import { contourTabs, pushTabOverlays } from './tabs';
 import { depthLevels, emitHelix, emitPathOverZones, emitRampLapsOverZones, MoveWriter, type TabZone } from './writer';
@@ -173,7 +173,8 @@ export function pocketToolpath(op: PocketOp, tool: Tool, ctx: CamContext, geo: R
         return { point, normal: ccw ? { x: tangent.y, y: -tangent.x } : { x: -tangent.y, y: tangent.x } };
       });
       const made = bridgeZones(sh.shape, i, centers, op.tabs.width, top, op.tabs.shape);
-      for (let k = 0; k < made.tooLong; k++) diag('warning', 'tab-bridge-long', 'A tab bridge would be longer than 50 mm; it was skipped', sh.ref);
+      for (let k = 0; k < made.tooLong; k++) diag('warning', 'tab-bridge-long', `A tab bridge would be longer than ${MAX_BRIDGE} mm; it was skipped`, sh.ref);
+      for (let k = 0; k < made.selfHits; k++) diag('warning', 'tab-bridge-self', 'A tab bridge would end on its own island; it was skipped', sh.ref);
       for (const zone of made.zones) out.overlays.tabBridges.push({ polygon: flattenPath(zone.polygon, 0.01), z: top });
       zones.push(...made.zones);
     });

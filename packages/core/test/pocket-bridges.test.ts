@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  applyCommand, bridgeZones, camContext, flattenPath, MAX_BRIDGE, type Move, newOperation, type Path2D, type PocketOp, pocketToolpath,
+  applyCommand, bridgeZones, camContext, flattenPath, MAX_BRIDGE, type Move, newOperation, type Path2D, pathFromPoints, type PocketOp, pocketToolpath,
   type ResolvedShape, type TabSettings, type TabZone, v2, type Vec2,
 } from '../src';
 import { camPartSetup, geoOf, rectPath, tool6 } from './fixtures/camSetup';
@@ -157,6 +157,16 @@ describe('pocket bridges', () => {
     expect(out.overlays.tabBridges).toHaveLength(2);
   });
 
+  it('skips a bridge that would end on its own island, with a warning', () => {
+    const c = pathFromPoints([v2(20, 20), v2(60, 20), v2(60, 30), v2(30, 30), v2(30, 50), v2(60, 50), v2(60, 60), v2(20, 60)], true);
+    // (45, 30) on the top face of the lower arm: 65 mm along the 220 mm edge
+    const out = run(pocket({ manual: [{ refIndex: 0, t: [65 / 220] }] }), [shape(rectPath(0, 0, 100, 80), [c], 3)]);
+    expect(out.diagnostics.filter((d) => d.code === 'tab-bridge-self')).toEqual([
+      { operationId: 'k', severity: 'warning', code: 'tab-bridge-self', message: 'A tab bridge would end on its own island; it was skipped', ref: 3 },
+    ]);
+    expect(out.overlays.tabBridges).toEqual([]);
+  });
+
   it('reports a pocket without islands', () => {
     const plain = [shape(outer100, [])];
     const on = run(pocket({ count: 4 }), plain);
@@ -228,6 +238,15 @@ describe('bridgeZones', () => {
     const { zones, tooLong } = bridgeZones(wide, 0, [{ point: v2(90, 30), normal: v2(-1, 0) }, { point: v2(100, 40), normal: v2(0, 1) }], 6, -4, 'rect');
     expect(tooLong).toBe(1);
     expect(zones).toHaveLength(1);
+  });
+
+  it('skips a strip that would end on its own island (a C-shaped island) and counts it', () => {
+    // a C opening to the right: the top face of its lower arm looks across the notch at its own upper arm
+    const c = pathFromPoints([v2(20, 20), v2(60, 20), v2(60, 30), v2(30, 30), v2(30, 50), v2(60, 50), v2(60, 60), v2(20, 60)], true);
+    const r = bridgeZones({ outer: rectPath(0, 0, 100, 80), islands: [c] }, 0, [{ point: v2(45, 30), normal: v2(0, 1) }, { point: v2(40, 20), normal: v2(0, -1) }], 6, -4, 'rect');
+    expect(r.selfHits).toBe(1);
+    expect(r.tooLong).toBe(0);
+    expect(r.zones).toHaveLength(1);
   });
 
   it('closes the gap to a round island', () => {

@@ -243,7 +243,7 @@ export type CamSeverity = 'error' | 'warning' | 'info';
 export type CamCode =
   | 'no-tool' | 'no-geometry' | 'ref-missing' | 'ref-changed' | 'face-not-horizontal' | 'open-contour' | 'no-stock'
   | 'heights-invalid' | 'offset-collapsed' | 'tool-too-large' | 'tool-undersize' | 'entry-plunge' | 'unmachined-area'
-  | 'tab-skipped' | 'tab-trochoid-skipped' | 'tab-bridge-long' | 'tab-no-islands' | 'stepdown-exceeds-flute' | 'feed-exceeds-machine' | 'tool-number-duplicate' | 'bend-rounded' | 'gouge' | 'facing-depth' | 'wrong-tool'
+  | 'tab-skipped' | 'tab-trochoid-skipped' | 'tab-bridge-long' | 'tab-bridge-self' | 'tab-no-islands' | 'stepdown-exceeds-flute' | 'feed-exceeds-machine' | 'tool-number-duplicate' | 'bend-rounded' | 'gouge' | 'facing-depth' | 'wrong-tool'
   | 'slot-width-mismatch' | 'slot-too-narrow' | 'slot-ends-unset' | 'slot-overcut' | 'wrong-geometry'
   | 'flute-exceeded' | 'vcarve-uncleared' | 'source-missing' | 'source-incomplete' | 'internal'
   | 'font-unreadable' | 'font-missing' | 'text-empty' | 'text-missing-glyphs' | 'text-fit' | 'text-arc' | 'text-no-stock' | 'text-single-line'

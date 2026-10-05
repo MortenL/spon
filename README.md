@@ -33,7 +33,7 @@ An MCP server lets Claude (or any MCP client) drive the same jobs: on `.spon` fi
 - **Tabs** keep a through cut from freeing the part, on profile (closed and open lines), slot and pocket (bridges to islands).
   - Shape, width, height, and a count or a spacing. Automatic tabs prefer straight edges, stay clear of corners and balance around the part.
   - Edit them in the viewport: click a toolpath to add a tab, click a tab to select it, drag to move it, Del or × removes it, Esc deselects. A contour you edit turns manual (drawn in a second colour); "Automatic for this contour" and "Reset tab positions" in the inspector undo that.
-  - Tabs that do not fit or a bridge that would be too long are reported as warnings.
+  - Tabs that do not fit, a bridge that would be too long and a bridge that would end on its own island (across the mouth of a C-shaped island) are reported as warnings.
 - **Drill**: plain drilling, dwell, peck and chip-break cycles, with a diameter filter.
 - **Face** the whole stock or picked areas, zig-zag or spiral, with overlap, stepdown and a finish pass.
 - **Chamfer** an edge or contour with a chamfer mill or V-bit, countersink a hole, or cut an open line to its left or right. You give the chamfer width, and Spon computes the depth from the tool's tip angle. A deburr button sets a small edge break.

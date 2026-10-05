@@ -10,10 +10,11 @@ const FLATTEN_TOL = 1e-3;
 /** Hits closer than this to a ray's origin are the edge it starts on. */
 const MIN_T = 1e-6;
 
-/** Parameters t of every crossing of the line o + t·d with the polygons' edges. */
-function crossings(o: Vec2, d: Vec2, polys: readonly (readonly Vec2[])[]): number[] {
+/** Parameters t of every crossing of the line o + t·d with the polygons' edges (with `owner`, only those of `polys[owner]`). */
+function crossings(o: Vec2, d: Vec2, polys: readonly (readonly Vec2[])[], owner = -1): number[] {
   const out: number[] = [];
-  for (const poly of polys) {
+  for (const [k, poly] of polys.entries()) {
+    if (owner >= 0 && k !== owner) continue;
     for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
       const a = poly[j], b = poly[i];
       const ex = b.x - a.x, ey = b.y - a.y;
@@ -37,18 +38,22 @@ const firstAfter = (ts: readonly number[], from: number) => ts.reduce((m, t) => 
  * with the outer boundary or another island. The strip's ends follow the boundaries it joins: each side of the strip
  * starts where it meets the island (a round island curves away from the tab point) and ends at its own first hit, at
  * most a strip width past the centre line's, so a slanted wall is met along the whole end. A strip whose centre line
- * is longer than {@link MAX_BRIDGE} (or never hits anything) is not made and is counted in `tooLong`.
+ * is longer than {@link MAX_BRIDGE} (or never hits anything) is not made and is counted in `tooLong`. A strip whose
+ * first hit is its own island (across the mouth of a C-shaped island) would hold nothing: it is not made and is
+ * counted in `selfHits`. It is not cast on past the island, since beyond its own edge it would cross the island
+ * itself and its strip could not follow the boundaries it joins.
  */
 export function bridgeZones(
   region: { outer: Path2D; islands: Path2D[] }, island: number, centers: readonly { point: Vec2; normal: Vec2 }[], width: number, top: number,
   shape: TabZone['shape'],
-): { zones: TabZone[]; tooLong: number } {
+): { zones: TabZone[]; tooLong: number; selfHits: number } {
   const islands = region.islands.map((p) => flattenPath(p, FLATTEN_TOL));
   const all = [flattenPath(region.outer, FLATTEN_TOL), ...islands];
   const own = islands[island] ? [islands[island]] : [];
   const half = Math.max(0, width) / 2;
   const zones: TabZone[] = [];
-  let tooLong = 0;
+  let tooLong = 0, selfHits = 0;
+  const ownIndex = islands[island] ? island + 1 : -1; // the island's index in `all`
   for (const c of centers) {
     const nl = Math.hypot(c.normal.x, c.normal.y);
     if (!(nl > 0)) continue;
@@ -58,6 +63,10 @@ export function bridgeZones(
     const len = firstAfter(crossings(c.point, n, all), MIN_T);
     if (!(len <= MAX_BRIDGE)) {
       tooLong++;
+      continue;
+    }
+    if (ownIndex >= 0 && firstAfter(crossings(c.point, n, all, ownIndex), MIN_T) <= len) {
+      selfHits++;
       continue;
     }
     // each side of the strip: where it meets the island (the crossing nearest the tangent line, within a width)
@@ -74,5 +83,5 @@ export function bridgeZones(
     const polygon = pathFromPoints([at(-half, a.t0), at(0, 0), at(half, b.t0), at(half, b.t1), at(0, len), at(-half, a.t1)], true);
     zones.push({ polygon, top, shape });
   }
-  return { zones, tooLong };
+  return { zones, tooLong, selfHits };
 }
