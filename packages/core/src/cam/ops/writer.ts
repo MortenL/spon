@@ -1,7 +1,8 @@
-import { pathLength, segmentLength, subPath } from '../../geometry/offset/pathOps';
+import { flattenPath, pathLength, segmentLength, subPath } from '../../geometry/offset/pathOps';
 import { type Path2D, type Segment, segmentEnd, type Vec2 } from '../../geometry/path2d';
 import type { Vec3 } from '../../geometry/vec3';
 import type { Move } from '../types';
+import { contactIntervals, contactPolygon, contactStep, toolTouches, wrapTriangles } from './zoneContact';
 
 const EPS = 1e-9;
 /** An arc whose chord is shorter than this is written as a line (a near-zero arc would read as a full circle). */
@@ -74,7 +75,8 @@ export class MoveWriter {
   }
 }
 
-export interface TabInterval { s0: number; s1: number; shape: 'rect' | 'triangle' }
+/** A stretch `[s0, s1]` along a path where material stays; `top` overrides the profile's top for this stretch. */
+export interface TabInterval { s0: number; s1: number; shape: 'rect' | 'triangle'; top?: number }
 /** Tabs on one lap: material stays up to `top`; triangles fall to `base` at their ends. */
 export interface TabProfile { top: number; base: number; intervals: TabInterval[] }
 
@@ -90,13 +92,14 @@ export function emitLap(w: MoveWriter, path: Path2D, zStart: number, zEnd: numbe
   const tabZ = (s: number, side: -1 | 1): number => {
     let z = -Infinity;
     for (const iv of intervals) {
+      const top = iv.top ?? tabs!.top;
       if (iv.shape === 'rect') {
         const inside = side < 0 ? s > iv.s0 + EPS && s <= iv.s1 + EPS : s >= iv.s0 - EPS && s < iv.s1 - EPS;
-        if (inside) z = Math.max(z, tabs!.top);
+        if (inside) z = Math.max(z, top);
       } else if (s >= iv.s0 - EPS && s <= iv.s1 + EPS) {
         const mid = (iv.s0 + iv.s1) / 2;
         const half = (iv.s1 - iv.s0) / 2;
-        z = Math.max(z, tabs!.top - ((tabs!.top - tabs!.base) * Math.abs(s - mid)) / half);
+        z = Math.max(z, top - ((top - tabs!.base) * Math.abs(s - mid)) / half);
       }
     }
     return z;
@@ -138,6 +141,43 @@ export function emitLap(w: MoveWriter, path: Path2D, zStart: number, zEnd: numbe
     const after = zAt(b, 1);
     if (b < total - EPS && Math.abs(after - zb) > EPS) w.line(p3(w.pos!.x, w.pos!.y, after), feed);
   }
+}
+
+/** Material a pass must keep clear of below `top` (a pocket tab bridge): rectangular zones lift and drop vertically, triangular ones ramp. */
+export interface TabZone { polygon: Path2D; top: number; shape: 'rect' | 'triangle' }
+
+/** Chord tolerance for flattening a zone polygon with arcs. */
+const ZONE_FLATTEN_TOL = 1e-3;
+
+/**
+ * Follows `path` at constant `z` like {@link emitLap}, but rises over every zone whose top is above `z` wherever the
+ * tool (radius `toolRadius`) touches it, i.e. where the centre is inside the zone grown by the tool radius. Inside, it
+ * runs at `max(z, top)`: rectangular zones with vertical moves at the boundary, triangular zones with a linear ramp up
+ * to `top` over the first half of the crossing and back down over the second. Overlapping zones of the same top and
+ * shape are one lift; elsewhere the highest zone wins. The tool must be at the path start.
+ */
+export function emitPathOverZones(w: MoveWriter, path: Path2D, z: number, feed: number, zones: readonly TabZone[], toolRadius: number): void {
+  const groups = new Map<string, { top: number; shape: 'rect' | 'triangle'; polys: ReturnType<typeof contactPolygon>[] }>();
+  for (const zone of zones) {
+    if (!(z < zone.top - EPS)) continue;
+    const poly = flattenPath(zone.polygon, ZONE_FLATTEN_TOL);
+    if (poly.length < 3) continue;
+    const key = `${zone.top}|${zone.shape}`;
+    const g = groups.get(key) ?? { top: zone.top, shape: zone.shape, polys: [] };
+    g.polys.push(contactPolygon(poly));
+    groups.set(key, g);
+  }
+  const intervals: TabInterval[] = [];
+  let top = z;
+  const r = Math.max(0, toolRadius);
+  for (const g of groups.values()) {
+    const found = contactIntervals(path, (p) => toolTouches(g.polys, p, r), contactStep(r));
+    for (const iv of found) intervals.push({ ...iv, shape: g.shape, top: g.top });
+    if (found.length) top = Math.max(top, g.top);
+  }
+  intervals.sort((a, b) => a.s0 - b.s0);
+  wrapTriangles(intervals, path, pathLength(path));
+  emitLap(w, path, z, z, feed, intervals.length ? { top, base: z, intervals } : null);
 }
 
 /** Ramps down along a closed path from zFrom to zTo over whole laps, never steeper than `angleDeg`. */
