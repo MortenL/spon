@@ -157,7 +157,8 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
 
     let tabsAt: (z: number) => TabProfile | null = () => null;
     if (op.tabs.enabled) {
-      const explicit = useExplicit && op.tabs.positions ? op.tabs.positions.filter((p) => p.refIndex === index).map((p) => p.t) : null;
+      const manual = op.tabs.manual.find((m) => m.refIndex === index);
+      const explicit = useExplicit && manual ? manual.t : null;
       const { intervals, skipped } = tabIntervals(path, op.tabs, r, explicit);
       if (skipped) diag('warning', 'tab-skipped', `${skipped} tab(s) did not fit and were skipped`);
       const top = h.bottom + op.tabs.height;
@@ -165,7 +166,7 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
       tabsAt = (z) => (intervals.length && z < top - 1e-9 ? profile : null);
       if (recordOverlay) {
         for (const iv of intervals) out.overlays.tabs.push({ refIndex: index, t: iv.center / total, point: pointAt(path, iv.center).point });
-        if (intervals.length || (useExplicit && op.tabs.positions)) {
+        if (intervals.length || (useExplicit && manual)) {
           out.overlays.laps.push({ refIndex: index, points: flattenPath(path, 0.01), z: top });
         }
       }

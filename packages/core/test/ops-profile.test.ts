@@ -100,7 +100,7 @@ describe('profileToolpath', () => {
   });
 
   it('raises the path over tabs on levels below the tab top', () => {
-    const op = profile({ tabs: { enabled: true, shape: 'rect', width: 4, height: 2, placement: 'count', count: 4, spacing: 50, positions: null } });
+    const op = profile({ tabs: { enabled: true, shape: 'rect', width: 4, height: 2, placement: 'count', count: 4, spacing: 50, manual: [] } });
     const out = profileToolpath(op, tool6, ctx, geoOf({ contours: [outline] }));
     expect(out.diagnostics).toEqual([]);
     const atTabTop = cutMoves(out.toolpath!.moves).filter((m) => Math.abs(m.to.z + 4.2) < 1e-9);
@@ -114,23 +114,21 @@ describe('profileToolpath', () => {
     const c1: ResolvedContour = { path: rectPath(55, 5, 95, 25), z: 0, ref: 1 };
     const tabs = {
       enabled: true, shape: 'rect' as const, width: 4, height: 2, placement: 'count' as const, count: 4, spacing: 50,
-      positions: [{ refIndex: 1, t: 0.5 }],
+      manual: [{ refIndex: 1, t: [0.5] }],
     };
     const rough = profileToolpath(profile({ tabs }), tool6, ctx, geoOf({ contours: [c0, c1] }));
     const both = profileToolpath(profile({ tabs, finishPass: true }), tool6, ctx, geoOf({ contours: [c0, c1] }));
     expect(rough.diagnostics).toEqual([]);
     expect(both.diagnostics).toEqual([]);
 
-    // contour 0 (refIndex 0) has no matching explicit position, so it gets no tabs
-    expect(rough.overlays.tabs).toHaveLength(1);
-    expect(rough.overlays.tabs[0].refIndex).toBe(1);
+    // contour 1 has one manual tab; contour 0 (no manual entry) gets its automatic tabs
+    expect(rough.overlays.tabs.filter((t) => t.refIndex === 1)).toHaveLength(1);
+    expect(rough.overlays.tabs.filter((t) => t.refIndex === 0)).toHaveLength(4);
     expect(rough.overlays.laps.map((l) => l.refIndex).sort()).toEqual([0, 1]);
-    const contour0Clips = cutMoves(rough.toolpath!.moves).filter((m) => m.to.x < 50 && Math.abs(m.to.z + 4.2) < 1e-6);
-    expect(contour0Clips).toHaveLength(0);
 
     // both the roughing laps and the finish lap of contour 1 ride up over the tab (at z = tab top, -4.2); the tab's
     // rising/falling edges sit tool-width + half tab width from its centre, so search within that radius
-    const tabPoint = rough.overlays.tabs[0].point;
+    const tabPoint = rough.overlays.tabs.find((t) => t.refIndex === 1)!.point;
     const clipsNearTab = (o: typeof rough) =>
       cutMoves(o.toolpath!.moves).filter((m) => dist2(v2(m.to.x, m.to.y), tabPoint) < 6 && Math.abs(m.to.z + 4.2) < 1e-6).length;
     expect(clipsNearTab(rough)).toBeGreaterThan(0);
@@ -140,7 +138,7 @@ describe('profileToolpath', () => {
   it('keys the explicit lead start point to the contour index, leaving other contours on the automatic start', () => {
     const c0: ResolvedContour = { path: rectPath(5, 5, 45, 25), z: 0, ref: 0 };
     const c1: ResolvedContour = { path: rectPath(55, 5, 95, 25), z: 0, ref: 1 };
-    const tabs = { enabled: true, shape: 'rect' as const, width: 4, height: 2, placement: 'count' as const, count: 2, spacing: 50, positions: null };
+    const tabs = { enabled: true, shape: 'rect' as const, width: 4, height: 2, placement: 'count' as const, count: 2, spacing: 50, manual: [] };
     const auto = profileToolpath(
       profile({ tabs, leads: { mode: 'none', length: 0, startPoint: 'auto' } }), tool6, ctx, geoOf({ contours: [c0, c1] }),
     );

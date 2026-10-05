@@ -6,6 +6,7 @@ import type { ResolvedShape } from '../features/resolve';
 import { resolveGeometry } from '../features/resolve';
 import { resolveHeights } from '../heights';
 import { plugFloor, plugWallRegions } from '../inlay/plugStrokes';
+import { defaultTabs } from '../defaults';
 import type { CamCode, CamSeverity, PocketOp, VClearOp } from '../types';
 import { emptyOverlays, type OpOutput } from './output';
 import { pocketToolpath } from './pocket';
@@ -91,7 +92,7 @@ export function vclearToolpath(op: VClearOp, tool: Tool, ctx: CamContext): OpOut
     return out;
   }
   const pocket: PocketOp = {
-    ...op, type: 'pocket', stockRadial: 0, stockAxial: 0, finishWalls: false, finishFloor: false, geometry: [],
+    ...op, type: 'pocket', stockRadial: 0, stockAxial: 0, finishWalls: false, finishFloor: false, tabs: defaultTabs(0), geometry: [],
     heights: {
       ...op.heights, top: source.heights.top,
       bottom: { ...source.heights.top, offset: source.heights.top.offset - depth },

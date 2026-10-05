@@ -51,9 +51,10 @@ export interface TabSettings {
   placement: 'count' | 'spacing';
   count: number;
   spacing: number;
-  /** null = automatic; set once the user drags a tab. */
-  positions: LapPosition[] | null;
+  /** Per contour (by refIndex) fixed positions as fractions t of the lap; a contour without an entry is automatic. */
+  manual: ManualTabs[];
 }
+export interface ManualTabs { refIndex: number; t: number[] }
 
 export interface OperationBase {
   id: string;
@@ -88,6 +89,7 @@ export interface PocketOp extends OperationBase {
   finishWalls: boolean;
   finishFloor: boolean;
   entry: EntrySettings;
+  tabs: TabSettings;
 }
 export type DrillCycle = 'drill' | 'dwell' | 'peck' | 'chipbreak';
 export interface DrillOp extends OperationBase {
@@ -142,6 +144,7 @@ export interface SlotOp extends OperationBase {
   trochoidal: { stepPct: number };
   /** How square ends of recognised slots are cut; null = not chosen yet (an error when a picked slot has one). */
   squareEnds: 'inside' | 'endWall' | 'dogbone' | null;
+  tabs: TabSettings;
 }
 export interface EngraveOp extends OperationBase {
   type: 'engrave';

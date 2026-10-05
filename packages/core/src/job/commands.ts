@@ -1,5 +1,5 @@
 import { newOperation, OPERATION_LABELS } from '../cam/defaults';
-import type { Operation, OperationPatch, OperationType, TabSettings } from '../cam/types';
+import type { ManualTabs, Operation, OperationPatch, OperationType, TabSettings } from '../cam/types';
 import type { Vec3 } from '../geometry/vec3';
 import { type ThreadSpec, type ThreadStandard, threadRow } from '../thread/table';
 import type { PostSettings } from '../post/types';
@@ -49,11 +49,11 @@ export class CommandError extends Error {
 const COMMON_KEYS = ['name', 'enabled', 'toolId', 'feeds', 'heights', 'geometry'];
 const OP_KEYS: Readonly<Record<OperationType, readonly string[]>> = {
   profile: [...COMMON_KEYS, 'side', 'openSide', 'direction', 'stepdown', 'stockRadial', 'stockAxial', 'finishPass', 'entry', 'leads', 'tabs'],
-  pocket: [...COMMON_KEYS, 'direction', 'stepdown', 'stepoverPct', 'stockRadial', 'stockAxial', 'finishWalls', 'finishFloor', 'entry'],
+  pocket: [...COMMON_KEYS, 'direction', 'stepdown', 'stepoverPct', 'stockRadial', 'stockAxial', 'finishWalls', 'finishFloor', 'entry', 'tabs'],
   drill: [...COMMON_KEYS, 'cycle', 'peck', 'dwellSeconds', 'diameterFilter'],
   face: [...COMMON_KEYS, 'area', 'overlap', 'pattern', 'angleDeg', 'stepoverPct', 'oneWay', 'direction', 'stepdown', 'finishPass', 'finishStepoverPct'],
   chamfer: [...COMMON_KEYS, 'side', 'openSide', 'direction', 'width', 'tipOffset', 'stepdown'],
-  slot: [...COMMON_KEYS, 'strategy', 'width', 'direction', 'stepdown', 'stepoverPct', 'stockRadial', 'stockAxial', 'finishWalls', 'entry', 'trochoidal', 'squareEnds'],
+  slot: [...COMMON_KEYS, 'strategy', 'width', 'direction', 'stepdown', 'stepoverPct', 'stockRadial', 'stockAxial', 'finishWalls', 'entry', 'trochoidal', 'squareEnds', 'tabs'],
   engrave: [...COMMON_KEYS, 'depthMode', 'depth', 'lineWidth', 'stepdown'],
   vcarve: [...COMMON_KEYS, 'maxDepth', 'stepdown', 'inlay'],
   vplug: [...COMMON_KEYS, 'inlayDepth', 'startDepth', 'glueGap', 'stepdown'],
@@ -158,6 +158,16 @@ function checkTabs(t: Partial<TabSettings>): void {
   if ('width' in t && !((t.width as number) > 0 && Number.isFinite(t.width))) throw new CommandError('Tab width must be greater than 0');
 }
 
+/** Validates manual tab positions and returns them with each contour's t ascending. */
+function checkManualTabs(manual: unknown): ManualTabs[] {
+  if (!Array.isArray(manual)) throw new CommandError('Manual tabs must be a list');
+  return manual.map((m) => {
+    if (!isObj(m) || !Number.isInteger(m.refIndex) || (m.refIndex as number) < 0) throw new CommandError('Tab contour index must be 0 or more');
+    if (!Array.isArray(m.t) || m.t.some((t) => typeof t !== 'number' || !(t >= 0 && t < 1))) throw new CommandError('Tab positions must be from 0 to below 1');
+    return { refIndex: m.refIndex as number, t: [...(m.t as number[])].sort((a, b) => a - b) };
+  });
+}
+
 function checkInlay(v: unknown): void {
   if (!isObj(v)) throw new CommandError('inlay must be an object');
   if (!positive(v.startDepth)) throw new CommandError('inlay.startDepth must be greater than 0');
@@ -190,7 +200,8 @@ function checkThread(v: unknown): ThreadSpec {
 function patchOperation(job: Job, op: Operation, patch: OperationPatch): Operation {
   const allowed = OP_KEYS[op.type];
   const next: Record<string, unknown> = { ...op };
-  for (const [key, value] of Object.entries(patch)) {
+  for (const [key, patchValue] of Object.entries(patch)) {
+    let value: unknown = patchValue;
     if (!allowed.includes(key)) throw new CommandError(`"${key}" does not apply to a ${op.type} operation`);
     const allowedValues = ENUMS[key]?.[op.type];
     if (allowedValues && !(key === 'squareEnds' && value === null) && !allowedValues.includes(value as string)) throw new CommandError(`${key} must be one of ${allowedValues.join(', ')}`);
@@ -214,7 +225,10 @@ function patchOperation(job: Job, op: Operation, patch: OperationPatch): Operati
       const v = value as { stepPct?: number };
       if ('stepPct' in v && !((v.stepPct as number) > 0 && (v.stepPct as number) <= 100)) throw new CommandError('trochoidal.stepPct must be in (0, 100]');
     }
-    if (key === 'tabs') checkTabs(value as Partial<TabSettings>);
+    if (key === 'tabs') {
+      checkTabs(value as Partial<TabSettings>);
+      if ('manual' in (value as object)) value = { ...(value as object), manual: checkManualTabs((value as TabSettings).manual) };
+    }
     if (key === 'inlay') {
       // undefined or null removes the inlay settings
       if (value === undefined || value === null) { delete next.inlay; continue; }

@@ -170,8 +170,8 @@ function ProfilePasses({ op }: { op: ProfileOp }) {
             ? intField('Count', tabs.count, 'pass-tab-count', 1, (v) => patch({ tabs: { ...tabs, count: v } }))
             : <LengthField label="Spacing" valueMm={tabs.spacing} testId="pass-tab-spacing" min={0.01} onCommit={(v) => patch({ tabs: { ...tabs, spacing: v } })} />}
           <Button
-            variant="outline" size="sm" data-testid="pass-tab-reset" disabled={tabs.positions === null}
-            onClick={() => patch({ tabs: { ...tabs, positions: null } })}
+            variant="outline" size="sm" data-testid="pass-tab-reset" disabled={tabs.manual.length === 0}
+            onClick={() => patch({ tabs: { ...tabs, manual: [] } })}
           >
             Reset tab positions
           </Button>

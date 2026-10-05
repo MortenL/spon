@@ -1,7 +1,7 @@
 import type { ModelKind } from '../import/importFile';
 import { threadRow } from '../thread/table';
 import type { Tool } from '../tools/types';
-import type { Feeds, Heights, Operation, OperationType } from './types';
+import type { Feeds, Heights, Operation, OperationType, TabSettings } from './types';
 
 export const OPERATION_LABELS: Readonly<Record<OperationType, string>> = { profile: 'Profile', pocket: 'Pocket', drill: 'Drill', face: 'Face', chamfer: 'Chamfer', slot: 'Slot', engrave: 'Engrave', vcarve: 'V-carve', vclear: 'V-carve clearing', vplug: 'V-carve plug', thread: 'Thread' };
 
@@ -45,6 +45,10 @@ function feedsFor(tool: Tool | null): Feeds {
     : { presetName: null, rpm: 10000, feed: 1000, plungeFeed: 300, coolant: 'off' };
 }
 
+export function defaultTabs(toolDiameter: number): TabSettings {
+  return { enabled: false, shape: 'rect', width: Math.max(4, toolDiameter), height: 2, placement: 'count', count: 4, spacing: 50, manual: [] };
+}
+
 export function newOperation(type: OperationType, opts: { id: string; name: string; tool: Tool | null; modelKind: ModelKind | null }): Operation {
   const { id, name, tool, modelKind } = opts;
   const d = tool?.diameter ?? 6;
@@ -56,13 +60,13 @@ export function newOperation(type: OperationType, opts: { id: string; name: stri
     return {
       ...base, type, side: 'outside', openSide: 'on', direction: 'climb', stepdown, stockRadial: 0, stockAxial: 0, finishPass: false, entry,
       leads: { mode: 'arc', length: d / 2, startPoint: 'auto' },
-      tabs: { enabled: false, shape: 'rect', width: Math.max(4, d), height: 2, placement: 'count', count: 4, spacing: 50, positions: null },
+      tabs: defaultTabs(d),
     };
   }
   if (type === 'pocket') {
     return {
       ...base, type, direction: 'climb', stepdown, stepoverPct: preset?.stepoverPct ?? 40, stockRadial: 0, stockAxial: 0,
-      finishWalls: false, finishFloor: false, entry,
+      finishWalls: false, finishFloor: false, entry, tabs: defaultTabs(d),
     };
   }
   if (type === 'face') {
@@ -77,7 +81,7 @@ export function newOperation(type: OperationType, opts: { id: string; name: stri
   if (type === 'slot') {
     return {
       ...base, type, strategy: 'auto', width: d, direction: 'climb', stepdown, stepoverPct: preset?.stepoverPct ?? 40, stockRadial: 0, stockAxial: 0,
-      finishWalls: false, entry, trochoidal: { stepPct: 10 }, squareEnds: null,
+      finishWalls: false, entry, trochoidal: { stepPct: 10 }, squareEnds: null, tabs: defaultTabs(d),
     };
   }
   if (type === 'engrave') {
