@@ -47,13 +47,12 @@ An MCP server lets Claude (or any MCP client) drive the same jobs: on `.spon` fi
   - V-carve closed outlines with the depth following the width and sharp corners.
   - A max depth with a linked clearing operation for wide letters.
 - **Thread milling:** internal and external straight threads (ISO metric, UNC/UNF or custom), single-point and multi-tooth thread mills, all hand/climb combinations, with cutter and hole checks.
-
-![An external M20 thread milled on a boss](docs/screenshots/threads.png)
-
 - **Text:** typed text in bundled or uploaded fonts (outline and single-line), on the stock or a model face, with multi-line, spacing, fit, arc, rotation and mirror; V-carve, engrave, pocket or profile it.
 - **Inlays:** Make inlay… turns a V-carve into an inlay pocket and writes a matching plug job (mirrored, V-carve plug + clearing) with inlay depth, start depth and glue gap; the toolpaths are computed so the plug fits the pocket, and the V-bit also cleans the floor corners and narrow gaps the clearing tool can't reach.
 - **Gouge check.** Toolpaths are checked against the model (chamfer depth and the facets of round walls are allowed for). A cut into it is an error that keeps the toolpath, shows red markers in the viewport and blocks export.
 - Geometry is picked in the viewport, or from a catalog of faces, edge loops, holes and drawing contours.
+
+![An external M20 thread milled on a boss](docs/screenshots/threads.png)
 
 **Tools**
 - A tool library in the browser, starting from a set of starter tools.
@@ -62,10 +61,9 @@ An MCP server lets Claude (or any MCP client) drive the same jobs: on `.spon` fi
 **G-code**
 - Post-processors for GRBL / grblHAL / FluidNC, LinuxCNC / Mach, and Fanuc / Haas, with one file per tool if wanted.
 - Generated programs are played back, timed and analysed in the viewport, together with any G-code you import.
+- Export refuses on errors. Warnings ask for confirmation.
 
 ![Playback of the generated programs with the analysis](docs/screenshots/playback.png)
-
-- Export refuses on errors. Warnings ask for confirmation.
 
 **Claude integration (MCP)**
 - `packages/mcp` is a local stdio MCP server with tools for jobs, import, setup, geometry, operations (profile, pocket, drill, face, chamfer and thread; tabs included, with `generate` listing each operation's tabs per contour), round holes and bosses with handles, a `list_threads` table, generation, a PNG preview, export and the tool library.

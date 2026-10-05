@@ -40,13 +40,33 @@ async function pickTool(page: Page, id: string) {
 }
 
 /** Ends picking, closes the inspector unless `keepInspector`, fits the view and saves the page once the viewport has rendered. */
-async function shoot(page: Page, name: string, { keepInspector = false } = {}) {
-  await page.keyboard.press('Escape');
-  if (!keepInspector && (await page.getByTestId('inspector-close').count())) await page.getByTestId('inspector-close').click();
-  await page.getByRole('button', { name: 'Fit', exact: true }).click();
-  await page.mouse.move(0, 0);
+async function shoot(page: Page, name: string, { keepInspector = false, keepView = false } = {}) {
+  if (!keepView) {
+    await page.keyboard.press('Escape');
+    if (!keepInspector && (await page.getByTestId('inspector-close').count())) await page.getByTestId('inspector-close').click();
+    await page.getByRole('button', { name: 'Fit', exact: true }).click();
+    await page.mouse.move(0, 0);
+  }
   await page.waitForTimeout(1500);
   await page.screenshot({ path: path.join(OUT, `${name}.png`) });
+}
+
+/** Where a tab marker sits on screen once it stands still, and a click there (the markers take no pointer events). */
+async function clickMarker(page: Page, testId: string) {
+  const centre = async () => {
+    const box = await page.getByTestId(testId).boundingBox();
+    return box ? { x: box.x + box.width / 2, y: box.y + box.height / 2 } : null;
+  };
+  let at: { x: number; y: number } | null = null;
+  await expect(async () => {
+    const a = await centre();
+    await page.waitForTimeout(150);
+    at = await centre();
+    expect(a && at && Math.hypot(a.x - at.x, a.y - at.y) < 0.5).toBe(true);
+  }).toPass({ timeout: 10_000 });
+  await page.mouse.move(at!.x - 1, at!.y);
+  await page.mouse.move(at!.x, at!.y);
+  await page.mouse.click(at!.x, at!.y);
 }
 
 /** thread-plate.stl (a 60 × 40 plate with a Ø20 boss and a Ø6.8 hole): the outline profiled with tabs and the hole drilled. */
@@ -72,7 +92,18 @@ test('toolpaths: profile with tabs and drill on a model', async ({ page }) => {
   await page.getByTestId('toggle-stock').click(); // the stock box hides the tab ridges
   await page.getByRole('button', { name: 'Top', exact: true }).click();
   await page.getByTestId('inspector-tab-passes').click();
-  await shoot(page, 'toolpaths', { keepInspector: true });
+  await expect(page.getByTestId('tab-handle-0-0')).toBeVisible();
+  // zoom on the part
+  const view = (await page.locator('canvas').first().boundingBox())!;
+  await page.mouse.move(view.x + view.width / 2, view.y + view.height / 2);
+  for (let i = 0; i < 8; i++) await page.mouse.wheel(0, -300);
+  await page.waitForTimeout(1000);
+  // a click on the tab path adds a manual tab (that contour turns manual); a click on a tab selects it
+  await clickMarker(page, 'tab-path-0');
+  await expect(page.getByTestId('pass-tab-manual-count')).toBeVisible();
+  await clickMarker(page, 'tab-handle-0-0');
+  await expect(page.getByTestId('tab-remove')).toBeVisible();
+  await shoot(page, 'toolpaths', { keepView: true });
 });
 
 test('playback: the programs played back, with the analysis', async ({ page }) => {
