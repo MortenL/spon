@@ -55,9 +55,21 @@ describe('emitPathOverZones', () => {
     expect(moves.map((m) => [+m!.x.toFixed(4), +m!.z.toFixed(4)])).toEqual([[42, -6], [42, -4], [65, -4], [65, -6], [100, -6]]);
   });
 
-  it('merges two overlapping triangular zones into one ramp', () => {
+  it('keeps each of two overlapping triangular zones whole: never below either triangle', () => {
     const moves = pts(run(straight, -6, [zone(rect(45, -20, 55, 20), 'triangle'), zone(rect(52, -20, 62, 20), 'triangle')]));
-    expect(moves.map((m) => [+m!.x.toFixed(4), +m!.z.toFixed(4)])).toEqual([[42, -6], [53.5, -4], [65, -6], [100, -6]]);
+    // the first triangle peaks at x 50 (over x 42–58), the second at x 57 (over x 49–65); between the peaks the pass
+    // stays at the top, above where the two triangles cross
+    expect(moves.map((m) => [+m!.x.toFixed(4), +m!.z.toFixed(4)])).toEqual([
+      [42, -6], [49, -4.25], [50, -4], [57, -4], [58, -4.25], [65, -6], [100, -6],
+    ]);
+    const tri = (x: number, peak: number) => Math.max(-6, -4 - (2 * Math.abs(x - peak)) / 8);
+    for (let i = 1; i < moves.length; i++) {
+      const a = moves[i - 1]!, b = moves[i]!;
+      for (let k = 0; k <= 20; k++) {
+        const x = a.x + ((b.x - a.x) * k) / 20, z = a.z + ((b.z - a.z) * k) / 20;
+        expect(z).toBeGreaterThanOrEqual(Math.max(tri(x, 50), tri(x, 57)) - 1e-6);
+      }
+    }
   });
 
   it('runs at the highest top where zones of different heights overlap', () => {

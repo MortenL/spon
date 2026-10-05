@@ -51,8 +51,15 @@ export function contactDistance(polys: readonly ContactPolygon[], p: Vec2): numb
 
 /** Whether a tool of radius `r` centred at `p` touches any polygon (overlaps it by more than 0.1 µm, or sits inside). */
 export function toolTouches(polys: readonly ContactPolygon[], p: Vec2, r: number): boolean {
-  const d = contactDistance(polys, p);
-  return d === 0 || d < r - 1e-7;
+  const reach = r - 1e-7;
+  for (const z of polys) {
+    // a polygon whose bounding box is out of reach is skipped without looking at its edges
+    const box = Math.max(z.minX - p.x, p.x - z.maxX, z.minY - p.y, p.y - z.maxY);
+    if (box > 0 && box >= reach) continue;
+    if (inPolygon(p, z.poly)) return true;
+    for (let i = 0, j = z.poly.length - 1; i < z.poly.length; j = i++) if (segmentDistance(p, z.poly[j], z.poly[i]) < reach) return true;
+  }
+  return false;
 }
 
 /**

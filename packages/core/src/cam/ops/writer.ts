@@ -150,43 +150,67 @@ export interface TabZone { polygon: Path2D; top: number; shape: 'rect' | 'triang
 const ZONE_FLATTEN_TOL = 1e-3;
 
 /**
- * Follows `path` at constant `z` like {@link emitLap}, but rises over every zone whose top is above `z` wherever the
- * tool (radius `toolRadius`) touches it, i.e. where the centre is inside the zone grown by the tool radius. Inside, it
- * runs at `max(z, top)`: rectangular zones with vertical moves at the boundary, triangular zones with a linear ramp up
- * to `top` over the first half of the crossing and back down over the second. Overlapping zones of the same top and
- * shape are one lift; elsewhere the highest zone wins. The tool must be at the path start.
+ * Follows `path` like {@link emitLap}, Z moving linearly from `z` to `zEnd` (default: `z`, a level pass), but rises
+ * over every zone whose top is above the pass wherever the tool (radius `toolRadius`) touches it, i.e. where the centre
+ * is inside the zone grown by the tool radius. Inside, it runs at the zone's top: rectangular zones with vertical moves
+ * at the boundary, triangular zones with a linear ramp up to `top` over the first half of the crossing and back down
+ * over the second. Overlapping rectangular zones of the same top are one lift; each triangular zone keeps its own
+ * triangle, and where triangles overlap the pass stays on or above the highest of them. Elsewhere the highest zone
+ * wins. The tool must be at the path start.
  */
-export function emitPathOverZones(w: MoveWriter, path: Path2D, z: number, feed: number, zones: readonly TabZone[], toolRadius: number): void {
-  const groups = new Map<string, { top: number; shape: 'rect' | 'triangle'; polys: ReturnType<typeof contactPolygon>[] }>();
+export function emitPathOverZones(
+  w: MoveWriter, path: Path2D, z: number, feed: number, zones: readonly TabZone[], toolRadius: number, zEnd = z,
+): void {
+  const low = Math.min(z, zEnd);
+  const groups: { top: number; shape: 'rect' | 'triangle'; polys: ReturnType<typeof contactPolygon>[] }[] = [];
+  const rects = new Map<number, (typeof groups)[number]>();
   for (const zone of zones) {
-    if (!(z < zone.top - EPS)) continue;
+    if (!(low < zone.top - EPS)) continue;
     const poly = flattenPath(zone.polygon, ZONE_FLATTEN_TOL);
     if (poly.length < 3) continue;
-    const key = `${zone.top}|${zone.shape}`;
-    const g = groups.get(key) ?? { top: zone.top, shape: zone.shape, polys: [] };
-    g.polys.push(contactPolygon(poly));
-    groups.set(key, g);
+    const cp = contactPolygon(poly);
+    if (zone.shape === 'triangle') { groups.push({ top: zone.top, shape: 'triangle', polys: [cp] }); continue; }
+    const g = rects.get(zone.top);
+    if (g) g.polys.push(cp);
+    else {
+      const ng = { top: zone.top, shape: 'rect' as const, polys: [cp] };
+      rects.set(zone.top, ng);
+      groups.push(ng);
+    }
   }
   const intervals: TabInterval[] = [];
-  let top = z;
+  let top = Math.max(z, zEnd);
   const r = Math.max(0, toolRadius);
-  for (const g of groups.values()) {
+  for (const g of groups) {
     const found = contactIntervals(path, (p) => toolTouches(g.polys, p, r), contactStep(r));
     for (const iv of found) intervals.push({ ...iv, shape: g.shape, top: g.top });
     if (found.length) top = Math.max(top, g.top);
   }
   intervals.sort((a, b) => a.s0 - b.s0);
   wrapTriangles(intervals, path, pathLength(path));
-  emitLap(w, path, z, z, feed, intervals.length ? { top, base: z, intervals } : null);
+  emitLap(w, path, z, zEnd, feed, intervals.length ? { top, base: low, intervals } : null);
 }
+
+/** Like {@link emitRampLaps}, rising over tab zones (see {@link emitPathOverZones}). */
+export function emitRampLapsOverZones(
+  w: MoveWriter, path: Path2D, zFrom: number, zTo: number, angleDeg: number, feed: number, zones: readonly TabZone[], toolRadius: number,
+): void {
+  const total = pathLength(path);
+  const drop = zFrom - zTo;
+  if (drop <= EPS || total <= EPS) return;
+  const laps = rampLapCount(total, drop, angleDeg);
+  for (let k = 0; k < laps; k++) emitPathOverZones(w, path, zFrom - (drop * k) / laps, feed, zones, toolRadius, zFrom - (drop * (k + 1)) / laps);
+}
+
+const rampLapCount = (total: number, drop: number, angleDeg: number) =>
+  Math.max(1, Math.ceil(drop / (total * Math.tan((Math.max(0.1, angleDeg) * Math.PI) / 180)) - 1e-9));
 
 /** Ramps down along a closed path from zFrom to zTo over whole laps, never steeper than `angleDeg`. */
 export function emitRampLaps(w: MoveWriter, path: Path2D, zFrom: number, zTo: number, angleDeg: number, feed: number, tabs: TabProfile | null): void {
   const total = pathLength(path);
   const drop = zFrom - zTo;
   if (drop <= EPS || total <= EPS) return;
-  const perLap = total * Math.tan((Math.max(0.1, angleDeg) * Math.PI) / 180);
-  const laps = Math.max(1, Math.ceil(drop / perLap - 1e-9));
+  const laps = rampLapCount(total, drop, angleDeg);
   for (let k = 0; k < laps; k++) emitLap(w, path, zFrom - (drop * k) / laps, zFrom - (drop * (k + 1)) / laps, feed, tabs);
 }
 
