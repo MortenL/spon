@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  applyCommand, camContext, type Move, newOperation, type OpOverlays, pathFromPoints, type ProfileOp, profileToolpath, type ResolvedContour, startOffTabs,
+  applyCommand, autoStart, contourLaps, lapRunsCW, MIGRATIONS, orientPath, pathLength, pointAt, rotateStart, camContext, type Move, newOperation, type OpOverlays, pathFromPoints, type ProfileOp, profileToolpath, type ResolvedContour, reversePath, startOffTabs,
   type TabSettings, type Vec2,
 } from '../src';
 import { camPartSetup, geoOf, rectPath, tool6 } from './fixtures/camSetup';
@@ -101,8 +101,8 @@ describe('profile tabs on later laps', () => {
   }
 
   it('keeps the finish pass out of manual tabs', () => {
-    // (away from the line's bend: a manual tab beside an inner corner is nicked by the other leg's pass, as before)
-    for (const [contour, t] of [[rect, [0.1, 0.3, 0.55, 0.8]], [ell, [0.05, 0.4, 0.7]], [line, [0.3, 0.85]]] as const) {
+    // (away from inner corners: a manual tab beside one is nicked by the other leg's pass, as before)
+    for (const [contour, t] of [[rect, [0.1, 0.3, 0.55, 0.8]], [ell, [0.05, 0.35, 0.7, 0.8]], [line, [0.3, 0.85]]] as const) {
       const out = run({ openSide: 'left', finishPass: true, stockRadial: 0.5, tabs: tabs({ manual: [{ refIndex: 0, t: [...t] }] }) }, [contour]);
       expect(out.overlays.tabs).toHaveLength(t.length);
       expect(intoTabs(out.toolpath!.moves, out.overlays)).toEqual([]);
@@ -111,7 +111,7 @@ describe('profile tabs on later laps', () => {
 
   it('enters every lap off the tabs, with a plunge or a lead', () => {
     for (const contour of [rect, ell]) {
-      for (const extra of [{ entry: { mode: 'plunge' as const, rampAngleDeg: 3 } }, { leads: { mode: 'arc' as const, length: 3, startPoint: 'auto' as const } }]) {
+      for (const extra of [{ entry: { ...profile().entry, mode: 'plunge' as const } }, { leads: { mode: 'arc' as const, length: 3, startPoint: 'auto' as const } }]) {
         // tabs on every side: the automatic start of some lap falls on one
         const out = run({ ...extra, finishPass: true, stockRadial: 0.5, tabs: tabs({ count: 8 }) }, [contour]);
         expect(out.overlays.tabs.length).toBeGreaterThan(4);
@@ -133,5 +133,93 @@ describe('startOffTabs', () => {
     expect(startOffTabs(11, [10, 18], 5, 100)).toBe(5);
     expect(startOffTabs(16, [10, 18], 5, 100)).toBe(23);
     expect(startOffTabs(3, [0, 10, 20, 30, 40, 50, 60, 70, 80, 90], 6, 100)).toBe(3);
+  });
+});
+
+/** Whether the tool passes over `p` at the tab top `z` (it rose over the tab there). */
+const liftsAt = (moves: readonly Move[], p: Vec2, z: number) => samples(moves).some((q) => Math.abs(q.z - z) < 1e-6 && Math.hypot(q.x - p.x, q.y - p.y) < 0.06);
+
+describe('profile tab positions', () => {
+  const at = (patch: Partial<ProfileOp>, contour: ResolvedContour) => {
+    const out = run(patch, [contour]);
+    const top = out.overlays.tabPaths[0].z;
+    expect(intoTabs(out.toolpath!.moves, out.overlays)).toEqual([]);
+    for (const tab of out.overlays.tabs) expect(liftsAt(out.toolpath!.moves, tab.point, top)).toBe(true);
+    return out.overlays.tabs.map((tab) => ({ t: tab.t, x: tab.point.x, y: tab.point.y }));
+  };
+  const same = (a: { t: number; x: number; y: number }[], b: { t: number; x: number; y: number }[]) => {
+    expect(b).toHaveLength(a.length);
+    a.forEach((p, i) => {
+      expect(b[i].t).toBeCloseTo(p.t, 6);
+      // laps offset to either side of a line agree within the tolerance
+      expect(b[i].x).toBeCloseTo(p.x, 3);
+      expect(b[i].y).toBeCloseTo(p.y, 3);
+    });
+  };
+  const start = (t: number) => ({ mode: 'none' as const, length: 0, startPoint: { refIndex: 0, t } });
+
+  it('keeps manual tabs on a closed contour in place when the direction or the lead start point changes', () => {
+    for (const contour of [rect, ell]) {
+      const manual = tabs({ manual: [{ refIndex: 0, t: [0.1, 0.45, 0.8] }] });
+      const base = at({ tabs: manual }, contour);
+      same(base, at({ tabs: manual, direction: 'conventional' }, contour));
+      same(base, at({ tabs: manual, leads: start(0.3) }, contour));
+      same(base, at({ tabs: manual, leads: start(0.77), direction: 'conventional' }, contour));
+      same(base, at({ tabs: manual, leads: start(0.1) }, contour)); // a start on a tab moves off it
+    }
+  });
+
+  it('places automatic tabs on a closed contour the same whichever way it is cut', () => {
+    for (const contour of [rect, ell]) {
+      const base = at({ tabs: tabs({ count: 3 }) }, contour);
+      same(base, at({ tabs: tabs({ count: 3 }), direction: 'conventional' }, contour));
+      same(base, at({ tabs: tabs({ count: 3 }), leads: start(0.4) }, contour));
+    }
+  });
+
+  it('measures the tabs of a closed contour counter-clockwise', () => {
+    const [a, b] = at({ tabs: tabs({ manual: [{ refIndex: 0, t: [0.1, 0.2] }] }) }, rect);
+    // counter-clockwise around the centre (60, 40): the angle grows from the first tab to the second
+    const ang = (p: { x: number; y: number }) => Math.atan2(p.y - 40, p.x - 60);
+    const d = ang(b) - ang(a);
+    expect(Math.sin(d)).toBeGreaterThan(0);
+  });
+
+  it('keeps manual tabs on an open line in place when the direction or Reverse changes', () => {
+    const manual = tabs({ manual: [{ refIndex: 0, t: [0.25, 0.85] }] });
+    const reversed: ResolvedContour = { ...line, path: reversePath(line.path), reversed: true };
+    for (const openSide of ['left', 'right', 'on'] as const) {
+      const base = at({ tabs: manual, openSide }, line);
+      same(base, at({ tabs: manual, openSide, direction: 'conventional' }, line));
+      // measured from the line's drawn start: Reverse cuts the other side of the line, at the same places along it
+      const flipped = { left: 'right', right: 'left', on: 'on' } as const;
+      same(base, at({ tabs: manual, openSide: flipped[openSide] }, reversed));
+      same(base, at({ tabs: manual, openSide: flipped[openSide], direction: 'conventional' }, reversed));
+    }
+  });
+});
+
+describe('schema 9 tab positions', () => {
+  it('stay where they were after the migration', () => {
+    // a rectangle's two long edges tie for the automatic start: a counter-clockwise schema 9 lap (conventional, outside)
+    // started on the other one, which the migration cannot tell without the geometry
+    for (const [contour, direction] of [[rect, 'climb'], [ell, 'climb'], [ell, 'conventional']] as const) {
+      {
+        // schema 9 measured a contour's tabs along its first lap as cut: oriented for the direction, from the automatic start
+        const lap = contourLaps(contour.path, 'outside', 'on', direction, R, ctx.tolerance)!.laps[0];
+        let old = orientPath(lap, !lapRunsCW('outside', direction));
+        old = rotateStart(old, autoStart(old));
+        const ts = [0.2, 0.45];
+        const before = ts.map((t) => pointAt(old, t * pathLength(old)).point);
+        const v9 = { operations: [{ type: 'profile', side: 'outside', direction, leads: noLeads, tabs: { ...tabs(), manual: undefined, positions: ts.map((t) => ({ refIndex: 0, t })) } }], tools: [] };
+        const migrated = (MIGRATIONS[9](v9).operations as ProfileOp[])[0];
+        const out = run({ direction, tabs: { ...tabs(), manual: migrated.tabs.manual } }, [contour]);
+        const after = out.overlays.tabs.map((t) => t.point).sort((a, b) => a.x - b.x || a.y - b.y);
+        before.sort((a, b) => a.x - b.x || a.y - b.y).forEach((p, i) => {
+          expect(after[i].x).toBeCloseTo(p.x, 6);
+          expect(after[i].y).toBeCloseTo(p.y, 6);
+        });
+      }
+    }
   });
 });

@@ -52,11 +52,13 @@ interface ManualTabs { refIndex: number; t: number[] }   // t: fractions along t
 
 - `refIndex` is the contour's index in the operation's resolved geometry (as `LapPosition.refIndex` is today): the profile contour, the slot, or the pocket island.
 - `t` is measured along the operation's **tab path** for that contour (section 4): the first tool-centre lap for a profile, the centreline for a slot, the island edge for a pocket.
+- A profile's `t` is measured in a frame that the cut direction, Reverse and the lead start point do not change: a closed lap counter-clockwise from its automatic start point (the middle of its longest straight edge; on a tie, the one a clockwise lap picks), an open lap in the line's drawn direction. The tab path in the overlays is given in the same frame.
 - A manual entry with an empty `t` is valid: that contour has no tabs.
 - `ProfileOp`, `PocketOp` and `SlotOp` all have `tabs: TabSettings`. Defaults for all three, as profile has today: `enabled: false`, rect, width `max(4, tool diameter)`, height 2, count 4, spacing 50, `manual: []`.
 
 ### Schema 10 migration
 - Profile: `positions === null` → `manual: []`. Otherwise the positions are grouped by `refIndex`, each group becoming `{ refIndex, t: sorted }`. Contours that had no positions become automatic. In the old model they had no tabs; this edge case is accepted and documented in the migration comment.
+- Schema 9 measured positions along the lap as cut. A lap that was cut clockwise (outside climb, inside conventional, on climb) is mirrored into the new frame (`t → 1 − t`); a counter-clockwise one keeps its `t`. Positions of the contour with an explicit lead start point, of inner loops (cut the other way) and of counter-clockwise laps whose longest edges tie cannot be converted without the geometry and are kept as they were.
 - Pocket and slot operations get the default `tabs` (disabled).
 - `positions` is removed.
 
@@ -84,7 +86,7 @@ A shared **Tabs** block, used by profile, pocket and slot, with: enable, shape, 
 Shared rule: at every depth `z < tabTop` (`tabTop = bottom + height`) the tool rises over each tab; at or above `tabTop` it cuts normally. Rectangular tabs lift and drop vertically; triangular tabs ramp (existing `TabProfile` behaviour). Each tab interval covers the tab width plus the tool diameter (as today).
 
 ### Profile, closed contours
-Unchanged mechanism (`tabIntervals` → `TabProfile` → `emitLap` / `emitRampLaps`), now reading `manual` per contour. The tab path is the first tool-centre lap. Later laps (finish pass, multiple laps) use the same tabs mapped by arc length fraction, as today.
+Unchanged mechanism (`tabIntervals` → `TabProfile` → `emitLap` / `emitRampLaps`), now reading `manual` per contour. The tab path is the first tool-centre lap, in the tab frame (§2). Tabs are placed once per contour, on its roughing laps; every lap as cut and every later lap (the finish pass) takes them by projecting each tab centre to its nearest point, never placing them again. A closed lap's start (and its leads) moves off a tab it would fall on.
 
 ### Profile, open lines
 `cutOpen` passes the contour's `TabProfile` to `emitLap` for levels below `tabTop`, in either direction. When a level is cut in reverse (`sameWay` false), the intervals are mirrored. Automatic placement: section 5, open paths.

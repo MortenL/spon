@@ -51,7 +51,11 @@ export interface TabSettings {
   placement: 'count' | 'spacing';
   count: number;
   spacing: number;
-  /** Per contour (by refIndex) fixed positions as fractions t of the lap; a contour without an entry is automatic. */
+  /**
+   * Per contour (by refIndex) fixed positions as fractions t of its tab path; a contour without an entry is automatic.
+   * A profile measures them in a frame that the cut direction, Reverse and the lead start point do not change: a
+   * closed lap counter-clockwise from its automatic start, an open lap in the line's drawn direction.
+   */
   manual: ManualTabs[];
 }
 export interface ManualTabs { refIndex: number; t: number[] }

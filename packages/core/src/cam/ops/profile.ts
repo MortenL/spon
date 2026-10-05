@@ -34,26 +34,27 @@ export const lapRunsCW = (side: 'outside' | 'inside' | 'on', direction: 'climb' 
  * fitting, up to tol/2, which fitArcs also enforces between input points (a few sparse vertices would otherwise
  * be fitted by one arc bulging far from the lap). The joins stay well under the fit bound, or arcs could not
  * follow their chords. The lap is offset by their sum beyond `offset`, so the tool centre never comes closer
- * than `offset` to the contour; the lap stays within `tol` of nominal.
+ * than `offset` to the contour; the lap stays within `tol` of nominal. Open laps come in cutting order and direction;
+ * `reversed` tells when that runs against `path`.
  */
 export function contourLaps(
   path: Path2D, side: 'outside' | 'inside' | 'on', openSide: 'left' | 'on' | 'right', direction: 'climb' | 'conventional', offset: number, tol: number,
-): { laps: Path2D[]; rounded: boolean } | null {
+): { laps: Path2D[]; rounded: boolean; reversed: boolean } | null {
   if (!path.closed) {
-    if (openSide === 'on' || offset === 0) return { laps: [path], rounded: false };
+    if (openSide === 'on' || offset === 0) return { laps: [path], rounded: false, reversed: false };
     const res = offsetOpenPath(path, openSide, offset, tol);
     if (!res) return null;
     // climb keeps the cut edge on the tool's right (M3): left of the line runs with it, right runs against it
     const forward = (openSide === 'left') === (direction === 'climb');
     const laps = forward ? res.paths : res.paths.map(reversePath).reverse();
-    return { laps, rounded: res.rounded };
+    return { laps, rounded: res.rounded, reversed: !forward };
   }
-  if (side === 'on' || offset === 0) return { laps: [path], rounded: false };
+  if (side === 'on' || offset === 0) return { laps: [path], rounded: false, reversed: false };
   const flatTol = tol / 4, joinTol = tol / 8, fitTol = tol / 2;
   const d = offset + flatTol + joinTol + fitTol;
   const poly = flattenPath(orientPath(path, true), flatTol);
   const res = offsetPolys([poly], side === 'outside' ? d : -d, joinTol).filter((p) => polyArea(p) > 0);
-  return res.length ? { laps: res.map((p) => fitArcs(p, true, fitTol, fitTol)), rounded: false } : null;
+  return res.length ? { laps: res.map((p) => fitArcs(p, true, fitTol, fitTol)), rounded: false, reversed: false } : null;
 }
 
 /** Midpoint of the longest line segment, else of the longest arc. */
@@ -70,6 +71,19 @@ export function autoStart(path: Path2D): number {
     acc += len;
   }
   return best;
+}
+
+/**
+ * A closed lap in the frame its tab positions are measured in, whatever the cut direction and lead start point:
+ * counter-clockwise, starting at the automatic start point (the middle of the longest straight edge). Where several
+ * edges tie for longest (a rectangle), it is the one a clockwise lap picks, the frame schema 9 measured the tabs of
+ * the default (climb, outside) cut in, so those convert exactly (see migration 9 → 10).
+ */
+export function tabFrame(lap: Path2D): Path2D {
+  const ccw = orientPath(lap, true);
+  const cw = orientPath(lap, false);
+  if (cw === ccw) return rotateStart(ccw, autoStart(ccw)); // no area: no orientation to choose
+  return rotateStart(ccw, pathLength(ccw) - autoStart(cw));
 }
 
 /** Distance from `a` to `b` around a closed path of length `total`. */
@@ -132,21 +146,23 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
   const noTabs = { at: (_z: number, _rev: boolean): TabProfile | null => null };
 
   /**
-   * Places one contour's tabs once, on its roughing laps (`runs`, as cut), and records the first lap's in the
-   * overlays: that lap is the contour's tab path, where explicit (manual) positions apply. Later pieces of a split
-   * contour are placed automatically, except that an empty manual list still means no tabs. Returns each lap's tab
-   * centres as points; every later lap (the finish pass) takes the same tabs, projected onto it (spec §4).
+   * Places one contour's tabs once, on its roughing laps in their tab frames (`frames`: closed laps counter-clockwise
+   * from the automatic start, open laps in the line's drawn direction; never the cut direction or lead start), and
+   * records the tab path (the frame at `first`, where explicit manual positions apply) in the overlays. Other
+   * pieces of a split contour are placed automatically, except that an empty manual list still means no tabs.
+   * Returns each lap's tab centres as points; every lap as cut, and every later lap (the finish pass), takes them by
+   * projecting each to its nearest point (spec §4).
    */
-  const planContourTabs = (runs: Path2D[], index: number, ref: number, top: number): Vec2[][] => {
-    if (!op.tabs.enabled) return runs.map(() => []);
+  const planContourTabs = (frames: Path2D[], first: number, index: number, ref: number, top: number): Vec2[][] => {
+    if (!op.tabs.enabled) return frames.map(() => []);
     const emptyEntry = op.tabs.manual.find((m) => m.refIndex === index);
     const noManualTabs = emptyEntry && emptyEntry.t.length === 0 ? [emptyEntry] : [];
     let skippedAll = 0;
-    const points = runs.map((path, i) => {
-      const { intervals, skipped, manual } = contourTabs(path, i === 0 ? op.tabs : { ...op.tabs, manual: noManualTabs }, r, index);
+    const points = frames.map((path, i) => {
+      const { intervals, skipped, manual } = contourTabs(path, i === first ? op.tabs : { ...op.tabs, manual: noManualTabs }, r, index);
       skippedAll += skipped;
       const centres = intervals.map((iv) => iv.center);
-      if (i === 0) pushTabOverlays(out.overlays, path, centres, index, manual, top);
+      if (i === first) pushTabOverlays(out.overlays, path, centres, index, manual, top);
       return centres.map((c) => pointAt(path, c).point);
     });
     if (skippedAll) diag('warning', 'tab-skipped', `${skippedAll} tab(s) did not fit and were skipped`, ref);
@@ -303,11 +319,16 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
     const { laps } = res;
     if (res.rounded) diag('warning', 'bend-rounded', 'The tool is too large for a bend in this line; the bend was rounded', c.ref);
     const levels = depthLevels(h.top, h.bottom + op.stockAxial, op.stepdown);
-    const runs = laps.map((lap, i) => (lap.closed ? closedRun(lap, index, i === 0, []) : lap));
-    const tabPoints = planContourTabs(runs, index, c.ref, tabTop(h));
-    runs.forEach((run, i) => {
-      if (run.closed) cutClosed(run, levels, h, first, c.ref, tabPoints[i]);
-      else cutOpen(run, levels, h, first, op.openSide !== 'on', tabPoints[i]);
+    // tab frames: open laps (and their order) run against the drawn line when exactly one of them is reversed: the
+    // laps against `c.path` (the cut direction), or `c.path` against the drawn line (Reverse)
+    const againstDrawn = res.reversed !== (c.reversed === true);
+    const frames = laps.map((lap) => (lap.closed ? tabFrame(lap) : againstDrawn ? reversePath(lap) : lap));
+    // the tab path is the first lap along the drawn line (laps come in cutting order) or a closed contour's first lap
+    const firstFrame = !c.path.closed && againstDrawn ? laps.length - 1 : 0;
+    const tabPoints = planContourTabs(frames, firstFrame, index, c.ref, tabTop(h));
+    laps.forEach((lap, i) => {
+      if (lap.closed) cutClosed(closedRun(lap, index, i === 0, tabPoints[i]), levels, h, first, c.ref, tabPoints[i]);
+      else cutOpen(lap, levels, h, first, op.openSide !== 'on', tabPoints[i]);
       first = false;
     });
     if (op.finishPass && (c.path.closed || op.openSide !== 'on')) {
