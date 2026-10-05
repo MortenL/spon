@@ -1,12 +1,18 @@
 import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { importModel, OCCT_PARAMS, type OcctReader } from '../src';
+import { importModel, OCCT_FALLBACK_PARAMS, OCCT_PARAMS, type OcctReader, type OcctResult } from '../src';
 
 const reader = { ReadStepFile: vi.fn(), ReadIgesFile: vi.fn() };
 const loadReader = vi.fn(async () => reader as unknown as OcctReader);
 const recorded = (name: string) => JSON.parse(readFileSync(new URL(`./fixtures/${name}.occt.json`, import.meta.url), 'utf8'));
 const STL = new TextEncoder().encode(['solid t', 'facet normal 0 0 1', 'outer loop', 'vertex 0 0 0', 'vertex 2 0 0', 'vertex 0 1 0', 'endloop', 'endfacet', 'endsolid t'].join('\n'));
 const BYTES = new Uint8Array([1, 2, 3]);
+/** box-hole.step with one more B-rep face that the reader left without triangles. */
+function withUnmeshedFace(): OcctResult {
+  const r = recorded('box-hole.step');
+  r.meshes[0].brep_faces.push({ first: 0, last: -1 });
+  return r;
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -25,6 +31,7 @@ describe('importModel', () => {
     reader.ReadStepFile.mockReturnValue(recorded('box-hole.step'));
     const r = await importModel('bracket.STP', BYTES, {}, loadReader);
     expect(loadReader).toHaveBeenCalledOnce();
+    expect(reader.ReadStepFile).toHaveBeenCalledOnce();
     expect(reader.ReadStepFile).toHaveBeenCalledWith(BYTES, OCCT_PARAMS);
     expect(reader.ReadIgesFile).not.toHaveBeenCalled();
     if (!r.ok || r.kind !== 'mesh') throw new Error('expected a mesh');
@@ -46,6 +53,22 @@ describe('importModel', () => {
     expect(chosen.ok && chosen.kind === 'mesh' && chosen.source?.name).toBe('Large block');
   });
 
+  it('reads again with coarser settings when faces were left without triangles, and says so', async () => {
+    reader.ReadStepFile.mockImplementation((_bytes: Uint8Array, params: unknown) => (params === OCCT_PARAMS ? withUnmeshedFace() : recorded('box-hole.step')));
+    const r = await importModel('neck.step', BYTES, {}, loadReader);
+    expect(reader.ReadStepFile).toHaveBeenNthCalledWith(2, BYTES, OCCT_FALLBACK_PARAMS);
+    if (!r.ok || r.kind !== 'mesh') throw new Error('expected a mesh');
+    expect(r.warnings).toEqual(['Some faces could not be meshed at 0.01 mm, so the model was meshed at 0.05 mm']);
+  });
+
+  it('keeps the fine mesh and warns about the missing faces when the coarser read is no better', async () => {
+    reader.ReadStepFile.mockImplementation(() => withUnmeshedFace());
+    const r = await importModel('neck.step', BYTES, {}, loadReader);
+    expect(reader.ReadStepFile).toHaveBeenCalledTimes(2);
+    if (!r.ok || r.kind !== 'mesh') throw new Error('expected a mesh');
+    expect(r.warnings).toContain('1 face could not be meshed and is missing from the model');
+  });
+
   it('reports reader crashes and load failures', async () => {
     reader.ReadStepFile.mockImplementation(() => { throw new Error('abort'); });
     expect(await importModel('bad.step', BYTES, {}, loadReader)).toEqual({ ok: false, error: 'Not a readable STEP file' });
@@ -55,5 +78,6 @@ describe('importModel', () => {
 
   it('keeps the tessellation parameters fixed', () => {
     expect(OCCT_PARAMS).toEqual({ linearUnit: 'millimeter', linearDeflectionType: 'absolute_value', linearDeflection: 0.01, angularDeflection: (5 * Math.PI) / 180 });
+    expect(OCCT_FALLBACK_PARAMS).toEqual({ linearUnit: 'millimeter', linearDeflectionType: 'absolute_value', linearDeflection: 0.05, angularDeflection: (15 * Math.PI) / 180 });
   });
 });

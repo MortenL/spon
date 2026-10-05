@@ -34,6 +34,18 @@ describe('weldTriangles', () => {
   });
 });
 
+describe('cadImport', () => {
+  it('warns about faces the reader left without triangles', () => {
+    const rec = recorded('box-hole.step');
+    rec.meshes![0].brep_faces!.push({ first: 0, last: -1 }, { first: 0, last: -1 });
+    const r = cadImport(rec, 'step');
+    if (!r.ok || r.kind !== 'mesh') throw new Error('expected a mesh');
+    expect(r.warnings).toContain('2 faces could not be meshed and are missing from the model');
+    const clean = cadImport(recorded('box-hole.step'), 'step');
+    expect(clean.ok && clean.kind === 'mesh' && clean.warnings).toEqual([]);
+  });
+});
+
 describe('occtToBodies', () => {
   it('box-hole.step: one closed body whose face ids follow the B-rep face ranges', () => {
     const rec = recorded('box-hole.step');

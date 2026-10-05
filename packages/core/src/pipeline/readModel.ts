@@ -1,4 +1,4 @@
-import { CAD_LABEL, cadImport, type OcctResult } from '../import/cad';
+import { CAD_LABEL, cadImport, type OcctResult, unmeshedFaces } from '../import/cad';
 import type { SvgScale } from '../import/svg/svg';
 import { cadFormat, type ImportResult, importFile } from '../import/importFile';
 
@@ -14,7 +14,18 @@ export const OCCT_PARAMS = {
   angularDeflection: (5 * Math.PI) / 180,
 } as const;
 
-export type OcctParams = typeof OCCT_PARAMS;
+/**
+ * The second try when OCCT_PARAMS leave faces without triangles. Only that file reads with it, and the same file always
+ * does, so a reopened job gets the same triangles.
+ */
+export const OCCT_FALLBACK_PARAMS = {
+  linearUnit: 'millimeter',
+  linearDeflectionType: 'absolute_value',
+  linearDeflection: 0.05,
+  angularDeflection: (15 * Math.PI) / 180,
+} as const;
+
+export type OcctParams = typeof OCCT_PARAMS | typeof OCCT_FALLBACK_PARAMS;
 
 /** The occt-import-js (LGPL-2.1) functions Spon calls. Core never imports the reader; callers inject a loader. */
 export interface OcctReader {
@@ -42,11 +53,22 @@ export async function importModel(fileName: string, bytes: Uint8Array, options: 
   } catch (err) {
     return { ok: false, error: `Could not load the ${CAD_LABEL[format]} reader: ${message(err)}` };
   }
-  let result: OcctResult;
-  try {
-    result = format === 'step' ? reader.ReadStepFile(bytes, OCCT_PARAMS) : reader.ReadIgesFile(bytes, OCCT_PARAMS);
-  } catch {
-    result = { success: false }; // the WASM reader aborts on some malformed files
+  const read = (params: OcctParams): OcctResult => {
+    try {
+      return format === 'step' ? reader.ReadStepFile(bytes, params) : reader.ReadIgesFile(bytes, params);
+    } catch {
+      return { success: false }; // the WASM reader aborts on some malformed files
+    }
+  };
+  const fine = read(OCCT_PARAMS);
+  const missing = unmeshedFaces(fine.meshes ?? []);
+  if (!fine.success || missing === 0) return cadImport(fine, format, options.body);
+  // the mesher gave up on some faces: a coarser mesh is better than a model with holes, but only if it has fewer
+  const coarse = read(OCCT_FALLBACK_PARAMS);
+  if (!coarse.success || unmeshedFaces(coarse.meshes ?? []) >= missing) return cadImport(fine, format, options.body);
+  const result = cadImport(coarse, format, options.body);
+  if (result.ok && result.kind === 'mesh') {
+    result.warnings.unshift(`Some faces could not be meshed at ${OCCT_PARAMS.linearDeflection} mm, so the model was meshed at ${OCCT_FALLBACK_PARAMS.linearDeflection} mm`);
   }
-  return cadImport(result, format, options.body);
+  return result;
 }
