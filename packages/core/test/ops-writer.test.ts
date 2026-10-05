@@ -119,14 +119,15 @@ describe('leads', () => {
 describe('tabIntervals', () => {
   const rect = pathFromPoints([v2(0, 0), v2(100, 0), v2(100, 50), v2(0, 50)], true); // corners at 0, 100, 150, 250
 
-  it('spreads tabs evenly and sizes them by width plus the tool diameter', () => {
+  it('balances tabs around the part and sizes them by width plus the tool diameter', () => {
     const r = tabIntervals(rect, tabs({ count: 4 }), 3, null);
     expect(r.skipped).toBe(0);
-    expect(r.intervals.map((i) => [i.s0, i.s1])).toEqual([[32.5, 42.5], [107.5, 117.5], [182.5, 192.5], [257.5, 267.5]]);
+    // one tab in the middle of each side: straight, and exactly 90° apart about the centroid (50, 25)
+    expect(r.intervals.map((i) => [i.s0, i.s1])).toEqual([[45, 55], [120, 130], [195, 205], [270, 280]]);
   });
 
   it('shifts tabs away from sharp corners and skips those that cannot fit', () => {
-    // 30 mm square, 8 tabs: centres at 7.5, 22.5, … are 7.5 mm from a corner; a tab needs 5 + 4 = 9 mm → shifted to 9, 21, …
+    // 30 mm square, 8 tabs: a tab centre needs 5 + 4 = 9 mm from a corner, so each side holds two, at 9 and 21
     const shifted = tabIntervals(pathFromPoints([v2(0, 0), v2(30, 0), v2(30, 30), v2(0, 30)], true), tabs({ count: 8 }), 3, null);
     expect(shifted.skipped).toBe(0);
     expect(shifted.intervals.slice(0, 2).map((i) => +i.center.toFixed(6))).toEqual([9, 21]);
