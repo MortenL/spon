@@ -45,6 +45,11 @@ const SAMPLES: JobCommand[] = [
   { type: 'updateOperation', id: 'o', patch: { geometry: [{ kind: 'meshSlot', face }, { kind: 'meshSlot', face, loop: 2 }], strategy: 'toolWidth', trochoidal: { stepPct: 12 }, squareEnds: 'dogbone', heights: { bottom: { from: 'slotBottom', offset: 0 } } } },
   { type: 'updateOperation', id: 'o', patch: { maxDepth: null, depthMode: 'width', lineWidth: 0.4, sourceId: 'op1', stepdown: null } },
   { type: 'removeOperation', id: 'o' },
+  { type: 'addTab', opId: 'o', refIndex: 0, t: 0.5, current: [0.25, 0.75] },
+  { type: 'removeTab', opId: 'o', refIndex: 0, index: 1, current: [0.25, 0.75] },
+  { type: 'moveTab', opId: 'o', refIndex: 1, index: 0, t: 0.4, current: [] },
+  { type: 'resetTabs', opId: 'o', refIndex: 2 },
+  { type: 'resetTabs', opId: 'o' },
   { type: 'duplicateOperation', id: 'o', newId: 'o2' },
   { type: 'moveOperation', id: 'o', delta: -1 },
   { type: 'setOperationEnabled', id: 'o', enabled: false },
@@ -57,7 +62,7 @@ const SAMPLES: JobCommand[] = [
 
 describe('jobCommandSchema', () => {
   it('covers every command type', () => {
-    expect(new Set(SAMPLES.map((c) => c.type)).size).toBe(25);
+    expect(new Set(SAMPLES.map((c) => c.type)).size).toBe(29);
   });
 
   it('accepts every command unchanged', () => {
