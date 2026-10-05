@@ -1,15 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { applyCommand, applyCommands, createJob, CURRENT_SCHEMA_VERSION, migrateJob } from '../src';
+import { applyCommand, applyCommands, createJob, migrateJob, MIGRATIONS } from '../src';
 import { tool6 } from './fixtures/camSetup';
 
 const vbit = { ...tool6, id: 'v60', number: 7, type: 'vbit' as const, tipAngleDeg: 60, cornerRadius: 0 };
 const withV = () => applyCommand(createJob(), { type: 'addTool', tool: vbit });
 
 describe('inlay job model', () => {
-  it('is schema 8 and migrates schema 6 jobs unchanged', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(8);
+  it('migrates schema 6 jobs to 8 unchanged', () => {
     const v6 = { ...createJob(), schemaVersion: 6 };
-    expect(migrateJob(v6)).toEqual({ ...v6, schemaVersion: 8 });
+    expect(migrateJob(v6, MIGRATIONS, 8)).toEqual({ ...v6, schemaVersion: 8 });
   });
 
   it('adds a V-carve plug with defaults and validates it', () => {

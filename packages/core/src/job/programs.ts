@@ -11,6 +11,7 @@ export interface MachinePatch {
   accel?: Partial<AxisValues>;
   maxFeed?: number;
   toolChangeSeconds?: number;
+  spoilboardAllowance?: number;
 }
 
 export function addProgram(job: Job, program: NewProgram): Job {
@@ -49,6 +50,7 @@ export function setMachineProfile(job: Job, patch: MachinePatch): Job {
       accel: { ...m.accel, ...patch.accel },
       maxFeed: patch.maxFeed ?? m.maxFeed,
       toolChangeSeconds: patch.toolChangeSeconds ?? m.toolChangeSeconds,
+      spoilboardAllowance: patch.spoilboardAllowance ?? m.spoilboardAllowance,
     },
   };
 }

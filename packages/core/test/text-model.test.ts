@@ -5,7 +5,7 @@ const fixed = () => setStock(createJob(), { mode: 'fixed', size: { x: 200, y: 10
 
 describe('texts in the job', () => {
   it('starts empty and migrates schema 5 jobs', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(8);
+    expect(CURRENT_SCHEMA_VERSION).toBe(9);
     expect(createJob().texts).toEqual([]);
     const v5 = { ...createJob(), schemaVersion: 5 } as Record<string, unknown>;
     delete v5.texts;

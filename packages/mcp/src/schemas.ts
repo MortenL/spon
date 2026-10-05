@@ -142,7 +142,7 @@ const wcsPatch = z.strictObject({
   offset: vec3Schema,
   workOffset: z.enum(['G54', 'G55', 'G56', 'G57', 'G58', 'G59']),
 }).partial();
-const machinePatch = z.strictObject({ rapid: vec3Partial, accel: vec3Partial, maxFeed: z.number(), toolChangeSeconds: z.number() }).partial();
+const machinePatch = z.strictObject({ rapid: vec3Partial, accel: vec3Partial, maxFeed: z.number(), toolChangeSeconds: z.number(), spoilboardAllowance: z.number().min(0) }).partial();
 const postPatch = z.strictObject({
   dialect: dialectSchema, splitByTool: z.boolean(), decimals: z.number().int(), arcFormat: z.enum(['ij', 'r']), lineNumbers: z.boolean(),
   lineNumberStep: z.number().int(), coolant: z.boolean(), spindleDwell: z.number(), safeStart: z.string(), programNumber: z.number().int(),

@@ -3,7 +3,7 @@ import type { Job } from '../job/types';
 import { defaultPostSettings } from '../post/types';
 import { SponFileError } from './errors';
 
-export const CURRENT_SCHEMA_VERSION = 8;
+export const CURRENT_SCHEMA_VERSION = 9;
 
 export type Migration = (job: Record<string, unknown>) => Record<string, unknown>;
 
@@ -34,6 +34,8 @@ export const MIGRATIONS: Readonly<Record<number, Migration>> = {
   6: (job) => job,
   // v7 → v8 (Milestone 4.5): thread milling; nothing to change in older jobs
   7: (job) => job,
+  // v8 → v9: the machine profile allows cuts 0.5 mm into the spoilboard (a through profile breaks through by 0.2 mm)
+  8: (job) => ({ ...job, machine: { spoilboardAllowance: 0.5, ...(job.machine as object) } }),
 };
 
 export function migrateJob(raw: unknown, migrations: Readonly<Record<number, Migration>> = MIGRATIONS, current = CURRENT_SCHEMA_VERSION): Job {

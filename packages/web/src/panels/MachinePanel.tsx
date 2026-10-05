@@ -2,7 +2,7 @@ import {
   type AxisValues, applyMachinePreset, formatLength, MACHINE_PRESET_NAMES, type MachinePresetName, parseLength, setMachineProfile,
 } from '@sponcam/core';
 import { appStore, useApp } from '@/state/store';
-import { NumericField } from './NumericField';
+import { LengthField, NumericField } from './NumericField';
 
 const AXES = ['x', 'y', 'z'] as const;
 
@@ -49,6 +49,11 @@ export function MachineSettings() {
             return t.trim() !== '' && Number.isFinite(n) && n >= 0 ? n : null;
           }}
           onCommit={(v) => commit((j) => setMachineProfile(j, { toolChangeSeconds: v }))}
+        />
+        {/* how far a cut may go below the stock bottom (a through cut's breakthrough) before the analysis calls it an error */}
+        <LengthField
+          label="Into spoilboard" valueMm={machine.spoilboardAllowance} min={0} testId="machine-spoilboard"
+          onCommit={(v) => commit((j) => setMachineProfile(j, { spoilboardAllowance: v }))}
         />
       </div>
     </>
