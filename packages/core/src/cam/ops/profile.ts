@@ -12,7 +12,7 @@ import { resolveHeights, type ResolvedHeights } from '../heights';
 import type { CamCode, CamSeverity, ProfileOp } from '../types';
 import { leadIn, leadOut } from './leads';
 import { emptyOverlays, type OpOutput } from './output';
-import { contourTabs } from './tabs';
+import { contourTabs, pushTabOverlays } from './tabs';
 import { depthLevels, emitLap, emitRampLaps, MoveWriter, type TabProfile } from './writer';
 
 const lerp = (a: Vec2, b: Vec2, t: number): Vec2 => v2(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
@@ -118,11 +118,7 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
     const top = h.bottom + op.tabs.height;
     const forward: TabProfile = { top, base: h.bottom, intervals };
     const mirrored: TabProfile = { top, base: h.bottom, intervals: intervals.map((iv) => ({ ...iv, s0: total - iv.s1, s1: total - iv.s0 })) };
-    if (recordOverlay) {
-      intervals.forEach((iv, i) =>
-        out.overlays.tabs.push({ refIndex: index, index: i, t: iv.center / total, point: pointAt(path, iv.center).point, manual }));
-      out.overlays.tabPaths.push({ refIndex: index, points: flattenPath(path, 0.01), z: top, closed: path.closed });
-    }
+    if (recordOverlay) pushTabOverlays(out.overlays, path, intervals.map((iv) => iv.center), index, manual, top);
     return { at: (z: number, rev: boolean): TabProfile | null => (intervals.length && z < top - 1e-9 ? (rev ? mirrored : forward) : null) };
   };
 

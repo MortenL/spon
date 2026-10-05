@@ -339,6 +339,7 @@ function SlotPasses({ op }: { op: SlotOp }) {
   const tool = job.tools.find((t) => t.id === op.toolId) ?? null;
   const ctx = useMemo(() => camContext(job, geometry), [job, geometry]);
   const { info, fields } = useMemo(() => slotView(op, ctx, tool), [op, ctx, tool]);
+  const selectedTab = useApp((s) => s.selectedTab);
 
   return (
     <div className="space-y-3">
@@ -384,6 +385,8 @@ function SlotPasses({ op }: { op: SlotOp }) {
         </label>
       )}
       <EntryFields entry={op.entry} showAngles onPatch={(p) => patch({ entry: { ...op.entry, ...p } })} />
+
+      <TabsBlock op={op} selectedTab={selectedTab} />
     </div>
   );
 }

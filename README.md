@@ -34,6 +34,7 @@ An MCP server lets Claude (or any MCP client) drive the same jobs: on `.spon` fi
   - Tool-width, wider and trochoidal slots along drawn lines and arcs.
   - Straight and arc slots found in STL, STEP and IGES models, closed or open, blind or through.
   - Square ends cut inside, to the wall, or with dogbones, as you choose.
+  - Tabs across the slot, placed along its centreline and draggable in the viewport; trochoidal loops at a tab are left out.
 - **Engraving and V-carve** from drawings and flat faces of models.
   - Engrave lines and outlines by depth, or by V-bit line width.
   - V-carve closed outlines with the depth following the width and sharp corners.

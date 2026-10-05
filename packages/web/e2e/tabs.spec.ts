@@ -109,3 +109,32 @@ test('tabs: add on the path, select, remove with Delete and ×, reset one contou
   await expect(handles(page)).toHaveCount(3);
   await expect(page.getByTestId('pass-tab-manual-count')).toHaveText('1 contour placed by hand');
 });
+
+test('tabs on a slot: handles along the centreline', async ({ page }) => {
+  await page.getByTestId('open-input').setInputFiles(path.join(FIXTURES, 'slot-lines.dxf'));
+  await expect(page.getByTestId('model-size')).toBeVisible();
+  await openPanel(page, 'stock');
+  await page.getByTestId('stock-margin-bottom').fill('6');
+  await page.getByTestId('stock-margin-bottom').press('Enter');
+
+  await openPanel(page, 'operations');
+  await page.getByTestId('add-op').click();
+  await page.getByTestId('add-op-slot').click();
+  await page.getByTestId('inspector-tab-geometry').click();
+  await page.locator('[data-testid^="catalog-contour-SLOTS-"]').first().locator('input').check();
+  await page.getByTestId('inspector-tab-passes').click();
+  await page.getByTestId('pass-tabs').click();
+  await page.getByTestId('pass-tab-count').fill('2');
+  await page.getByTestId('pass-tab-count').press('Enter');
+  await expect(opRows(page).last()).toHaveAttribute('data-status', /ok|warning/);
+  await page.getByTestId('view-top').click();
+  await expect(handles(page)).toHaveCount(2);
+  await expect(page.getByTestId('tab-handle-0-0')).toBeAttached();
+  await expect(page.getByTestId('tab-handle-0-1')).toBeAttached();
+  await expect(page.getByTestId('tab-path-0')).toBeAttached();
+
+  // a click on the centreline adds a third tab there and freezes the slot
+  await clickMarker(page, 'tab-path-0');
+  await expect(handles(page)).toHaveCount(3);
+  await expect(page.getByTestId('pass-tab-manual-count')).toHaveText('1 contour placed by hand');
+});
