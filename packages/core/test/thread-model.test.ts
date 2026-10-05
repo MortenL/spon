@@ -1,15 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { applyCommand, createJob, CURRENT_SCHEMA_VERSION, migrateJob, threadRow } from '../src';
+import { applyCommand, createJob, migrateJob, MIGRATIONS, threadRow } from '../src';
 import { tool6 } from './fixtures/camSetup';
 
 const base = () => applyCommand(createJob(), { type: 'addOperation', opType: 'thread', toolId: null, id: 't' });
 const update = (patch: object, job = base()) => applyCommand(job, { type: 'updateOperation', id: 't', patch: patch as never });
 
 describe('thread job model', () => {
-  it('is schema 8 and migrates schema 7 jobs unchanged', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(8);
+  it('migrates schema 7 jobs to 8 unchanged', () => {
     const v7 = { ...createJob(), schemaVersion: 7 };
-    expect(migrateJob(v7)).toEqual({ ...v7, schemaVersion: 8 });
+    expect(migrateJob(v7, MIGRATIONS, 8)).toEqual({ ...v7, schemaVersion: 8 });
   });
 
   it('adds a thread operation with defaults', () => {

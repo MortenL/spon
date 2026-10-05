@@ -62,6 +62,9 @@ const EPS = 1e-6;
 /** Times the table (fills table.t), summarises it and checks it against the stock. */
 export function analyzeTable(table: MotionTable, lineFlags: Uint8Array, ctx: AnalysisContext): AnalysisResult {
   const sink = new DiagnosticSink();
+  // a through cut breaks into the spoilboard by design; only deeper than the machine allows is an error
+  const allowance = Math.max(0, ctx.profile.spoilboardAllowance ?? 0);
+  const belowMessage = allowance > 0 ? `Tool goes more than ${+allowance.toFixed(3)} mm below the stock bottom` : 'Tool goes below the stock bottom';
   const perTool = new Map<number, number>();
   const tools = new Set<number>();
   const s = [0, 0, 0];
@@ -144,8 +147,8 @@ export function analyzeTable(table: MotionTable, lineFlags: Uint8Array, ctx: Ana
 
     // the lowest point this move reaches (not where it started, so a retract from a too-deep cut is not reported twice)
     const lowest = kind === MoveKind.ArcCW || kind === MoveKind.ArcCCW ? rowMin[2] : e[2];
-    if (stock && lowest < stock.min.z - EPS) {
-      sink.add({ line: table.line[i], severity: 'error', code: 'below-stock-bottom', message: 'Tool goes below the stock bottom' });
+    if (stock && lowest < stock.min.z - allowance - EPS) {
+      sink.add({ line: table.line[i], severity: 'error', code: 'below-stock-bottom', message: belowMessage });
     }
   }
 

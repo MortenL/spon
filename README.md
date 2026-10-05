@@ -19,7 +19,7 @@ An MCP server lets Claude (or any MCP client) drive the same jobs: on `.spon` fi
 - Orient the model by quarter turns, by laying a face flat, or by spinning it about Z.
 - Auto or fixed stock, and a work coordinate system (G54–G59) anchored to the corners, edges or centre of the stock, with an offset.
 - With no model, set the stock size yourself: a spoilboard or blank can be faced without importing anything.
-- Machine profiles (rapid speeds, acceleration, maximum feed) for cycle-time estimates and feed checks.
+- Machine profiles (rapid speeds, acceleration, maximum feed) for cycle-time estimates and feed checks, and how far a through cut may go into the spoilboard (0.5 mm by default) before the G-code check calls it an error.
 
 **Operations**
 - **Profile** outside, inside or on a contour.
