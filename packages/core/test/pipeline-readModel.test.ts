@@ -54,6 +54,6 @@ describe('importModel', () => {
   });
 
   it('keeps the tessellation parameters fixed', () => {
-    expect(OCCT_PARAMS).toEqual({ linearUnit: 'millimeter', linearDeflectionType: 'absolute_value', linearDeflection: 0.01, angularDeflection: (0.5 * Math.PI) / 180 });
+    expect(OCCT_PARAMS).toEqual({ linearUnit: 'millimeter', linearDeflectionType: 'absolute_value', linearDeflection: 0.01, angularDeflection: (5 * Math.PI) / 180 });
   });
 });
