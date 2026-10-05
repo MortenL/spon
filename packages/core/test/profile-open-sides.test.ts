@@ -120,12 +120,12 @@ describe('open-line sides', () => {
       drawing: { layers: [{ name: 'L', color: 0xffffff, paths: [pathFromPoints([{ x: 0, y: 0 }, { x: 100, y: 0 }], false)] }] },
       rawPoints: new Float32Array([0, 0, 0, 100, 0, 0]),
     };
-    const tabs = { enabled: true, shape: 'rect', width: 4, height: 2, placement: 'count', count: 2, spacing: 50, manual: [] };
-    // openSide 'on' reverses every other level; 'left' cuts every level the same way
+    const tabs = { enabled: true, shape: 'rect', width: 4, height: 2, placement: 'count', count: 2, spacing: 50, manual: [{ refIndex: 0, t: [0.2] }] };
+    // two levels: openSide 'on' cuts the bottom one in reverse, 'left' cuts both the same way
     for (const openSide of ['left', 'on']) {
-      const { diagnostics, toolpath, overlays } = run(line, { openSide, tabs, stepdown: 3, entry: { mode: 'plunge' } });
+      const { diagnostics, toolpath, overlays } = run(line, { openSide, tabs, stepdown: 4, entry: { mode: 'plunge' } });
       expect(diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
-      expect(overlays.tabs).toHaveLength(2);
+      expect(overlays.tabs).toHaveLength(1);
       expect(overlays.tabPaths).toMatchObject([{ refIndex: 0, closed: false, z: -4.2 }]);
       const moves = toolpath!.moves.flatMap((m) => (m.kind === 'line' || m.kind === 'arc' ? [m.to] : []));
       const spans = moves.slice(1).flatMap((to, i) => {
@@ -137,6 +137,10 @@ describe('open-line sides', () => {
         expect(spans.some((s) => s.lo <= tab.point.x - 4.99 && s.hi >= tab.point.x + 4.99 && Math.abs(s.z + 4.2) < 1e-6)).toBe(true);
         expect(spans.some((s) => s.z < -4.3 && s.lo < tab.point.x + 4.99 && s.hi > tab.point.x - 4.99)).toBe(false);
       }
+      // an asymmetric tab: the mirror image of its place (the lap runs 10..110) is cut through, in either direction
+      const cx = overlays.tabs[0].point.x, mx = 120 - cx;
+      expect(cx).toBeCloseTo(30, 6);
+      expect(spans.some((s) => s.z < -6.1 && s.lo <= mx - 4.99 && s.hi >= mx + 4.99)).toBe(true);
       expect(Math.min(...moves.map((p) => p.z))).toBeCloseTo(-6.2, 6);
     }
   });

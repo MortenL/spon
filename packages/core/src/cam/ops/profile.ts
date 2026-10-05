@@ -106,8 +106,11 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
    */
   const planTabs = (path: Path2D, h: ResolvedHeights, index: number, useExplicit: boolean, recordOverlay: boolean) => {
     if (!op.tabs.enabled) return { at: (_z: number, _mirrored: boolean): TabProfile | null => null };
+    // later pieces of a split contour are placed automatically, except that an empty manual list still means no tabs
+    const emptyEntry = op.tabs.manual.find((m) => m.refIndex === index);
+    const noManualTabs = emptyEntry && emptyEntry.t.length === 0 ? [emptyEntry] : [];
     const total = pathLength(path);
-    const { intervals, skipped, manual } = contourTabs(path, useExplicit ? op.tabs : { ...op.tabs, manual: [] }, r, index);
+    const { intervals, skipped, manual } = contourTabs(path, useExplicit ? op.tabs : { ...op.tabs, manual: noManualTabs }, r, index);
     if (skipped && !tabWarned.has(index)) {
       tabWarned.add(index);
       diag('warning', 'tab-skipped', `${skipped} tab(s) did not fit and were skipped`);

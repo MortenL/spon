@@ -89,11 +89,31 @@ describe('contour tabs', () => {
     }, [c0]);
     expect(out.diagnostics).toEqual([]);
     const cuts = cutMoves(out.toolpath!.moves);
-    const count = (z: number) => cuts.filter((m) => Math.abs(m.to.z - z) < 1e-6).length;
-    // levels -2, -4 (the tab top) and -6: nothing rises above the first level, and the level at -4 is a plain lap
+    // levels -2, -4 (the tab top) and -6: nothing rises above the first level
     expect([...new Set(cuts.map((m) => +m.to.z.toFixed(4)))].sort((a, b) => a - b)).toEqual([-6, -4, -2]);
-    // the bottom level adds a lift to -4 and back down around the tab
-    expect(count(-4)).toBeGreaterThan(count(-2));
-    expect(count(-4) - count(-2)).toBeGreaterThanOrEqual(2);
+    // the level at -4 is a plain lap, exactly as long as the level at -2
+    const first = (z: number) => cuts.findIndex((m) => Math.abs(m.to.z - z) < 1e-6);
+    const level2 = cuts.slice(0, first(-4)).length, level4 = cuts.slice(first(-4), first(-6)).length;
+    expect(level4).toBe(level2);
+    // the bottom level lifts to -4 and back down around the tab
+    expect(cuts.length - first(-6)).toBeGreaterThanOrEqual(level2 + 2);
+  });
+
+  it('gives every piece of a split contour no tabs when its manual list is empty', () => {
+    // two 30 mm squares joined by a 4 mm neck: cut inside with a 6 mm tool the lap splits in two
+    const pts = [[0, 0], [30, 0], [30, 13], [40, 13], [40, 0], [70, 0], [70, 30], [40, 30], [40, 17], [30, 17], [30, 30], [0, 30]]
+      .map(([x, y]) => ({ x: x + 10, y: y + 10 }));
+    const dumbbell: ResolvedContour = {
+      path: { closed: true, segments: pts.map((from, i) => ({ kind: 'line' as const, from, to: pts[(i + 1) % pts.length] })) }, z: 0, ref: 0,
+    };
+    const base = profile(tool6);
+    const patch = { side: 'inside' as const, entry: { ...base.entry, mode: 'plunge' as const } };
+    const automatic = run({ ...patch, tabs: tabs({ count: 2 }) }, [dumbbell]);
+    const top = (o: typeof automatic) => cutMoves(o.toolpath!.moves).filter((m) => Math.abs(m.to.z + 4.2) < 1e-6).length;
+    expect(top(automatic)).toBeGreaterThan(0); // control: the contour does get tabs, on its pieces
+    const none = run({ ...patch, tabs: tabs({ count: 2, manual: [{ refIndex: 0, t: [] }] }) }, [dumbbell]);
+    expect(none.diagnostics).toEqual([]);
+    expect(none.overlays.tabs).toEqual([]);
+    expect(top(none)).toBe(0);
   });
 });
