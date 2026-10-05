@@ -1,7 +1,15 @@
 // Minimal writers for the STEP and IGES test fixtures (see make-fixtures.mjs). They cover exactly what the fixtures need:
-// axis-aligned boxes, vertical through holes (STEP only) and one product per body.
+// axis-aligned boxes, vertical through holes and freeform arches (STEP only) and one product per body.
 
-/** STEP AP214 with one product (a MANIFOLD_SOLID_BREP) per body: `{ name, origin: [x, y, z], size: [sx, sy, sz], holes?: [{ center: [x, y], diameter }] }`. */
+/** The [x, z] control points of an arch's cubic Bézier cross-section, half width `w` and height `h`; it starts and ends on Z 0. */
+export function archProfile(w, h) {
+  return [[-w, 0], [-0.9 * w, 1.3 * h], [0.9 * w, 1.3 * h], [w, 0]];
+}
+
+/**
+ * STEP AP214 with one product (a MANIFOLD_SOLID_BREP) per body: a box `{ name, origin: [x, y, z], size: [sx, sy, sz], holes?: [{ center: [x, y], diameter }] }`
+ * or an arch `{ name, arch: { halfWidths: [atY0, atLength], length, height } }`.
+ */
 export function stepFile(fileName, bodies) {
   const ents = [];
   const e = (s) => { ents.push(s); return `#${ents.length}`; };
@@ -30,6 +38,36 @@ export function stepFile(fileName, bodies) {
   const pdc = e(`PRODUCT_DEFINITION_CONTEXT('part definition',${appctx},'design')`);
 
   for (const b of bodies) {
+    const faces = b.arch ? archFaces(b.arch) : boxFaces(b);
+    const brep = e(`MANIFOLD_SOLID_BREP('${b.name}',${e(`CLOSED_SHELL('',(${faces.join(',')}))`)})`);
+    const rep = e(`ADVANCED_BREP_SHAPE_REPRESENTATION('${b.name}',(${brep},${axis([0, 0, 0], [0, 0, 1], [1, 0, 0])}),${ctx})`);
+    const prod = e(`PRODUCT('${b.name}','${b.name}','',(${pc}))`);
+    e(`PRODUCT_RELATED_PRODUCT_CATEGORY('part',$,(${prod}))`);
+    const pd = e(`PRODUCT_DEFINITION('design','',${e(`PRODUCT_DEFINITION_FORMATION('','',${prod})`)},${pdc})`);
+    e(`SHAPE_DEFINITION_REPRESENTATION(${e(`PRODUCT_DEFINITION_SHAPE('','',${pd})`)},${rep})`);
+  }
+
+  // A tapered arch along +Y on Z 0: its top is one B-spline surface, cubic Bézier across (archProfile), straight along Y.
+  function archFaces({ halfWidths: [w0, wL], length: L, height: h }) {
+    const P = [[-w0, 0, 0], [w0, 0, 0], [-wL, L, 0], [wL, L, 0]];
+    const [V0, V1, V2, V3] = P.map(vertex);
+    const ruled = (a, b) => line(a, [b[0] - a[0], b[1] - a[1], b[2] - a[2]]);
+    const profile = (w, y) => archProfile(w, h).map(([x, z]) => [x, y, z]);
+    const bezier = (w, y) => e(`B_SPLINE_CURVE_WITH_KNOTS('',3,(${profile(w, y).map((p) => pt(...p)).join(',')}),.UNSPECIFIED.,.F.,.F.,(4,4),(0.,1.),.UNSPECIFIED.)`);
+    const front = edge(V0, V1, bezier(w0, 0)), back = edge(V2, V3, bezier(wL, L));
+    const front0 = edge(V0, V1, ruled(P[0], P[1])), back0 = edge(V2, V3, ruled(P[2], P[3]));
+    const left = edge(V0, V2, ruled(P[0], P[2])), right = edge(V1, V3, ruled(P[1], P[3]));
+    const rows = profile(w0, 0).map((p, i) => `(${pt(...p)},${pt(...profile(wL, L)[i])})`).join(',');
+    const top = e(`B_SPLINE_SURFACE_WITH_KNOTS('',3,1,(${rows}),.UNSPECIFIED.,.F.,.F.,.F.,(4,4),(2,2),(0.,1.),(0.,1.),.UNSPECIFIED.)`);
+    return [
+      face([outer(loop([oe(left, true), oe(back0, true), oe(right, false), oe(front0, false)]))], plane([0, 0, 0], [0, 0, -1], [1, 0, 0])),
+      face([outer(loop([oe(front0, true), oe(front, false)]))], plane([0, 0, 0], [0, -1, 0], [1, 0, 0])),
+      face([outer(loop([oe(back0, false), oe(back, true)]))], plane([0, L, 0], [0, 1, 0], [1, 0, 0])),
+      face([outer(loop([oe(front, true), oe(right, true), oe(back, false), oe(left, false)]))], top),
+    ];
+  }
+
+  function boxFaces(b) {
     const [x0, y0, z0] = b.origin, [sx, sy, sz] = b.size;
     const V = (i, j, k) => [x0 + i * sx, y0 + j * sy, z0 + k * sz];
     const v = {};
@@ -62,12 +100,7 @@ export function stepFile(fileName, bodies) {
       face([outer(loop([oe(ey['10'], true), oe(ez['11'], true), oe(ey['11'], false), oe(ez['10'], false)]))], plane(V(1, 0, 0), [1, 0, 0], [0, 1, 0])),
       ...holeFaces,
     ];
-    const brep = e(`MANIFOLD_SOLID_BREP('${b.name}',${e(`CLOSED_SHELL('',(${faces.join(',')}))`)})`);
-    const rep = e(`ADVANCED_BREP_SHAPE_REPRESENTATION('${b.name}',(${brep},${axis([0, 0, 0], [0, 0, 1], [1, 0, 0])}),${ctx})`);
-    const prod = e(`PRODUCT('${b.name}','${b.name}','',(${pc}))`);
-    e(`PRODUCT_RELATED_PRODUCT_CATEGORY('part',$,(${prod}))`);
-    const pd = e(`PRODUCT_DEFINITION('design','',${e(`PRODUCT_DEFINITION_FORMATION('','',${prod})`)},${pdc})`);
-    e(`SHAPE_DEFINITION_REPRESENTATION(${e(`PRODUCT_DEFINITION_SHAPE('','',${pd})`)},${rep})`);
+    return faces;
   }
   const data = ents.map((s, i) => `#${i + 1}=${s};`).join('\n');
   return [

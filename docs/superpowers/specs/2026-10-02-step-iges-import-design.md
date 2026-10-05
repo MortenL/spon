@@ -31,7 +31,7 @@ Spon can open STEP (`.step`, `.stp`) and IGES (`.iges`, `.igs`) files as the job
    - calling `ReadStepFile` / `ReadIgesFile` with **fixed parameters**:
      - `linearUnit: 'millimeter'`;
      - `linearDeflectionType: 'absolute_value'`, `linearDeflection: 0.01`;
-     - `angularDeflection: 0.5` degrees, in radians as the API expects.
+     - `angularDeflection: 5` degrees, in radians as the API expects. (It was 0.5° until 2026-10-05; that made the reader spend minutes on freeform B-spline faces and then drop them, see `arch.step`.)
 
    The same bytes always give the same triangles.
 3. The reader's result is converted by a **pure core function**, `occtToBodies(result): OcctBody[]`, where `OcctBody = { name: string; mesh: Mesh; faceIds: Uint32Array; triangles: number; bbox: BBox }`.

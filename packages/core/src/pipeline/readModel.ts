@@ -2,12 +2,16 @@ import { CAD_LABEL, cadImport, type OcctResult } from '../import/cad';
 import type { SvgScale } from '../import/svg/svg';
 import { cadFormat, type ImportResult, importFile } from '../import/importFile';
 
-/** Tessellation settings. Fixed, so the same file always gives the same triangles (face references depend on it). */
+/**
+ * Tessellation settings. Fixed, so the same file always gives the same triangles (face references depend on it).
+ * The 0.01 mm chord sets the accuracy. The angle is a coarse cap: at 0.5° the reader spent minutes on freeform
+ * (B-spline) faces and then left them without triangles.
+ */
 export const OCCT_PARAMS = {
   linearUnit: 'millimeter',
   linearDeflectionType: 'absolute_value',
   linearDeflection: 0.01,
-  angularDeflection: (0.5 * Math.PI) / 180,
+  angularDeflection: (5 * Math.PI) / 180,
 } as const;
 
 export type OcctParams = typeof OCCT_PARAMS;

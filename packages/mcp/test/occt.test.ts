@@ -23,6 +23,15 @@ describe('loadNodeOcct', () => {
     expect(iges.ok && iges.kind === 'mesh' && iges.source?.format).toBe('iges');
   });
 
+  it('gives every face of a freeform STEP surface triangles, quickly', async () => {
+    // a too-fine angular deflection made the reader spend half a minute on the B-spline top and then drop it
+    const started = Date.now();
+    const arch = await importModel('arch.step', fixture('arch.step'), {}, loadNodeOcct);
+    if (!arch.ok || arch.kind !== 'mesh') throw new Error('expected a mesh');
+    expect(new Set(arch.mesh.faceIds).size).toBe(4);
+    expect(Date.now() - started).toBeLessThan(10_000);
+  });
+
   it('never writes to stdout (it carries the MCP protocol)', async () => {
     // Emscripten binds console.log when the module starts, so spy first and load a fresh reader
     vi.resetModules();

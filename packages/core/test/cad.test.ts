@@ -41,10 +41,10 @@ describe('occtToBodies', () => {
     expect(bodies).toHaveLength(1);
     const [b] = bodies;
     expect(b.name).toBe('Bracket');
-    expect(b.triangles).toBe(5776);
+    expect(b.triangles).toBe(592);
     expect(b.degenerateRemoved).toBe(0);
     expect(b.mesh.faceIds).toBe(b.faceIds);
-    expect(b.faceIds.length).toBe(5776);
+    expect(b.faceIds.length).toBe(592);
     rec.meshes![0].brep_faces!.forEach((f, id) => {
       for (let t = f.first; t <= f.last; t++) expect(b.faceIds[t]).toBe(id);
     });
