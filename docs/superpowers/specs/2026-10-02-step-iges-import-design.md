@@ -34,6 +34,8 @@ Spon can open STEP (`.step`, `.stp`) and IGES (`.iges`, `.igs`) files as the job
      - `angularDeflection: 5` degrees, in radians as the API expects. (It was 0.5° until 2026-10-05; that made the reader spend minutes on freeform B-spline faces and then drop them, see `arch.step`.)
 
    The same bytes always give the same triangles.
+
+   If the reader leaves any B-rep face without triangles, the file is read once more with `OCCT_FALLBACK_PARAMS` (0.05 mm, 15°). That mesh is used only if it has fewer such faces, and the import warns that the model was meshed at 0.05 mm. Faces still without triangles are reported as "N faces could not be meshed and are missing from the model". The decision depends only on the bytes, so the same file still always gives the same triangles.
 3. The reader's result is converted by a **pure core function**, `occtToBodies(result): OcctBody[]`, where `OcctBody = { name: string; mesh: Mesh; faceIds: Uint32Array; triangles: number; bbox: BBox }`.
    - Each reader mesh becomes one body. Faces come from its `brep_faces` ranges (`first..last` triangle indices → `faceIds`).
    - Vertices are welded with the existing `weld`. Normals come from the winding, as for STL.

@@ -11,7 +11,7 @@ An MCP server lets Claude (or any MCP client) drive the same jobs: on `.spon` fi
 - Operation rows show the first problem, reorder by dragging, and have a ⋯ menu and shortcuts that act while the Operations panel is open (Ctrl+D duplicates, Del deletes, Alt+↑/↓ moves). Machine settings are in the top bar.
 
 **Import**
-- STL meshes, STEP and IGES solids (multi-body files ask which body), DXF drawings and SVG drawings.
+- STL meshes, STEP and IGES solids (multi-body files ask which body; faces the reader cannot mesh are retried coarser, or reported as missing), DXF drawings and SVG drawings.
 - SVG files from Inkscape, Illustrator, Affinity, CAD exports and web artwork. Shapes are layered by Inkscape layer or by colour. Pixel-based files ask for a scale: 96 dpi, 72 dpi or a target width.
 - Files without units ask for millimetres or inches.
 
