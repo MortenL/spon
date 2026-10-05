@@ -6,8 +6,14 @@ export function contourTabTs(overlays: OpOverlays, refIndex: number): number[] {
   return overlays.tabs.filter((tab) => tab.refIndex === refIndex).sort((a, b) => a.index - b.index).map((tab) => tab.t);
 }
 
-/** The command removing the selected tab of the selected operation, or null when there is none on show. */
-export function removeSelectedTabCommand(s: Pick<AppState, 'job' | 'selectedOperationId' | 'selectedTab' | 'camResults'>): JobCommand | null {
+/**
+ * The command removing the selected tab of the selected operation, or null when there is none on show. Null as well
+ * while toolpaths are regenerating: the overlays the index and `current` come from may then be stale.
+ */
+export function removeSelectedTabCommand(
+  s: Pick<AppState, 'job' | 'selectedOperationId' | 'selectedTab' | 'camResults' | 'camStatus'>,
+): JobCommand | null {
+  if (s.camStatus === 'generating') return null;
   const sel = s.selectedTab;
   const opId = s.selectedOperationId;
   if (!sel || !opId || !s.job.operations.some((o) => o.id === opId)) return null;
