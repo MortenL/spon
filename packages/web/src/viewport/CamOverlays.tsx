@@ -44,6 +44,7 @@ export function CamOverlays() {
       {(op.type === 'profile' || op.type === 'pocket' || op.type === 'slot') && op.tabs.enabled && summary && (
         <TabEditor op={op} overlays={summary.overlays} origin={origin} />
       )}
+      {op.type === 'pocket' && op.tabs.enabled && summary && <TabBridges overlays={summary.overlays} />}
       {summary && <UnmachinedAreas overlays={summary.overlays} />}
       {summary && <GougeMarkers overlays={summary.overlays} />}
     </group>
@@ -392,6 +393,38 @@ function ScreenAnchor({ position, testId, selected }: { position: Point3; testId
     <Html position={position as [number, number, number]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
       <div data-testid={testId} data-selected={selected ? 'true' : undefined} aria-hidden style={{ width: 6, height: 6, pointerEvents: 'none' }} />
     </Html>
+  );
+}
+
+// ── pocket tab bridges ──────────────────────────────────────────────────
+
+/** The strips of material a pocket leaves to hold its islands, drawn at the tab top. */
+function TabBridges({ overlays }: { overlays: OpOverlays }) {
+  const bridges = useMemo(
+    () =>
+      overlays.tabBridges
+        .filter((b) => b.polygon.length >= 3)
+        .map((b, i) => ({
+          key: i,
+          z: b.z,
+          geometry: new THREE.ShapeGeometry(regionShape({ outer: b.polygon, holes: [] })),
+          outline: [...b.polygon, b.polygon[0]].map((p): Point3 => [p.x, p.y, 0]),
+        })),
+    [overlays.tabBridges],
+  );
+  useEffect(() => () => bridges.forEach((b) => b.geometry.dispose()), [bridges]);
+
+  return (
+    <>
+      {bridges.map((b) => (
+        <group key={b.key} name="tab-bridge" position={[0, 0, b.z]}>
+          <mesh geometry={b.geometry} raycast={noRaycast}>
+            <meshBasicMaterial color={PICK_COLOR} transparent opacity={0.3} depthWrite={false} side={THREE.DoubleSide} />
+          </mesh>
+          <Line points={b.outline} color={PICK_COLOR} lineWidth={1.5} raycast={noRaycast} />
+        </group>
+      ))}
+    </>
   );
 }
 

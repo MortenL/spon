@@ -56,7 +56,7 @@ export function registerOutputTools(server: McpServer, ctx: ToolContext): void {
     const operations = job.operations.map((op) => {
       const r = results.get(op.id);
       const diagnostics = (r?.diagnostics ?? []).map(({ severity, code, message: text }) => ({ severity, code, message: text }));
-      const status = !op.enabled ? 'disabled' : diagnostics.some((d) => d.severity === 'error') ? 'error' : diagnostics.length ? 'warning' : 'ok';
+      const status = !op.enabled ? 'disabled' : diagnostics.some((d) => d.severity === 'error') ? 'error' : diagnostics.some((d) => d.severity === 'warning') ? 'warning' : 'ok';
       return { id: op.id, name: op.name, type: op.type, status, diagnostics, heights: r?.heights ?? null };
     });
     const files = run.files.map((f) => ({ name: f.name, lines: f.lineCount, tools: f.tools, seconds: f.seconds }));

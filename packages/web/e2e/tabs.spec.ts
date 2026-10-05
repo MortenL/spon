@@ -138,3 +138,36 @@ test('tabs on a slot: handles along the centreline', async ({ page }) => {
   await expect(handles(page)).toHaveCount(3);
   await expect(page.getByTestId('pass-tab-manual-count')).toHaveText('1 contour placed by hand');
 });
+
+test('tabs on a through pocket: bridges hold the island', async ({ page }) => {
+  await page.getByTestId('open-input').setInputFiles(path.join(FIXTURES, 'cam-part.dxf'));
+  await expect(page.getByTestId('model-size')).toBeVisible();
+  await openPanel(page, 'stock');
+  await page.getByTestId('stock-margin-bottom').fill('6');
+  await page.getByTestId('stock-margin-bottom').press('Enter');
+
+  await openPanel(page, 'operations');
+  await page.getByTestId('add-op').click();
+  await page.getByTestId('add-op-pocket').click();
+  for (let i = 0; i < 5; i++) await page.getByTestId(`catalog-contour-POCKET-${i}`).click(); // 4 lines + the island circle
+  // through: 0.2 mm below the stock bottom
+  await page.getByTestId('inspector-tab-heights').click();
+  await page.getByTestId('height-bottom-from').selectOption('stockBottom');
+  await page.getByTestId('height-bottom-offset').fill('-0.2');
+  await page.getByTestId('height-bottom-offset').press('Enter');
+  await page.getByTestId('inspector-tab-passes').click();
+  await expect(page.getByTestId('pass-tab-no-islands')).toHaveCount(0);
+  await page.getByTestId('pass-tabs').click();
+  await expect(opRows(page).last()).toHaveAttribute('data-status', /ok|warning/);
+  await page.getByTestId('view-top').click();
+  await expect(page.getByTestId('tab-handle-0-0')).toBeVisible();
+  await expect(page.getByTestId('tab-path-0')).toBeAttached();
+
+  await openPanel(page, 'programs');
+  await expect(page.getByTestId('program-generated')).toHaveCount(1);
+  await page.getByTestId('dock-tab-analysis').click();
+  await expect(page.getByTestId('analysis-total-time')).toBeVisible();
+  await expect(page.locator('[data-testid="diagnostic"][data-code="below-stock-bottom"]')).toHaveCount(0);
+  await expect(page.locator('[data-testid="op-diagnostic"][data-code="unmachined-area"]').first()).toBeVisible(); // the pocket's square corners
+  await expect(page.locator('[data-testid="op-diagnostic"][data-code="tab-bridge-long"]')).toHaveCount(0);
+});

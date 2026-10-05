@@ -26,7 +26,7 @@ An MCP server lets Claude (or any MCP client) drive the same jobs: on `.spon` fi
   - Open lines can be cut on the line, or to its left or right, with a Reverse toggle.
   - Climb or conventional milling, stepdowns, radial and axial stock, and a finish pass.
   - Ramp, helix or plunge entry; arc or line leads; and tabs you can drag in the viewport.
-- **Pocket** with islands, stepover, and wall and floor finishing; unmachined areas are shown.
+- **Pocket** with islands, stepover, and wall and floor finishing; unmachined areas are shown. Tabs on the islands leave bridges to the wall (or the next island), so a through pocket keeps its islands.
 - **Drill**: plain drilling, dwell, peck and chip-break cycles, with a diameter filter.
 - **Face** the whole stock or picked areas, zig-zag or spiral, with overlap, stepdown and a finish pass.
 - **Chamfer** an edge or contour with a chamfer mill or V-bit, countersink a hole, or cut an open line to its left or right. You give the chamfer width, and Spon computes the depth from the tool's tip angle. A deburr button sets a small edge break.

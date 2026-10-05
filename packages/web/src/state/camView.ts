@@ -9,7 +9,7 @@ export function operationStatus(op: Operation, s: Pick<AppState, 'camResults' | 
   if (!op.enabled) return 'disabled';
   if (s.camStatus === 'generating') return 'generating';
   const d = s.camResults[op.id]?.diagnostics ?? [];
-  return d.some((x) => x.severity === 'error') ? 'error' : d.length ? 'warning' : 'ok';
+  return d.some((x) => x.severity === 'error') ? 'error' : d.some((x) => x.severity === 'warning') ? 'warning' : 'ok';
 }
 
 /** Estimated seconds of an operation: sum of row durations whose source line lies in its section. */

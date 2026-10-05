@@ -146,6 +146,14 @@ function ProfilePasses({ op }: { op: ProfileOp }) {
 
 function PocketPasses({ op }: { op: PocketOp }) {
   const patch = (p: Partial<PocketOp>) => runCommand({ type: 'updateOperation', id: op.id, patch: p });
+  const job = useApp((s) => s.job);
+  const geometry = useApp((s) => s.geometry);
+  // tabs hold islands: count them over every closed area of the pocket
+  const islands = useMemo(
+    () => resolveGeometry(op, camContext(job, geometry)).shapes.reduce((n, sh) => n + sh.shape.islands.length, 0),
+    [op, job, geometry],
+  );
+  const selectedTab = useApp((s) => s.selectedTab);
 
   return (
     <div className="space-y-3">
@@ -174,6 +182,8 @@ function PocketPasses({ op }: { op: PocketOp }) {
       </label>
 
       <EntryFields entry={op.entry} showAngles onPatch={(p) => patch({ entry: { ...op.entry, ...p } })} />
+
+      <TabsBlock op={op} islands={islands} selectedTab={selectedTab} />
     </div>
   );
 }

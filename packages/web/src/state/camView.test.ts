@@ -28,6 +28,9 @@ describe('camView', () => {
     appStore.setState({ job });
     const op = job.operations[0];
     expect(operationStatus(op, appStore.getState())).toBe('ok');
+    // an info note (a pocket with tabs and no islands) is not a problem
+    appStore.setState({ camResults: { d: { operationId: 'd', diagnostics: [{ operationId: 'd', severity: 'info', code: 'tab-no-islands', message: '' }], heights: null, overlays: { tabs: [], tabPaths: [], tabBridges: [], unmachined: [], gouges: [] }, hasToolpath: true } } });
+    expect(operationStatus(op, appStore.getState())).toBe('ok');
     appStore.setState({ camResults: { d: { operationId: 'd', diagnostics: [{ operationId: 'd', severity: 'warning', code: 'tool-undersize', message: '' }], heights: null, overlays: { tabs: [], tabPaths: [], tabBridges: [], unmachined: [], gouges: [] }, hasToolpath: true } } });
     expect(operationStatus(op, appStore.getState())).toBe('warning');
     appStore.setState({ camStatus: 'generating' });
