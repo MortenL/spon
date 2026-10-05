@@ -127,7 +127,7 @@ export function vclearToolpath(op: VClearOp, tool: Tool, ctx: CamContext): OpOut
     diagnostics: cut.flatMap((r) => r.diagnostics),
     overlays: {
       ...first.overlays,
-      tabs: cut.flatMap((r) => r.overlays.tabs), laps: cut.flatMap((r) => r.overlays.laps), gouges: cut.flatMap((r) => r.overlays.gouges),
+      tabs: cut.flatMap((r) => r.overlays.tabs), tabPaths: cut.flatMap((r) => r.overlays.tabPaths), tabBridges: cut.flatMap((r) => r.overlays.tabBridges), gouges: cut.flatMap((r) => r.overlays.gouges),
       unmachined: [
         ...cut.flatMap((r) => r.overlays.unmachined),
         ...left.map(({ shape }) => ({ regions: [{ outer: flattenPath(shape.shape.outer, tol), holes: shape.shape.islands.map((i) => flattenPath(i, tol)) }], z: first.heights?.bottom ?? 0 })),

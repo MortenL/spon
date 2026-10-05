@@ -33,7 +33,7 @@ function run(geo: CamGeometry, patch: Record<string, unknown>, reverse: boolean 
   ];
   job = applyCommands(job, commands);
   const { run: r, toolpaths } = runPipeline(job, geo as never, programContext(job, geo as never), new PipelineCache(), { date: '2026-01-01' });
-  return { diagnostics: r.results[0].diagnostics, toolpath: toolpaths[0] as Toolpath | undefined };
+  return { diagnostics: r.results[0].diagnostics, toolpath: toolpaths[0] as Toolpath | undefined, overlays: r.results[0].overlays };
 }
 
 function cut(patch: Record<string, unknown>, reverse: boolean | boolean[] = false, geo: CamGeometry = drawing): Toolpath {
@@ -111,6 +111,33 @@ describe('open-line sides', () => {
         return Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy);
       };
       for (const p of cuts(toolpath)) expect(Math.min(...segs.map(([a, b]) => distTo(p, a, b)))).toBeGreaterThanOrEqual(3 - 0.01);
+    }
+  });
+
+  it('gives open-line profiles tabs, the same in both cutting directions', () => {
+    const line: CamGeometry = {
+      kind: 'drawing',
+      drawing: { layers: [{ name: 'L', color: 0xffffff, paths: [pathFromPoints([{ x: 0, y: 0 }, { x: 100, y: 0 }], false)] }] },
+      rawPoints: new Float32Array([0, 0, 0, 100, 0, 0]),
+    };
+    const tabs = { enabled: true, shape: 'rect', width: 4, height: 2, placement: 'count', count: 2, spacing: 50, manual: [] };
+    // openSide 'on' reverses every other level; 'left' cuts every level the same way
+    for (const openSide of ['left', 'on']) {
+      const { diagnostics, toolpath, overlays } = run(line, { openSide, tabs, stepdown: 3, entry: { mode: 'plunge' } });
+      expect(diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+      expect(overlays.tabs).toHaveLength(2);
+      expect(overlays.tabPaths).toMatchObject([{ refIndex: 0, closed: false, z: -4.2 }]);
+      const moves = toolpath!.moves.flatMap((m) => (m.kind === 'line' || m.kind === 'arc' ? [m.to] : []));
+      const spans = moves.slice(1).flatMap((to, i) => {
+        const from = moves[i];
+        return from.z < -0.5 && to.z < -0.5 && from.y === to.y && from.x !== to.x ? [{ lo: Math.min(from.x, to.x), hi: Math.max(from.x, to.x), z: Math.max(from.z, to.z) }] : [];
+      });
+      for (const tab of overlays.tabs) {
+        // the bottom level crosses each tab interval (width 4 + tool 6) at the tab top, and nothing deeper crosses it
+        expect(spans.some((s) => s.lo <= tab.point.x - 4.99 && s.hi >= tab.point.x + 4.99 && Math.abs(s.z + 4.2) < 1e-6)).toBe(true);
+        expect(spans.some((s) => s.z < -4.3 && s.lo < tab.point.x + 4.99 && s.hi > tab.point.x - 4.99)).toBe(false);
+      }
+      expect(Math.min(...moves.map((p) => p.z))).toBeCloseTo(-6.2, 6);
     }
   });
 

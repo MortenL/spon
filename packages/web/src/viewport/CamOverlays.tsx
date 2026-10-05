@@ -211,7 +211,7 @@ function TabHandles({ op, overlays, origin }: { op: Operation; overlays: OpOverl
   return (
     <>
       {overlays.tabs.map((tab, i) => {
-        const lap = overlays.laps.find((l) => l.refIndex === tab.refIndex);
+        const lap = overlays.tabPaths.find((l) => l.refIndex === tab.refIndex);
         if (!lap) return null;
         const point = drag && drag.index === i ? drag.point : tab.point;
         return (

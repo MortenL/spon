@@ -106,7 +106,7 @@ describe('profileToolpath', () => {
     const atTabTop = cutMoves(out.toolpath!.moves).filter((m) => Math.abs(m.to.z + 4.2) < 1e-9);
     expect(atTabTop.length).toBeGreaterThanOrEqual(8); // up + across, for each of 4 tabs on the last level
     expect(out.overlays.tabs).toHaveLength(4);
-    expect(out.overlays.laps).toMatchObject([{ refIndex: 0, z: -4.2 }]);
+    expect(out.overlays.tabPaths).toMatchObject([{ refIndex: 0, z: -4.2 }]);
   });
 
   it('keys explicit tab positions to the contour index, applying to rough and finish laps alike', () => {
@@ -124,7 +124,7 @@ describe('profileToolpath', () => {
     // contour 1 has one manual tab; contour 0 (no manual entry) gets its automatic tabs
     expect(rough.overlays.tabs.filter((t) => t.refIndex === 1)).toHaveLength(1);
     expect(rough.overlays.tabs.filter((t) => t.refIndex === 0)).toHaveLength(4);
-    expect(rough.overlays.laps.map((l) => l.refIndex).sort()).toEqual([0, 1]);
+    expect(rough.overlays.tabPaths.map((l) => l.refIndex).sort()).toEqual([0, 1]);
 
     // both the roughing laps and the finish lap of contour 1 ride up over the tab (at z = tab top, -4.2); the tab's
     // rising/falling edges sit tool-width + half tab width from its centre, so search within that radius
@@ -145,7 +145,7 @@ describe('profileToolpath', () => {
     const explicit = profileToolpath(
       profile({ tabs, leads: { mode: 'none', length: 0, startPoint: { refIndex: 1, t: 0.25 } } }), tool6, ctx, geoOf({ contours: [c0, c1] }),
     );
-    const start = (o: typeof auto, refIndex: number) => o.overlays.laps.find((l) => l.refIndex === refIndex)!.points[0];
+    const start = (o: typeof auto, refIndex: number) => o.overlays.tabPaths.find((l) => l.refIndex === refIndex)!.points[0];
     expect(start(explicit, 0)).toEqual(start(auto, 0)); // contour 0 stays on the automatic start
     expect(start(explicit, 1)).not.toEqual(start(auto, 1)); // contour 1 starts at t = 0.25 instead
   });
