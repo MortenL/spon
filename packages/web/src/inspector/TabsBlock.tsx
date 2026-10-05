@@ -14,14 +14,19 @@ const intField = (label: string, value: number, testId: string, min: number, onC
 
 /**
  * Tab settings shared by profile, pocket and slot operations. `islands` is only meaningful for pockets: a pocket
- * holds tabs on its islands, so with none the block is shown disabled with an explanation.
+ * holds tabs on its islands, so with none the block is shown disabled with an explanation. `selectedTab` is the tab
+ * selected in the viewport; "Automatic for this contour" resets its contour when that one was placed by hand.
  */
-export function TabsBlock({ op, islands }: { op: ProfileOp | PocketOp | SlotOp; islands?: number }) {
+export function TabsBlock({ op, islands, selectedTab = null }: {
+  op: ProfileOp | PocketOp | SlotOp; islands?: number; selectedTab?: { refIndex: number; index: number } | null;
+}) {
   const { tabs } = op;
   const noIslands = op.type === 'pocket' && islands === 0;
   const off = noIslands;
   const patchTabs = (p: Partial<TabSettings>) => runCommand({ type: 'updateOperation', id: op.id, patch: { tabs: { ...tabs, ...p } } });
   const manualCount = tabs.manual.length;
+  // a tab is selected and its contour was placed by hand (resetting an automatic contour would change nothing)
+  const contourManual = selectedTab !== null && tabs.manual.some((m) => m.refIndex === selectedTab.refIndex);
 
   return (
     <div className="space-y-2">
@@ -65,12 +70,14 @@ export function TabsBlock({ op, islands }: { op: ProfileOp | PocketOp | SlotOp; 
             </p>
           )}
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" data-testid="pass-tab-reset" disabled={off || manualCount === 0} onClick={() => patchTabs({ manual: [] })}>
+            <Button variant="outline" size="sm" data-testid="pass-tab-reset" disabled={off || manualCount === 0} onClick={() => runCommand({ type: 'resetTabs', opId: op.id })}>
               Reset tab positions
             </Button>
-            {/* Enabled by the per-contour reset task. */}
-            <Button variant="outline" size="sm" data-testid="pass-tab-reset-contour" disabled>
-              Reset this contour
+            <Button
+              variant="outline" size="sm" data-testid="pass-tab-reset-contour" disabled={off || !contourManual}
+              onClick={() => { if (selectedTab) runCommand({ type: 'resetTabs', opId: op.id, refIndex: selectedTab.refIndex }); }}
+            >
+              Automatic for this contour
             </Button>
           </div>
         </div>

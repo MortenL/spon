@@ -21,8 +21,9 @@ export function OperationsPanel() {
     const onKey = (e: KeyboardEvent) => {
       const dialogOpen = document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]') !== null;
       const action = shouldHandle({ key: e.key, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, shiftKey: e.shiftKey, target: e.target as HTMLElement | null }, dialogOpen);
-      const id = appStore.getState().selectedOperationId;
-      if (!action || !id) return;
+      const { selectedOperationId: id, selectedTab } = appStore.getState();
+      if (!action || !id || e.defaultPrevented) return; // e.g. Delete already removed a selected tab
+      if (action === 'delete' && selectedTab) return; // Delete removes the selected tab (useKeyboardShortcuts)
       e.preventDefault(); // also stops the browser's Ctrl+D bookmark
       if (action === 'duplicate') duplicateOperation(id);
       else if (action === 'delete') removeOperation(id);

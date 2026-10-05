@@ -72,6 +72,7 @@ function ProfilePasses({ op }: { op: ProfileOp }) {
   const job = useApp((s) => s.job);
   const geometry = useApp((s) => s.geometry);
   const kinds = useMemo(() => contourKinds(op, camContext(job, geometry)), [op, job, geometry]);
+  const selectedTab = useApp((s) => s.selectedTab);
 
   return (
     <div className="space-y-3">
@@ -138,7 +139,7 @@ function ProfilePasses({ op }: { op: ProfileOp }) {
         onCommit={(v) => patch({ leads: { ...op.leads, length: v } })}
       />
 
-      <TabsBlock op={op} />
+      <TabsBlock op={op} selectedTab={selectedTab} />
     </div>
   );
 }

@@ -3,16 +3,18 @@ import {
   HEIGHT_NAMES, type HeightName, type Job, meshSlots, offsetOpenPath, pathLength, pointAt, type Operation, type OpOverlays, type Path2D, type ResolvedHeights,
   programContext, programOrigin, resolveFaceRef, type Vec2, type Vec3,
 } from '@sponcam/core';
-import { Line } from '@react-three/drei';
-import type { ThreeEvent } from '@react-three/fiber';
-import { useEffect, useMemo, useState } from 'react';
+import { Html, Line } from '@react-three/drei';
+import { type ThreeEvent, useThree } from '@react-three/fiber';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { runCommand } from '@/state/camView';
-import { type ModelGeometry, useApp } from '@/state/store';
+import { appStore, type ModelGeometry, useApp } from '@/state/store';
+import { contourTabTs, removeSelectedTabCommand } from '@/state/tabEdits';
 import { sameRef } from '@/inspector/geometryLabels';
 import { chamferRunsAsDrawn, openChains } from '@/inspector/openChains';
 import { regionShape } from './convert';
-import { noRaycast } from './SceneObjects';
+import { noRaycast, type OrbitLike } from './SceneObjects';
+import { freeTabT, nearestOnTabPath, normaliseTabT, pointAtTabT, TAB_TARGET, tabNear } from './tabPath';
 
 const PICK_COLOR = '#f59e0b';
 const UNMACHINED_COLOR = '#ef4444';
@@ -39,7 +41,9 @@ export function CamOverlays() {
       <PickedGeometry job={job} geometry={geometry} op={op} />
       {(op.type === 'profile' || op.type === 'chamfer' || op.type === 'slot') && <OpenChainArrows job={job} geometry={geometry} op={op} />}
       {inspectorTab === 'heights' && summary?.heights && <HeightsPlanes job={job} geometry={geometry} heights={summary.heights} />}
-      {op.type === 'profile' && summary && <TabHandles op={op} overlays={summary.overlays} origin={origin} />}
+      {(op.type === 'profile' || op.type === 'pocket' || op.type === 'slot') && op.tabs.enabled && summary && (
+        <TabEditor op={op} overlays={summary.overlays} origin={origin} />
+      )}
       {summary && <UnmachinedAreas overlays={summary.overlays} />}
       {summary && <GougeMarkers overlays={summary.overlays} />}
     </group>
@@ -201,87 +205,194 @@ function HeightsPlanes({ job, geometry, heights }: { job: Job; geometry: ModelGe
   );
 }
 
-// ── tab handles ─────────────────────────────────────────────────────────
+// ── tabs: paths to add on, handles to select, drag and remove ──────────
 
-interface Drag { index: number; point: Vec2; t: number }
+const MANUAL_TAB_COLOR = '#a855f7';
+const SELECTED_TAB_COLOR = '#fde047';
+/** Screen pixels a handle must move before a press counts as a drag rather than a click. */
+const DRAG_PX = 3;
+/** Width in screen pixels of the invisible band around a tab path that takes hover and clicks. */
+const PATH_PICK_PX = 12;
 
-function TabHandles({ op, overlays, origin }: { op: Operation; overlays: OpOverlays; origin: Vec3 }) {
-  const [drag, setDrag] = useState<Drag | null>(null);
+type TabOp = Extract<Operation, { tabs: unknown }>;
+type TabPath = OpOverlays['tabPaths'][number];
+interface Drag { refIndex: number; index: number; x: number; y: number; moved: boolean; point: Vec2; t: number }
+
+function TabEditor({ op, overlays, origin }: { op: TabOp; overlays: OpOverlays; origin: Vec3 }) {
+  return (
+    <>
+      {overlays.tabPaths.map((lap) => <TabPathTarget key={lap.refIndex} op={op} overlays={overlays} lap={lap} origin={origin} />)}
+      <TabHandles op={op} overlays={overlays} origin={origin} />
+    </>
+  );
+}
+
+/**
+ * The tab path of one contour: hover shows a ghost tab at the nearest point, a click adds a tab there (or selects
+ * the tab already within a tab width of it). A screen anchor (`tab-path-{refIndex}`) marks a free spot on it.
+ */
+function TabPathTarget({ op, overlays, lap, origin }: { op: TabOp; overlays: OpOverlays; lap: TabPath; origin: Vec3 }) {
+  const gl = useThree((st) => st.gl);
+  const [ghost, setGhost] = useState<Vec2 | null>(null);
+  const points = useMemo(() => {
+    const pts = lap.points.map((p): Point3 => [p.x, p.y, lap.z]);
+    if (lap.closed && pts.length) pts.push(pts[0]);
+    return pts;
+  }, [lap]);
+  const anchor = useMemo(
+    () => pointAtTabT(lap.points, freeTabT(contourTabTs(overlays, lap.refIndex), lap.closed), lap.closed),
+    [lap, overlays],
+  );
+  useEffect(() => () => { gl.domElement.style.cursor = ''; }, [gl]);
+  if (points.length < 2) return null;
+
+  const nearest = (e: ThreeEvent<PointerEvent | MouseEvent>) =>
+    nearestOnTabPath(lap.points, { x: e.point.x - origin.x, y: e.point.y - origin.y }, lap.closed);
 
   return (
     <>
-      {overlays.tabs.map((tab, i) => {
+      <Line
+        name="tab-path" points={points} color={PICK_COLOR} lineWidth={PATH_PICK_PX} transparent opacity={0} depthWrite={false}
+        userData={TAB_TARGET}
+        onPointerDown={(e: ThreeEvent<PointerEvent>) => e.stopPropagation()}
+        onPointerMove={(e: ThreeEvent<PointerEvent>) => {
+          e.stopPropagation();
+          gl.domElement.style.cursor = 'copy';
+          setGhost(nearest(e).point);
+        }}
+        onPointerOut={() => {
+          gl.domElement.style.cursor = '';
+          setGhost(null);
+        }}
+        onClick={(e: ThreeEvent<MouseEvent>) => {
+          e.stopPropagation();
+          if (e.delta > 4) return; // the end of an orbit drag
+          const { t, length } = nearest(e);
+          const current = contourTabTs(overlays, lap.refIndex);
+          const near = tabNear(current, t, op.tabs.width, length, lap.closed);
+          if (near >= 0) appStore.getState().selectTab({ refIndex: lap.refIndex, index: near });
+          else runCommand({ type: 'addTab', opId: op.id, refIndex: lap.refIndex, t, current });
+        }}
+      />
+      {ghost && (
+        <mesh position={[ghost.x, ghost.y, lap.z]} raycast={noRaycast}>
+          <sphereGeometry args={[TAB_RADIUS, 16, 16]} />
+          <meshBasicMaterial color={PICK_COLOR} transparent opacity={0.45} depthWrite={false} />
+        </mesh>
+      )}
+      <ScreenAnchor position={[anchor.x, anchor.y, lap.z]} testId={`tab-path-${lap.refIndex}`} />
+    </>
+  );
+}
+
+/**
+ * Tab handles: a click selects (with a × beside it), a drag moves the tab along its contour. Handles of contours
+ * placed by hand are drawn in a second colour.
+ */
+function TabHandles({ op, overlays, origin }: { op: TabOp; overlays: OpOverlays; origin: Vec3 }) {
+  const controls = useThree((st) => st.controls) as unknown as OrbitLike | null;
+  const gl = useThree((st) => st.gl);
+  const selected = useApp((st) => st.selectedTab);
+  const dragRef = useRef<Drag | null>(null);
+  const [drag, setDrag] = useState<Drag | null>(null);
+  const update = (d: Drag | null) => { dragRef.current = d; setDrag(d); };
+  const endDrag = () => {
+    if (controls) controls.enabled = true;
+    update(null);
+  };
+  useEffect(() => () => { if (controls) controls.enabled = true; }, [controls]);
+
+  return (
+    <>
+      {overlays.tabs.map((tab) => {
         const lap = overlays.tabPaths.find((l) => l.refIndex === tab.refIndex);
         if (!lap) return null;
-        const point = drag && drag.index === i ? drag.point : tab.point;
+        const key = `${tab.refIndex}-${tab.index}`;
+        const mine = (d: Drag | null) => d !== null && d.refIndex === tab.refIndex && d.index === tab.index;
+        const dragging = mine(drag) ? drag : null;
+        const isSelected = selected?.refIndex === tab.refIndex && selected.index === tab.index;
+        const point = dragging?.moved ? dragging.point : tab.point;
+        const color = isSelected ? SELECTED_TAB_COLOR : tab.manual ? MANUAL_TAB_COLOR : PICK_COLOR;
         return (
-          <mesh
-            key={i} data-testid={`tab-handle-${i}`} position={[point.x, point.y, lap.z]}
-            onPointerDown={(e: ThreeEvent<PointerEvent>) => {
-              e.stopPropagation();
-              (e.target as Element).setPointerCapture(e.pointerId);
-              setDrag({ index: i, point: tab.point, t: tab.t });
-            }}
-            onPointerMove={(e: ThreeEvent<PointerEvent>) => {
-              if (!drag || drag.index !== i) return;
-              e.stopPropagation();
-              const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -(lap.z + origin.z));
-              const hit = new THREE.Vector3();
-              if (!e.ray.intersectPlane(plane, hit)) return;
-              const local = { x: hit.x - origin.x, y: hit.y - origin.y };
-              const proj = nearestOnPolyline(lap.points, local);
-              setDrag({ index: i, point: proj.point, t: proj.t });
-            }}
-            onPointerUp={(e: ThreeEvent<PointerEvent>) => {
-              e.stopPropagation();
-              (e.target as Element).releasePointerCapture(e.pointerId);
-              if (drag && drag.index === i) {
-                // freeze this contour's current tabs, with the dragged one moved
-                const closed = lap.closed;
-                const norm = (v: number) => (closed ? (v >= 1 || v < 0 ? ((v % 1) + 1) % 1 : v) : Math.min(1 - 1e-9, Math.max(0, v)));
-                const t = overlays.tabs
-                  .flatMap((tb, idx) => (tb.refIndex === tab.refIndex ? [idx === i ? drag.t : tb.t] : []))
-                  .map(norm)
-                  .sort((a, b) => a - b);
-                const current = op.type === 'profile' || op.type === 'pocket' || op.type === 'slot' ? op.tabs.manual : [];
-                const manual = [...current.filter((m) => m.refIndex !== tab.refIndex), { refIndex: tab.refIndex, t }];
-                runCommand({ type: 'updateOperation', id: op.id, patch: { tabs: { manual } } });
-              }
-              setDrag(null);
-            }}
-          >
-            <sphereGeometry args={[TAB_RADIUS, 16, 16]} />
-            <meshBasicMaterial color={PICK_COLOR} />
-          </mesh>
+          <group key={key}>
+            <mesh
+              position={[point.x, point.y, lap.z]} scale={isSelected ? 1.35 : 1} userData={TAB_TARGET}
+              onClick={(e: ThreeEvent<MouseEvent>) => e.stopPropagation()}
+              onPointerDown={(e: ThreeEvent<PointerEvent>) => {
+                if (e.button !== 0) return;
+                e.stopPropagation();
+                (e.target as Element).setPointerCapture(e.pointerId);
+                if (controls) controls.enabled = false;
+                update({ refIndex: tab.refIndex, index: tab.index, x: e.clientX, y: e.clientY, moved: false, point: tab.point, t: tab.t });
+              }}
+              onPointerMove={(e: ThreeEvent<PointerEvent>) => {
+                e.stopPropagation(); // the tab path behind loses its hover and ghost
+                gl.domElement.style.cursor = 'pointer';
+                const d = dragRef.current;
+                if (!d || !mine(d)) return;
+                if (!d.moved && Math.hypot(e.clientX - d.x, e.clientY - d.y) <= DRAG_PX) return;
+                const hit = new THREE.Vector3();
+                if (!e.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 0, 1), -(lap.z + origin.z)), hit)) return;
+                const proj = nearestOnTabPath(lap.points, { x: hit.x - origin.x, y: hit.y - origin.y }, lap.closed);
+                update({ ...d, moved: true, point: proj.point, t: proj.t });
+              }}
+              onPointerUp={(e: ThreeEvent<PointerEvent>) => {
+                const d = dragRef.current;
+                if (!d || !mine(d)) return;
+                e.stopPropagation();
+                (e.target as Element).releasePointerCapture(e.pointerId);
+                endDrag();
+                if (d.moved) {
+                  runCommand({
+                    type: 'moveTab', opId: op.id, refIndex: tab.refIndex, index: tab.index,
+                    t: normaliseTabT(d.t, lap.closed), current: contourTabTs(overlays, tab.refIndex),
+                  });
+                } else {
+                  appStore.getState().selectTab({ refIndex: tab.refIndex, index: tab.index });
+                }
+              }}
+              onPointerOut={() => { if (!dragRef.current) gl.domElement.style.cursor = ''; }}
+              onPointerCancel={() => endDrag()}
+            >
+              <sphereGeometry args={[TAB_RADIUS, 16, 16]} />
+              <meshBasicMaterial color={color} />
+            </mesh>
+            <ScreenAnchor position={[point.x, point.y, lap.z]} testId={`tab-handle-${key}`} selected={isSelected} />
+            {isSelected && !dragging?.moved && (
+              <Html position={[point.x, point.y, lap.z]} zIndexRange={[20, 10]} style={{ transform: 'translate(8px, -28px)' }}>
+                <button
+                  type="button" data-testid="tab-remove" aria-label="Remove tab" title="Remove tab (Del)"
+                  className="flex size-5 items-center justify-center rounded-full border bg-background text-xs leading-none text-foreground shadow hover:bg-destructive hover:text-white"
+                  // keep the press from reaching the canvas's own event handling (and orbiting or picking)
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onPointerUp={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const command = removeSelectedTabCommand(appStore.getState());
+                    if (command) runCommand(command);
+                  }}
+                >
+                  ×
+                </button>
+              </Html>
+            )}
+          </group>
         );
       })}
     </>
   );
 }
 
-/** Nearest point on a closed polyline (program coordinates), and its fraction of the total (looped) length. */
-function nearestOnPolyline(points: readonly Vec2[], q: Vec2): { point: Vec2; t: number } {
-  if (points.length === 0) return { point: q, t: 0 };
-  if (points.length === 1) return { point: points[0], t: 0 };
-  let total = 0;
-  let bestDist = Infinity;
-  let bestS = 0;
-  let bestPoint = points[0];
-  let acc = 0;
-  for (let i = 0; i < points.length; i++) {
-    const a = points[i];
-    const b = points[(i + 1) % points.length];
-    const dx = b.x - a.x, dy = b.y - a.y;
-    const len2 = dx * dx + dy * dy;
-    const len = Math.sqrt(len2);
-    const t = len2 > 0 ? Math.max(0, Math.min(1, ((q.x - a.x) * dx + (q.y - a.y) * dy) / len2)) : 0;
-    const px = a.x + dx * t, py = a.y + dy * t;
-    const d = Math.hypot(q.x - px, q.y - py);
-    if (d < bestDist) { bestDist = d; bestS = acc + t * len; bestPoint = { x: px, y: py }; }
-    acc += len;
-    total += len;
-  }
-  return { point: bestPoint, t: total > 0 ? bestS / total : 0 };
+/**
+ * An invisible screen-space anchor at a 3D point. It takes no pointer events itself, so a click at its centre reaches
+ * the object under it; the end-to-end tests find tab handles and paths on screen through these.
+ */
+function ScreenAnchor({ position, testId, selected }: { position: Point3; testId: string; selected?: boolean }) {
+  return (
+    <Html position={position as [number, number, number]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
+      <div data-testid={testId} data-selected={selected ? 'true' : undefined} aria-hidden style={{ width: 6, height: 6, pointerEvents: 'none' }} />
+    </Html>
+  );
 }
 
 // ── unmachined areas ────────────────────────────────────────────────────

@@ -46,16 +46,29 @@ describe('TabsBlock', () => {
     expect(text(find(TabsBlock({ op: profile([{ refIndex: 1, t: [0.5] }]) }), 'pass-tab-manual-count'))).toBe('1 contour placed by hand');
   });
 
-  it('Reset clears manual', () => {
+  it('Reset tab positions resets every contour', () => {
     const tree = TabsBlock({ op: profile([{ refIndex: 0, t: [0.2] }]) });
     (find(tree, 'pass-tab-reset')!.props.onClick as () => void)();
     expect(runCommand).toHaveBeenCalledTimes(1);
-    expect(runCommand.mock.calls[0][0]).toMatchObject({ type: 'updateOperation', id: 'op1', patch: { tabs: { manual: [] } } });
+    expect(runCommand.mock.calls[0][0]).toEqual({ type: 'resetTabs', opId: 'op1' });
   });
 
-  it('renders the per-contour reset, disabled until Task 5', () => {
+  it('"Automatic for this contour" is disabled without a selected tab', () => {
     const tree = TabsBlock({ op: profile([{ refIndex: 0, t: [0.2] }]) });
-    expect(find(tree, 'pass-tab-reset-contour')!.props.disabled).toBe(true);
+    const button = find(tree, 'pass-tab-reset-contour')!;
+    expect(text(button)).toBe('Automatic for this contour');
+    expect(button.props.disabled).toBe(true);
+    expect(find(TabsBlock({ op: profile([]), selectedTab: null }), 'pass-tab-reset-contour')!.props.disabled).toBe(true);
+    // a selected tab on a contour that is already automatic: nothing to reset
+    expect(find(TabsBlock({ op: profile([{ refIndex: 0, t: [0.2] }]), selectedTab: { refIndex: 1, index: 0 } }), 'pass-tab-reset-contour')!.props.disabled).toBe(true);
+  });
+
+  it('"Automatic for this contour" resets the contour of the selected tab', () => {
+    const tree = TabsBlock({ op: profile([{ refIndex: 0, t: [0.2] }, { refIndex: 3, t: [0.5] }]), selectedTab: { refIndex: 3, index: 0 } });
+    const button = find(tree, 'pass-tab-reset-contour')!;
+    expect(button.props.disabled).toBeFalsy();
+    (button.props.onClick as () => void)();
+    expect(runCommand.mock.calls[0][0]).toEqual({ type: 'resetTabs', opId: 'op1', refIndex: 3 });
   });
 
   it('pocket without islands explains itself and disables the fields', () => {
