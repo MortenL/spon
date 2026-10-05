@@ -2,7 +2,7 @@ import { fitArcs } from '../../geometry/offset/arcFit';
 import { offsetOpenPath } from '../../geometry/offset/openOffset';
 import { offsetPolys, pointInPolys, segmentCrossesPolys } from '../../geometry/offset/clipper';
 import {
-  dist2, flattenPath, orientPath, pathLength, pathStart, pointAt, polyArea, reversePath, rotateStart, segmentLength, v2,
+  dist2, flattenPath, nearestS, orientPath, pathLength, pathStart, pointAt, polyArea, reversePath, rotateStart, segmentLength, v2,
 } from '../../geometry/offset/pathOps';
 import { type Path2D, type Segment, segmentStart, type Vec2 } from '../../geometry/path2d';
 import type { Tool } from '../../tools/types';
@@ -13,7 +13,7 @@ import type { CamCode, CamSeverity, ProfileOp } from '../types';
 import { leadIn, leadOut } from './leads';
 import { emptyOverlays, type OpOutput } from './output';
 import { contourTabs, pushTabOverlays } from './tabs';
-import { depthLevels, emitLap, emitRampLaps, MoveWriter, type TabProfile } from './writer';
+import { depthLevels, emitLap, emitRampLaps, MoveWriter, type TabInterval, type TabProfile } from './writer';
 
 const lerp = (a: Vec2, b: Vec2, t: number): Vec2 => v2(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
 
@@ -72,6 +72,31 @@ export function autoStart(path: Path2D): number {
   return best;
 }
 
+/** Distance from `a` to `b` around a closed path of length `total`. */
+const aroundDist = (a: number, b: number, total: number) => {
+  const d = Math.abs(a - b) % total;
+  return Math.min(d, total - d);
+};
+
+/**
+ * A start on a closed path of length `total` at least `clear` away from every tab centre: `start` itself when it is,
+ * else the nearest free place (the end of a tab's clearance). `start` when the tabs leave no such place.
+ */
+export function startOffTabs(start: number, centres: readonly number[], clear: number, total: number): number {
+  if (!(total > 0) || !centres.length) return start;
+  const wrap = (s: number) => ((s % total) + total) % total;
+  const free = (s: number) => centres.every((c) => aroundDist(s, c, total) >= clear - 1e-9);
+  if (free(wrap(start))) return wrap(start);
+  let best = start, bestD = Infinity;
+  for (const c of centres) {
+    for (const s of [wrap(c - clear), wrap(c + clear)]) {
+      const d = aroundDist(s, start, total);
+      if (d < bestD - 1e-12 && free(s)) { best = s; bestD = d; }
+    }
+  }
+  return best;
+}
+
 export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo: ResolvedGeometry): OpOutput {
   const out: OpOutput = { toolpath: null, diagnostics: [], heights: null, overlays: emptyOverlays() };
   const diag = (severity: CamSeverity, code: CamCode, message: string, ref?: number) =>
@@ -99,45 +124,77 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
     }
   };
 
-  const tabWarned = new Set<number>();
+  const tabTop = (h: ResolvedHeights) => h.bottom + op.tabs.height;
+  /** Half a tab interval along a tool-centre lap: half the tab and the tool radius. */
+  const tabHalf = op.tabs.width / 2 + r;
+  /** Tool-centre distance kept between a closed lap's start and a tab: the lead-in and lead-out start there too. */
+  const startClear = tabHalf + (op.leads.mode === 'none' ? 0 : Math.max(0, op.leads.length));
+  const noTabs = { at: (_z: number, _rev: boolean): TabProfile | null => null };
+
   /**
-   * Tab intervals of a lap and, per level, the profile to cut with (null at or above the tab top). `mirrored` flips
-   * the intervals for a lap cut in reverse. Overlays are recorded once per contour, when `recordOverlay` is set.
+   * Places one contour's tabs once, on its roughing laps (`runs`, as cut), and records the first lap's in the
+   * overlays: that lap is the contour's tab path, where explicit (manual) positions apply. Later pieces of a split
+   * contour are placed automatically, except that an empty manual list still means no tabs. Returns each lap's tab
+   * centres as points; every later lap (the finish pass) takes the same tabs, projected onto it (spec §4).
    */
-  const planTabs = (path: Path2D, h: ResolvedHeights, index: number, useExplicit: boolean, recordOverlay: boolean) => {
-    if (!op.tabs.enabled) return { at: (_z: number, _mirrored: boolean): TabProfile | null => null };
-    // later pieces of a split contour are placed automatically, except that an empty manual list still means no tabs
+  const planContourTabs = (runs: Path2D[], index: number, ref: number, top: number): Vec2[][] => {
+    if (!op.tabs.enabled) return runs.map(() => []);
     const emptyEntry = op.tabs.manual.find((m) => m.refIndex === index);
     const noManualTabs = emptyEntry && emptyEntry.t.length === 0 ? [emptyEntry] : [];
-    const total = pathLength(path);
-    const { intervals, skipped, manual } = contourTabs(path, useExplicit ? op.tabs : { ...op.tabs, manual: noManualTabs }, r, index);
-    if (skipped && !tabWarned.has(index)) {
-      tabWarned.add(index);
-      diag('warning', 'tab-skipped', `${skipped} tab(s) did not fit and were skipped`);
-    }
-    const top = h.bottom + op.tabs.height;
-    const forward: TabProfile = { top, base: h.bottom, intervals };
-    const mirrored: TabProfile = { top, base: h.bottom, intervals: intervals.map((iv) => ({ ...iv, s0: total - iv.s1, s1: total - iv.s0 })) };
-    if (recordOverlay) pushTabOverlays(out.overlays, path, intervals.map((iv) => iv.center), index, manual, top);
-    return { at: (z: number, rev: boolean): TabProfile | null => (intervals.length && z < top - 1e-9 ? (rev ? mirrored : forward) : null) };
+    let skippedAll = 0;
+    const points = runs.map((path, i) => {
+      const { intervals, skipped, manual } = contourTabs(path, i === 0 ? op.tabs : { ...op.tabs, manual: noManualTabs }, r, index);
+      skippedAll += skipped;
+      const centres = intervals.map((iv) => iv.center);
+      if (i === 0) pushTabOverlays(out.overlays, path, centres, index, manual, top);
+      return centres.map((c) => pointAt(path, c).point);
+    });
+    if (skippedAll) diag('warning', 'tab-skipped', `${skippedAll} tab(s) did not fit and were skipped`, ref);
+    return points;
   };
 
   /**
-   * Cuts one closed lap at the given levels; the tool travels to it first. `index` is the contour's index in
-   * `geo.contours` (the refIndex tabs and lead start points key on). `useExplicit` is true for a contour's first
-   * roughing or finish piece, where explicit tab positions and an explicit lead start point apply; a contour whose
-   * offset splits falls back to automatic placement and an automatic start for its later pieces. `recordOverlay`
-   * is true only for a contour's first roughing piece, so overlays are reported once per contour.
+   * Tabs on one lap as cut, from tab centre points: each projected to the lap's nearest point, covering the tab width
+   * and the tool diameter. A closed lap's interval across its start is also given shifted by the lap's length, so it
+   * holds at both ends. Per level, the profile to cut with (null at or above the tab top); `rev` mirrors it for a lap
+   * cut in reverse.
    */
-  const cutClosed = (
-    lap: Path2D, levels: number[], h: ResolvedHeights, first: boolean, index: number, ref: number, useExplicit: boolean, recordOverlay: boolean,
-  ) => {
-    const wantCW = lapRunsCW(side, op.direction);
-    let path = orientPath(lap, !wantCW);
+  const lapTabs = (path: Path2D, points: readonly Vec2[], h: ResolvedHeights) => {
+    if (!points.length) return noTabs;
+    const total = pathLength(path);
+    const top = tabTop(h);
+    const intervals: TabInterval[] = [];
+    for (const c of points.map((p) => nearestS(path, p).s).sort((a, b) => a - b)) {
+      const iv: TabInterval = { s0: c - tabHalf, s1: c + tabHalf, shape: op.tabs.shape };
+      intervals.push(iv);
+      if (path.closed && iv.s0 < 0) intervals.push({ ...iv, s0: iv.s0 + total, s1: iv.s1 + total });
+      if (path.closed && iv.s1 > total) intervals.push({ ...iv, s0: iv.s0 - total, s1: iv.s1 - total });
+    }
+    const forward: TabProfile = { top, base: h.bottom, intervals };
+    const mirrored: TabProfile = { top, base: h.bottom, intervals: intervals.map((iv) => ({ ...iv, s0: total - iv.s1, s1: total - iv.s0 })) };
+    return { at: (z: number, rev: boolean): TabProfile | null => (z < top - 1e-9 ? (rev ? mirrored : forward) : null) };
+  };
+
+  /**
+   * A closed lap as cut: oriented for the cut direction, starting at the explicit lead start point (`useExplicit`:
+   * the contour's first piece) or the automatic one, moved off the tabs at `tabPoints` when it falls on one.
+   */
+  const closedRun = (lap: Path2D, index: number, useExplicit: boolean, tabPoints: readonly Vec2[]): Path2D => {
+    const path = orientPath(lap, !lapRunsCW(side, op.direction));
     const total = pathLength(path);
     const explicitStart =
       useExplicit && op.leads.startPoint !== 'auto' && op.leads.startPoint.refIndex === index ? op.leads.startPoint.t * total : null;
-    path = rotateStart(path, explicitStart ?? autoStart(path));
+    const start = explicitStart ?? autoStart(path);
+    const centres = tabPoints.map((p) => nearestS(path, p).s);
+    return rotateStart(path, startOffTabs(start, centres, startClear, total));
+  };
+
+  /**
+   * Cuts one closed lap (as cut, see `closedRun`) at the given levels; the tool travels to it first. `tabPoints` are
+   * the centres of the tabs on it.
+   */
+  const cutClosed = (path: Path2D, levels: number[], h: ResolvedHeights, first: boolean, ref: number, tabPoints: readonly Vec2[]) => {
+    const wantCW = lapRunsCW(side, op.direction);
     const P = pathStart(path);
     const T = pointAt(path, 0).tangent;
     const freeLeft = side === 'inside' ? !wantCW : wantCW; // CW loop: outside is on the left
@@ -178,7 +235,7 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
     const S = inSegs.length ? segmentStart(inSegs[0]) : P;
     const inLen = inSegs.reduce((a, s) => a + segmentLength(s), 0);
 
-    const plan = planTabs(path, h, index, useExplicit, recordOverlay);
+    const plan = lapTabs(path, tabPoints, h);
     const tabsAt = (z: number) => plan.at(z, false);
 
     w.travel(S, first ? h.clearance : h.retract, h.feed);
@@ -209,15 +266,13 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
     w.up(h.retract);
   };
 
-  const cutOpen = (
-    lap: Path2D, levels: number[], h: ResolvedHeights, first: boolean, sameWay: boolean, index: number, useExplicit: boolean, recordOverlay: boolean,
-  ) => {
+  const cutOpen = (lap: Path2D, levels: number[], h: ResolvedHeights, first: boolean, sameWay: boolean, tabPoints: readonly Vec2[]) => {
     if (op.entry.mode !== 'plunge' && !plungeWarned) {
       diag('warning', 'entry-plunge', 'Open contours are entered with a plunge');
       plungeWarned = true;
     }
     let path = lap;
-    const plan = planTabs(lap, h, index, useExplicit, recordOverlay);
+    const plan = lapTabs(lap, tabPoints, h);
     let reversed = false;
     w.travel(pathStart(path), first ? h.clearance : h.retract, h.feed);
     levels.forEach((z, i) => {
@@ -248,17 +303,29 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
     const { laps } = res;
     if (res.rounded) diag('warning', 'bend-rounded', 'The tool is too large for a bend in this line; the bend was rounded', c.ref);
     const levels = depthLevels(h.top, h.bottom + op.stockAxial, op.stepdown);
-    laps.forEach((lap, i) => {
-      if (lap.closed) cutClosed(lap, levels, h, first, index, c.ref, i === 0, i === 0);
-      else cutOpen(lap, levels, h, first, op.openSide !== 'on', index, i === 0, i === 0);
+    const runs = laps.map((lap, i) => (lap.closed ? closedRun(lap, index, i === 0, []) : lap));
+    const tabPoints = planContourTabs(runs, index, c.ref, tabTop(h));
+    runs.forEach((run, i) => {
+      if (run.closed) cutClosed(run, levels, h, first, c.ref, tabPoints[i]);
+      else cutOpen(run, levels, h, first, op.openSide !== 'on', tabPoints[i]);
       first = false;
     });
     if (op.finishPass && (c.path.closed || op.openSide !== 'on')) {
-      // closed contours and open-side chains get a finish pass at the tool radius; a cut on the line has none
+      // closed contours and open-side chains get a finish pass at the tool radius; a cut on the line has none. It
+      // keeps the roughing tabs: each goes to the finish lap nearest to it, never placed again on the finish laps
       const finishLaps = contourLaps(c.path, side, op.openSide, op.direction, r, tol)?.laps ?? [];
+      const onLap: Vec2[][] = finishLaps.map(() => []);
+      for (const p of tabPoints.flat()) {
+        let best = -1, bestD = Infinity;
+        finishLaps.forEach((lap, i) => {
+          const d = nearestS(lap, p).distance;
+          if (d < bestD) { bestD = d; best = i; }
+        });
+        if (best >= 0) onLap[best].push(p);
+      }
       finishLaps.forEach((lap, i) => {
-        if (lap.closed) cutClosed(lap, [h.bottom], h, false, index, c.ref, i === 0, false);
-        else cutOpen(lap, [h.bottom], h, false, true, index, i === 0, false);
+        if (lap.closed) cutClosed(closedRun(lap, index, i === 0, onLap[i]), [h.bottom], h, false, c.ref, onLap[i]);
+        else cutOpen(lap, [h.bottom], h, false, true, onLap[i]);
       });
     }
   });
