@@ -5,6 +5,8 @@ import type { TabInterval } from './writer';
 
 /** Upper bound on automatic tabs per lap (a tiny spacing must not hang the worker). */
 const MAX_TABS = 200;
+/** Upper bound on candidate samples per path. */
+const MAX_SAMPLES = 20000;
 /** A tab is straight when the path turns less than this (degrees) over the whole tab. */
 const STRAIGHT_TURN = 5;
 /** Corners sharper than this (degrees) keep a tab width of clearance. */
@@ -80,12 +82,13 @@ function pointWalker(path: Path2D): (s: number) => Vec2 {
 }
 
 /**
- * Tab centres sampled every `width / 4` where the whole tab (`±half`) lies on the path and keeps `width` clear of
- * every corner sharper than 30° (and, on an open path, of its ends). A candidate is straight when the path turns
- * less than 5° over the tab. Sorted by distance along the path.
+ * Tab centres sampled every `width / 4` (at most 20000 samples), plus the `extra` positions, where the whole tab
+ * (`±half`) lies on the path and keeps `width` clear of every corner sharper than 30° (and, on an open path, of its
+ * ends). A candidate is straight when the path turns less than 5° over the tab. Sorted by distance along the path.
  */
-function tabCandidates(path: Path2D, total: number, half: number, width: number, origin: Vec2): Candidate[] {
-  const step = width > 0 ? width / 4 : total / 400;
+function tabCandidates(path: Path2D, total: number, half: number, width: number, origin: Vec2, extra: readonly number[] = []): Candidate[] {
+  // at most MAX_SAMPLES samples, so a tiny width cannot hang the worker
+  const step = Math.max(width / 4, total / MAX_SAMPLES);
   const corners = cornerDistances(path, SHARP_TURN);
   if (path.closed && corners[0] === 0) corners.push(total); // the joint at the start is also the joint at the end
   const clear = half + width - 1e-9;
@@ -105,9 +108,13 @@ function tabCandidates(path: Path2D, total: number, half: number, width: number,
     out.push({ s, straight: turning(s + half) - turning(s - half) < limit, angle: Math.atan2(p.y - origin.y, p.x - origin.x) });
   };
   const k0 = Math.ceil(lo / step - 1e-9), k1 = Math.floor(hi / step + 1e-9);
-  if (k0 * step > lo + 1e-9) pushAt(lo); // the ends of the usable stretch are candidates too
-  for (let k = k0; k <= k1; k++) pushAt(Math.min(hi, Math.max(lo, k * step)));
-  if (k1 * step < hi - 1e-9) pushAt(hi);
+  const at: number[] = [];
+  if (k0 * step > lo + 1e-9) at.push(lo); // the ends of the usable stretch are candidates too
+  for (let k = k0; k <= k1; k++) at.push(Math.min(hi, Math.max(lo, k * step)));
+  if (k1 * step < hi - 1e-9) at.push(hi);
+  for (const e of extra) if (e >= lo - 1e-9 && e <= hi + 1e-9) at.push(Math.min(hi, Math.max(lo, e)));
+  at.sort((a, b) => a - b);
+  for (let i = 0; i < at.length; i++) if (i === 0 || at[i] - at[i - 1] > 1e-9) pushAt(at[i]);
   return out;
 }
 
@@ -173,7 +180,8 @@ function nearestByAngle(cands: Candidate[], byAngle: number[], blocked: Uint8Arr
 
 /**
  * Closed paths: for 12 start angles `θ₀` over `360°/n`, target directions `θ₀ + 360°·i/n` about the centroid; each
- * target takes the candidate closest in direction, straight before curved, not yet blocked by a placed tab. Keeps the
+ * target takes the closest straight candidate when one lies within its sector (`180°/n` either side), else the closest
+ * candidate of any kind, never one blocked by a placed tab. Keeps the
  * set that places the most tabs, then has the fewest curved ones, then the smallest total angular error; ties keep
  * the earlier start angle.
  */
@@ -182,6 +190,7 @@ function balancedPick(cands: Candidate[], n: number, gap: number, total: number)
   const all = cands.map((_, k) => k);
   const straight = sortByAngle(all.filter((k) => cands[k].straight));
   const curvedList = sortByAngle(all.filter((k) => !cands[k].straight));
+  const sector = Math.PI / n + 1e-12;
   let best: { picked: number[]; curved: number; error: number } | null = null;
   const blocked = new Uint8Array(cands.length);
   for (let j = 0; j < START_STEPS; j++) {
@@ -191,12 +200,15 @@ function balancedPick(cands: Candidate[], n: number, gap: number, total: number)
     let curved = 0, error = 0;
     for (let i = 0; i < n; i++) {
       const target = theta0 + (TAU * i) / n;
-      let pick = nearestByAngle(cands, straight, blocked, target);
-      if (pick.k < 0) {
-        pick = nearestByAngle(cands, curvedList, blocked, target);
-        if (pick.k < 0) break;
-        curved++;
+      // a straight candidate wins when it lies in this tab's sector; otherwise the nearest in direction does
+      const st = nearestByAngle(cands, straight, blocked, target);
+      let pick = st;
+      if (!(st.k >= 0 && st.err <= sector)) {
+        const c = nearestByAngle(cands, curvedList, blocked, target);
+        if (c.k >= 0 && c.err < st.err) pick = c;
       }
+      if (pick.k < 0) break;
+      if (!cands[pick.k].straight) curved++;
       picked.push(cands[pick.k].s);
       error += pick.err;
       blocked[pick.k] = 1; // even with no gap (a zero width), a candidate holds one tab
@@ -255,7 +267,9 @@ export function tabIntervals(
     return { intervals: valid.map((f) => make(Math.min(total - half, Math.max(half, f * total)))), skipped: explicitT.length - valid.length };
   }
   const width = Math.max(0, t.width);
-  const cands = tabCandidates(path, total, half, width, path.closed ? centroid(path) : { x: 0, y: 0 });
+  // an open path's evenly spaced positions are candidates themselves, so tabs that can stay there keep exact spacing
+  const bases = path.closed ? [] : Array.from({ length: n }, (_, i) => ((i + 0.5) * total) / n);
+  const cands = tabCandidates(path, total, half, width, path.closed ? centroid(path) : { x: 0, y: 0 }, bases);
   const picked = path.closed ? balancedPick(cands, n, 2 * width, total) : openPick(cands, n, 2 * width, total);
   return { intervals: picked.sort((a, b) => a - b).map(make), skipped: n - picked.length };
 }
