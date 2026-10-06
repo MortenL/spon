@@ -47,14 +47,31 @@ describe('CAM pipeline', () => {
     worker.generateInWorker.mockImplementationOnce(() => new Promise((res) => (first = res)));
     worker.generateInWorker.mockImplementationOnce(async () => run(['new.nc']));
     const a = regenerate();
-    const b = regenerate();
-    await b;
+    const b = regenerate(); // waits for the run in flight, then goes ahead
+    await vi.waitFor(() => expect(worker.generateInWorker).toHaveBeenCalled());
     first(run(['old.nc']));
-    await a;
+    await Promise.all([a, b]);
     const s = appStore.getState();
     expect(allPrograms(s).map((p) => p.id)).toEqual(['gen:new.nc']);
     expect(s.activeProgramId).toBe('gen:new.nc');
     expect(Object.keys(s.programData)).toEqual(['gen:new.nc']);
+    expect(s.camStatus).toBe('idle');
+  });
+
+  it('sends only the newest of the runs requested while one is in flight', async () => {
+    appStore.setState({ job: withOp() });
+    let first!: (r: CamRun) => void;
+    worker.generateInWorker.mockImplementationOnce(() => new Promise((res) => (first = res)));
+    worker.generateInWorker.mockImplementation(async () => run(['latest.nc']));
+    const runs = [regenerate(), regenerate(), regenerate(), regenerate()];
+    await vi.waitFor(() => expect(worker.generateInWorker).toHaveBeenCalled());
+    await new Promise((res) => setTimeout(res, 0));
+    expect(worker.generateInWorker).toHaveBeenCalledTimes(1); // the worker runs one generation at a time: the others wait
+    first(run(['old.nc']));
+    await Promise.all(runs);
+    expect(worker.generateInWorker).toHaveBeenCalledTimes(2); // the superseded middle runs never reach the worker
+    const s = appStore.getState();
+    expect(allPrograms(s).map((p) => p.id)).toEqual(['gen:latest.nc']);
     expect(s.camStatus).toBe('idle');
   });
 
