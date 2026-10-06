@@ -24,6 +24,11 @@ describe('export checks', () => {
     expect(exportProblems(input({ files: [] })).errors).toEqual(['Nothing to export: add operations with geometry']);
   });
 
+  it('does not count info notes as problems', () => {
+    const noted = input({ results: { o: { diagnostics: [{ operationId: 'o', severity: 'info', code: 'tab-no-islands', message: 'Tabs hold islands; this pocket has none' }] } } });
+    expect(exportProblems(noted)).toEqual({ errors: [], warnings: [] });
+  });
+
   it('returns one file directly and several as a zip named after the job', () => {
     const one = exportFiles(input());
     expect(one.name).toBe('a.nc');
