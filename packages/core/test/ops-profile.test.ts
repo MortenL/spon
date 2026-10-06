@@ -145,9 +145,13 @@ describe('profileToolpath', () => {
     const explicit = profileToolpath(
       profile({ tabs, leads: { mode: 'none', length: 0, startPoint: { refIndex: 1, t: 0.25 } } }), tool6, ctx, geoOf({ contours: [c0, c1] }),
     );
-    const start = (o: typeof auto, refIndex: number) => o.overlays.tabPaths.find((l) => l.refIndex === refIndex)!.points[0];
+    // where the tool first goes over each contour (contour 0 lies left of x = 50, contour 1 right of it)
+    const start = (o: typeof auto, refIndex: number) =>
+      o.toolpath!.moves.flatMap((m) => ('to' in m ? [m.to] : [])).find((p) => (refIndex === 0 ? p.x < 50 : p.x > 50));
     expect(start(explicit, 0)).toEqual(start(auto, 0)); // contour 0 stays on the automatic start
     expect(start(explicit, 1)).not.toEqual(start(auto, 1)); // contour 1 starts at t = 0.25 instead
+    // the tab path is measured from the automatic start either way: the lead start point does not move the tabs
+    expect(explicit.overlays.tabs).toEqual(auto.overlays.tabs);
   });
 
   it('profiles open chains on the line with plunges and a warning', () => {

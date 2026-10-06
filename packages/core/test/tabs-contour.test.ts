@@ -68,9 +68,10 @@ describe('contour tabs', () => {
 
   it('skips a tab that does not fit on a tiny contour', () => {
     // on the line, a 2 x 2 mm square has a lap of 8 mm, shorter than the tab (4 mm wide + 6 mm tool)
-    const tiny: ResolvedContour = { path: rectPath(20, 20, 22, 22), z: 0, ref: 0 };
+    const tiny: ResolvedContour = { path: rectPath(20, 20, 22, 22), z: 0, ref: 7 };
     const out = run({ side: 'on', tabs: tabs({ manual: [{ refIndex: 0, t: [0.5] }] }) }, [tiny]);
-    expect(out.diagnostics).toMatchObject([{ severity: 'warning', code: 'tab-skipped' }]);
+    // the warning names the contour's ref, so the app can point at it
+    expect(out.diagnostics).toMatchObject([{ severity: 'warning', code: 'tab-skipped', ref: 7 }]);
     expect(out.overlays.tabs).toEqual([]);
     for (const m of out.toolpath!.moves) if ('to' in m) expect([m.to.x, m.to.y, m.to.z].every(Number.isFinite)).toBe(true);
     const r = tabIntervals(tiny.path, tabs(), 3, [0.5]);

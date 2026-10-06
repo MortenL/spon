@@ -44,6 +44,7 @@ export function CamOverlays() {
       {(op.type === 'profile' || op.type === 'pocket' || op.type === 'slot') && op.tabs.enabled && summary && (
         <TabEditor op={op} overlays={summary.overlays} origin={origin} />
       )}
+      {op.type === 'pocket' && op.tabs.enabled && summary && <TabBridges overlays={summary.overlays} />}
       {summary && <UnmachinedAreas overlays={summary.overlays} />}
       {summary && <GougeMarkers overlays={summary.overlays} />}
     </group>
@@ -218,11 +219,16 @@ type TabOp = Extract<Operation, { tabs: unknown }>;
 type TabPath = OpOverlays['tabPaths'][number];
 interface Drag { refIndex: number; index: number; x: number; y: number; moved: boolean; point: Vec2; t: number }
 
+/**
+ * Tab paths and handles. While toolpaths regenerate the overlays may be stale (an index could name another tab), so
+ * clicks, drags and Del are ignored and the handles are dimmed until the new overlays arrive.
+ */
 function TabEditor({ op, overlays, origin }: { op: TabOp; overlays: OpOverlays; origin: Vec3 }) {
+  const stale = useApp((st) => st.camStatus === 'generating');
   return (
     <>
-      {overlays.tabPaths.map((lap) => <TabPathTarget key={lap.refIndex} op={op} overlays={overlays} lap={lap} origin={origin} />)}
-      <TabHandles op={op} overlays={overlays} origin={origin} />
+      {overlays.tabPaths.map((lap) => <TabPathTarget key={lap.refIndex} op={op} overlays={overlays} lap={lap} origin={origin} stale={stale} />)}
+      <TabHandles op={op} overlays={overlays} origin={origin} stale={stale} />
     </>
   );
 }
@@ -231,7 +237,7 @@ function TabEditor({ op, overlays, origin }: { op: TabOp; overlays: OpOverlays; 
  * The tab path of one contour: hover shows a ghost tab at the nearest point, a click adds a tab there (or selects
  * the tab already within a tab width of it). A screen anchor (`tab-path-{refIndex}`) marks a free spot on it.
  */
-function TabPathTarget({ op, overlays, lap, origin }: { op: TabOp; overlays: OpOverlays; lap: TabPath; origin: Vec3 }) {
+function TabPathTarget({ op, overlays, lap, origin, stale }: { op: TabOp; overlays: OpOverlays; lap: TabPath; origin: Vec3; stale: boolean }) {
   const gl = useThree((st) => st.gl);
   const [ghost, setGhost] = useState<Vec2 | null>(null);
   const points = useMemo(() => {
@@ -257,6 +263,7 @@ function TabPathTarget({ op, overlays, lap, origin }: { op: TabOp; overlays: OpO
         onPointerDown={(e: ThreeEvent<PointerEvent>) => e.stopPropagation()}
         onPointerMove={(e: ThreeEvent<PointerEvent>) => {
           e.stopPropagation();
+          if (stale) return;
           gl.domElement.style.cursor = 'copy';
           setGhost(nearest(e).point);
         }}
@@ -266,7 +273,7 @@ function TabPathTarget({ op, overlays, lap, origin }: { op: TabOp; overlays: OpO
         }}
         onClick={(e: ThreeEvent<MouseEvent>) => {
           e.stopPropagation();
-          if (e.delta > 4) return; // the end of an orbit drag
+          if (e.delta > 4 || stale) return; // the end of an orbit drag, or overlays about to be replaced
           const { t, length } = nearest(e);
           const current = contourTabTs(overlays, lap.refIndex);
           const near = tabNear(current, t, op.tabs.width, length, lap.closed);
@@ -274,7 +281,7 @@ function TabPathTarget({ op, overlays, lap, origin }: { op: TabOp; overlays: OpO
           else runCommand({ type: 'addTab', opId: op.id, refIndex: lap.refIndex, t, current });
         }}
       />
-      {ghost && (
+      {ghost && !stale && (
         <mesh position={[ghost.x, ghost.y, lap.z]} raycast={noRaycast}>
           <sphereGeometry args={[TAB_RADIUS, 16, 16]} />
           <meshBasicMaterial color={PICK_COLOR} transparent opacity={0.45} depthWrite={false} />
@@ -289,7 +296,7 @@ function TabPathTarget({ op, overlays, lap, origin }: { op: TabOp; overlays: OpO
  * Tab handles: a click selects (with a × beside it), a drag moves the tab along its contour. Handles of contours
  * placed by hand are drawn in a second colour.
  */
-function TabHandles({ op, overlays, origin }: { op: TabOp; overlays: OpOverlays; origin: Vec3 }) {
+function TabHandles({ op, overlays, origin, stale }: { op: TabOp; overlays: OpOverlays; origin: Vec3; stale: boolean }) {
   const controls = useThree((st) => st.controls) as unknown as OrbitLike | null;
   const gl = useThree((st) => st.gl);
   const selected = useApp((st) => st.selectedTab);
@@ -321,6 +328,7 @@ function TabHandles({ op, overlays, origin }: { op: TabOp; overlays: OpOverlays;
               onPointerDown={(e: ThreeEvent<PointerEvent>) => {
                 if (e.button !== 0) return;
                 e.stopPropagation();
+                if (stale) return;
                 (e.target as Element).setPointerCapture(e.pointerId);
                 if (controls) controls.enabled = false;
                 update({ refIndex: tab.refIndex, index: tab.index, x: e.clientX, y: e.clientY, moved: false, point: tab.point, t: tab.t });
@@ -342,6 +350,7 @@ function TabHandles({ op, overlays, origin }: { op: TabOp; overlays: OpOverlays;
                 e.stopPropagation();
                 (e.target as Element).releasePointerCapture(e.pointerId);
                 endDrag();
+                if (appStore.getState().camStatus === 'generating') return; // regenerating since the press: stale overlays
                 if (d.moved) {
                   runCommand({
                     type: 'moveTab', opId: op.id, refIndex: tab.refIndex, index: tab.index,
@@ -355,10 +364,10 @@ function TabHandles({ op, overlays, origin }: { op: TabOp; overlays: OpOverlays;
               onPointerCancel={() => endDrag()}
             >
               <sphereGeometry args={[TAB_RADIUS, 16, 16]} />
-              <meshBasicMaterial color={color} />
+              <meshBasicMaterial color={color} transparent={stale} opacity={stale ? 0.35 : 1} />
             </mesh>
             <ScreenAnchor position={[point.x, point.y, lap.z]} testId={`tab-handle-${key}`} selected={isSelected} />
-            {isSelected && !dragging?.moved && (
+            {isSelected && !dragging?.moved && !stale && (
               <Html position={[point.x, point.y, lap.z]} zIndexRange={[20, 10]} style={{ transform: 'translate(8px, -28px)' }}>
                 <button
                   type="button" data-testid="tab-remove" aria-label="Remove tab" title="Remove tab (Del)"
@@ -392,6 +401,38 @@ function ScreenAnchor({ position, testId, selected }: { position: Point3; testId
     <Html position={position as [number, number, number]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
       <div data-testid={testId} data-selected={selected ? 'true' : undefined} aria-hidden style={{ width: 6, height: 6, pointerEvents: 'none' }} />
     </Html>
+  );
+}
+
+// ── pocket tab bridges ──────────────────────────────────────────────────
+
+/** The strips of material a pocket leaves to hold its islands, drawn at the tab top. */
+function TabBridges({ overlays }: { overlays: OpOverlays }) {
+  const bridges = useMemo(
+    () =>
+      overlays.tabBridges
+        .filter((b) => b.polygon.length >= 3)
+        .map((b, i) => ({
+          key: i,
+          z: b.z,
+          geometry: new THREE.ShapeGeometry(regionShape({ outer: b.polygon, holes: [] })),
+          outline: [...b.polygon, b.polygon[0]].map((p): Point3 => [p.x, p.y, 0]),
+        })),
+    [overlays.tabBridges],
+  );
+  useEffect(() => () => bridges.forEach((b) => b.geometry.dispose()), [bridges]);
+
+  return (
+    <>
+      {bridges.map((b) => (
+        <group key={b.key} name="tab-bridge" position={[0, 0, b.z]}>
+          <mesh geometry={b.geometry} raycast={noRaycast}>
+            <meshBasicMaterial color={PICK_COLOR} transparent opacity={0.3} depthWrite={false} side={THREE.DoubleSide} />
+          </mesh>
+          <Line points={b.outline} color={PICK_COLOR} lineWidth={1.5} raycast={noRaycast} />
+        </group>
+      ))}
+    </>
   );
 }
 

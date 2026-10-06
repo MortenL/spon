@@ -58,8 +58,11 @@ test('tabs: add on the path, select, remove with Delete and ×, reset one contou
   await expect(handles(page)).toHaveCount(4);
   await expect(page.getByTestId('pass-tab-manual-count')).toHaveCount(0);
 
-  // a drag moves a tab along its contour and freezes the contour
-  const before = await markerCentre(page, 'tab-handle-0-0');
+  // a drag moves a tab along its contour and freezes the contour: the topmost tab, on the outline's top edge, to the right
+  const centres = async () =>
+    Promise.all((await handles(page).evaluateAll((els) => els.map((el) => el.getAttribute('data-testid')!))).map((id) => markerCentre(page, id)));
+  const nearest = async (to: { x: number; y: number }) => Math.min(...(await centres()).map((c) => Math.hypot(c.x - to.x, c.y - to.y)));
+  const before = (await centres()).reduce((a, b) => (b.y < a.y ? b : a));
   await page.mouse.move(before.x, before.y);
   await page.mouse.down();
   await page.mouse.move(before.x + 15, before.y, { steps: 5 });
@@ -67,7 +70,10 @@ test('tabs: add on the path, select, remove with Delete and ×, reset one contou
   await page.mouse.up();
   await expect(page.getByTestId('pass-tab-manual-count')).toHaveText('1 contour placed by hand');
   await expect(handles(page)).toHaveCount(4);
-  await expect.poll(async () => Math.abs((await markerCentre(page, 'tab-handle-0-0')).x - before.x)).toBeGreaterThan(10);
+  // the tab sits where it was dropped and none is left where it was (its index may change: tabs are numbered along
+  // the contour from a start of their own)
+  await expect.poll(() => nearest(before)).toBeGreaterThan(10);
+  await expect.poll(() => nearest({ x: before.x + 30, y: before.y })).toBeLessThan(6);
   await expect(page.getByTestId('tab-remove')).toHaveCount(0); // a drag does not select
   await page.keyboard.press('Control+z');
   await expect(page.getByTestId('pass-tab-manual-count')).toHaveCount(0);
@@ -108,4 +114,66 @@ test('tabs: add on the path, select, remove with Delete and ×, reset one contou
   await page.keyboard.press('Control+z');
   await expect(handles(page)).toHaveCount(3);
   await expect(page.getByTestId('pass-tab-manual-count')).toHaveText('1 contour placed by hand');
+});
+
+test('tabs on a slot: handles along the centreline', async ({ page }) => {
+  await page.getByTestId('open-input').setInputFiles(path.join(FIXTURES, 'slot-lines.dxf'));
+  await expect(page.getByTestId('model-size')).toBeVisible();
+  await openPanel(page, 'stock');
+  await page.getByTestId('stock-margin-bottom').fill('6');
+  await page.getByTestId('stock-margin-bottom').press('Enter');
+
+  await openPanel(page, 'operations');
+  await page.getByTestId('add-op').click();
+  await page.getByTestId('add-op-slot').click();
+  await page.getByTestId('inspector-tab-geometry').click();
+  await page.locator('[data-testid^="catalog-contour-SLOTS-"]').first().locator('input').check();
+  await page.getByTestId('inspector-tab-passes').click();
+  await page.getByTestId('pass-tabs').click();
+  await page.getByTestId('pass-tab-count').fill('2');
+  await page.getByTestId('pass-tab-count').press('Enter');
+  await expect(opRows(page).last()).toHaveAttribute('data-status', /ok|warning/);
+  await page.getByTestId('view-top').click();
+  await expect(handles(page)).toHaveCount(2);
+  await expect(page.getByTestId('tab-handle-0-0')).toBeAttached();
+  await expect(page.getByTestId('tab-handle-0-1')).toBeAttached();
+  await expect(page.getByTestId('tab-path-0')).toBeAttached();
+
+  // a click on the centreline adds a third tab there and freezes the slot
+  await clickMarker(page, 'tab-path-0');
+  await expect(handles(page)).toHaveCount(3);
+  await expect(page.getByTestId('pass-tab-manual-count')).toHaveText('1 contour placed by hand');
+});
+
+test('tabs on a through pocket: bridges hold the island', async ({ page }) => {
+  await page.getByTestId('open-input').setInputFiles(path.join(FIXTURES, 'cam-part.dxf'));
+  await expect(page.getByTestId('model-size')).toBeVisible();
+  await openPanel(page, 'stock');
+  await page.getByTestId('stock-margin-bottom').fill('6');
+  await page.getByTestId('stock-margin-bottom').press('Enter');
+
+  await openPanel(page, 'operations');
+  await page.getByTestId('add-op').click();
+  await page.getByTestId('add-op-pocket').click();
+  for (let i = 0; i < 5; i++) await page.getByTestId(`catalog-contour-POCKET-${i}`).click(); // 4 lines + the island circle
+  // through: 0.2 mm below the stock bottom
+  await page.getByTestId('inspector-tab-heights').click();
+  await page.getByTestId('height-bottom-from').selectOption('stockBottom');
+  await page.getByTestId('height-bottom-offset').fill('-0.2');
+  await page.getByTestId('height-bottom-offset').press('Enter');
+  await page.getByTestId('inspector-tab-passes').click();
+  await expect(page.getByTestId('pass-tab-no-islands')).toHaveCount(0);
+  await page.getByTestId('pass-tabs').click();
+  await expect(opRows(page).last()).toHaveAttribute('data-status', /ok|warning/);
+  await page.getByTestId('view-top').click();
+  await expect(page.getByTestId('tab-handle-0-0')).toBeVisible();
+  await expect(page.getByTestId('tab-path-0')).toBeAttached();
+
+  await openPanel(page, 'programs');
+  await expect(page.getByTestId('program-generated')).toHaveCount(1);
+  await page.getByTestId('dock-tab-analysis').click();
+  await expect(page.getByTestId('analysis-total-time')).toBeVisible();
+  await expect(page.locator('[data-testid="diagnostic"][data-code="below-stock-bottom"]')).toHaveCount(0);
+  await expect(page.locator('[data-testid="op-diagnostic"][data-code="unmachined-area"]').first()).toBeVisible(); // the pocket's square corners
+  await expect(page.locator('[data-testid="op-diagnostic"][data-code="tab-bridge-long"]')).toHaveCount(0);
 });
