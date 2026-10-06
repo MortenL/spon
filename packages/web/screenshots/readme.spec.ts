@@ -117,6 +117,41 @@ test('playback: the programs played back, with the analysis', async ({ page }) =
   await shoot(page, 'playback');
 });
 
+test('vcarve: the SPON letters V-carved to a max depth, with the linked clearing', async ({ page }) => {
+  await openFixture(page, 'vcarve-spon.svg');
+  await expect(page.getByTestId('model-size')).toBeVisible();
+  await stockBottom(page, '6');
+  await addOp(page, 'vcarve');
+  await pickTool(page, 'starter-vbit-60');
+  await page.getByTestId('inspector-tab-geometry').click();
+  const contours = page.locator('[data-testid^="catalog-contour-LETTERS-"]');
+  await expect(contours.first()).toBeVisible();
+  const n = await contours.count();
+  for (let i = 0; i < n; i++) await contours.nth(i).locator('input').check();
+  await page.getByTestId('inspector-tab-passes').click();
+  await page.getByTestId('pass-vcarve-max-depth-on').check();
+  await page.getByTestId('pass-vcarve-max-depth').fill('2');
+  await page.getByTestId('pass-vcarve-max-depth').press('Enter');
+  await page.getByTestId('vcarve-add-clearing').click();
+  await expect(rows(page)).toHaveCount(2);
+  // the clearing: a 3 mm end mill reaches further into the letters; it still warns about the narrowest corners, which the V-bit cleans
+  await rows(page).first().click();
+  await pickTool(page, 'starter-flat-3');
+  await expect(rows(page).first()).toHaveAttribute('data-status', /ok|warning/, { timeout: 60_000 });
+  await expect(rows(page).last()).toHaveAttribute('data-status', 'ok');
+  await page.getByTestId('toggle-stock').click(); // the stock box hides the toolpaths
+  await page.keyboard.press('Escape');
+  if (await page.getByTestId('inspector-close').count()) await page.getByTestId('inspector-close').click();
+  await page.getByRole('button', { name: 'Top', exact: true }).click();
+  await page.getByRole('button', { name: 'Fit', exact: true }).click();
+  // zoom on the letters
+  const view = (await page.locator('canvas').first().boundingBox())!;
+  await page.mouse.move(view.x + view.width / 2, view.y + view.height / 2);
+  for (let i = 0; i < 5; i++) await page.mouse.wheel(0, -300);
+  await page.mouse.move(0, 0);
+  await shoot(page, 'vcarve', { keepView: true });
+});
+
 test('threads: an M20 external thread on a boss, with the operation open', async ({ page }) => {
   await openFixture(page, 'thread-plate.stl');
   await page.getByTestId('units-mm').click();

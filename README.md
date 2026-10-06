@@ -52,6 +52,8 @@ An MCP server lets Claude (or any MCP client) drive the same jobs: on `.spon` fi
 - **Gouge check.** Toolpaths are checked against the model (chamfer depth and the facets of round walls are allowed for). A cut into it is an error that keeps the toolpath, shows red markers in the viewport and blocks export.
 - Geometry is picked in the viewport, or from a catalog of faces, edge loops, holes and drawing contours.
 
+![The SPON letters V-carved to a 2 mm max depth, with the linked clearing](docs/screenshots/vcarve.png)
+
 ![An external M20 thread milled on a boss](docs/screenshots/threads.png)
 
 **Tools**
