@@ -108,6 +108,11 @@ export interface AppState {
   /** The text whose surface face is being picked in the viewport. */
   textPick: string | null;
   camPick: { operationId: string; target: CamPickTarget } | null;
+  /**
+   * The tab selected in the viewport (of the selected operation): its contour and its index within the contour.
+   * Cleared when the selected operation changes and by every job edit, undo and redo, since they may renumber tabs.
+   */
+  selectedTab: { refIndex: number; index: number } | null;
   inspectorTab: InspectorTab;
 
   commit(update: (job: Job) => Job): void;
@@ -150,6 +155,7 @@ export interface AppState {
   selectText(id: string | null): void;
   setTextPick(textId: string | null): void;
   setCamPick(pick: { operationId: string; target: CamPickTarget } | null): void;
+  selectTab(tab: { refIndex: number; index: number } | null): void;
   setInspectorTab(tab: InspectorTab): void;
 }
 
@@ -208,13 +214,14 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
     selectedTextId: null,
     textPick: null,
     camPick: null,
+    selectedTab: null,
     inspectorTab: 'geometry',
 
     commit(update) {
       const { job, past } = get();
       const next = update(job);
       if (next === job) return;
-      set({ job: next, past: [...past, job].slice(-UNDO_LIMIT), future: [], dirty: true, ...textSelectionFor(next, get()) });
+      set({ job: next, past: [...past, job].slice(-UNDO_LIMIT), future: [], dirty: true, selectedTab: null, ...textSelectionFor(next, get()) });
     },
     dispatch(command) {
       get().commit((job) => applyCommand(job, command));
@@ -227,7 +234,7 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
       const previous = past.at(-1);
       if (!previous) return;
       set({
-        job: previous, past: past.slice(0, -1), future: [job, ...future], dirty: true, ...textSelectionFor(previous, get()),
+        job: previous, past: past.slice(0, -1), future: [job, ...future], dirty: true, selectedTab: null, ...textSelectionFor(previous, get()),
         activeProgramId: activeProgramIdFor(allPrograms({ job: previous, generatedPrograms }), activeProgramId),
       });
     },
@@ -236,7 +243,7 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
       const [next, ...rest] = future;
       if (!next) return;
       set({
-        job: next, past: [...past, job].slice(-UNDO_LIMIT), future: rest, dirty: true, ...textSelectionFor(next, get()),
+        job: next, past: [...past, job].slice(-UNDO_LIMIT), future: rest, dirty: true, selectedTab: null, ...textSelectionFor(next, get()),
         activeProgramId: activeProgramIdFor(allPrograms({ job: next, generatedPrograms }), activeProgramId),
       });
     },
@@ -244,7 +251,7 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
       set({
         ...doc, past: [], future: [], pickMode: 'none', hiddenLayers: [], pendingImport: null, pendingBodies: null, pendingScale: null,
         programData: {}, pendingFontIds: [], activeProgramId: doc.job.programs[0]?.id ?? null, selectedLine: null, playhead: 0, playing: false,
-        generatedPrograms: [], camFiles: [], camResults: {}, catalog: null, camTexts: [], selectedOperationId: null, selectedTextId: null, textPick: null, camPick: null,
+        generatedPrograms: [], camFiles: [], camResults: {}, catalog: null, camTexts: [], selectedOperationId: null, selectedTextId: null, textPick: null, camPick: null, selectedTab: null,
       });
     },
     applyImportedModel(model, geometry, modelBytes, warnings) {
@@ -344,14 +351,14 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
     },
     selectOperation(id) {
       set({
-        selectedOperationId: id, ...(id !== get().selectedOperationId ? { camPick: null } : {}),
+        selectedOperationId: id, ...(id !== get().selectedOperationId ? { camPick: null, selectedTab: null } : {}),
         ...(id !== null ? { selectedTextId: null, textPick: null } : {}),
       });
     },
     selectText(id) {
       set({
         selectedTextId: id, ...(id !== get().selectedTextId ? { textPick: null } : {}),
-        ...(id !== null ? { selectedOperationId: null, camPick: null } : {}),
+        ...(id !== null ? { selectedOperationId: null, camPick: null, selectedTab: null } : {}),
       });
     },
     setTextPick(textId) {
@@ -359,6 +366,9 @@ export function createAppStore(initialJob: Job = createJob()): StoreApi<AppState
     },
     setCamPick(camPick) {
       set({ camPick, ...(camPick !== null ? { pickMode: 'none' as const, textPick: null } : {}) });
+    },
+    selectTab(selectedTab) {
+      set({ selectedTab });
     },
     setInspectorTab(inspectorTab) {
       set({ inspectorTab });

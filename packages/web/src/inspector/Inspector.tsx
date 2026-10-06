@@ -1,5 +1,5 @@
 import type { OperationType } from '@sponcam/core';
-import { Circle, RectangleHorizontal, CircleX, Layers, Scissors, SquareDashed, Triangle, TriangleAlert, X, PenLine, ChevronsDown, Eraser, Cog } from 'lucide-react';
+import { Circle, RectangleHorizontal, CircleX, Info, Layers, Scissors, SquareDashed, Triangle, TriangleAlert, X, PenLine, ChevronsDown, Eraser, Cog } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -79,8 +79,8 @@ function OperationInspector() {
       {diagnostics.length > 0 && (
         <ul data-testid="inspector-diagnostics" className="space-y-1 border-t p-3 text-xs">
           {diagnostics.map((d, i) => (
-            <li key={i} className={cn('flex items-start gap-1.5', d.severity === 'error' ? 'text-destructive' : 'text-amber-600')}>
-              {d.severity === 'error' ? <CircleX className="mt-0.5 size-3 shrink-0" /> : <TriangleAlert className="mt-0.5 size-3 shrink-0" />}
+            <li key={i} className={cn('flex items-start gap-1.5', d.severity === 'error' ? 'text-destructive' : d.severity === 'info' ? 'text-sky-600' : 'text-amber-600')}>
+              {d.severity === 'error' ? <CircleX className="mt-0.5 size-3 shrink-0" /> : d.severity === 'info' ? <Info className="mt-0.5 size-3 shrink-0" /> : <TriangleAlert className="mt-0.5 size-3 shrink-0" />}
               <span>{d.message}{d.ref !== undefined ? ` (reference ${d.ref + 1})` : ''}</span>
             </li>
           ))}

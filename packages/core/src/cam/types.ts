@@ -51,7 +51,11 @@ export interface TabSettings {
   placement: 'count' | 'spacing';
   count: number;
   spacing: number;
-  /** Per contour (by refIndex) fixed positions as fractions t of the lap; a contour without an entry is automatic. */
+  /**
+   * Per contour (by refIndex) fixed positions as fractions t of its tab path; a contour without an entry is automatic.
+   * A profile measures them in a frame that the cut direction, Reverse and the lead start point do not change: a
+   * closed lap counter-clockwise from its automatic start, an open lap in the line's drawn direction.
+   */
   manual: ManualTabs[];
 }
 export interface ManualTabs { refIndex: number; t: number[] }
@@ -239,11 +243,11 @@ export interface Toolpath {
   moves: Move[];
 }
 
-export type CamSeverity = 'error' | 'warning';
+export type CamSeverity = 'error' | 'warning' | 'info';
 export type CamCode =
   | 'no-tool' | 'no-geometry' | 'ref-missing' | 'ref-changed' | 'face-not-horizontal' | 'open-contour' | 'no-stock'
   | 'heights-invalid' | 'offset-collapsed' | 'tool-too-large' | 'tool-undersize' | 'entry-plunge' | 'unmachined-area'
-  | 'tab-skipped' | 'stepdown-exceeds-flute' | 'feed-exceeds-machine' | 'tool-number-duplicate' | 'bend-rounded' | 'gouge' | 'facing-depth' | 'wrong-tool'
+  | 'tab-skipped' | 'tab-trochoid-skipped' | 'tab-bridge-long' | 'tab-bridge-self' | 'tab-no-islands' | 'stepdown-exceeds-flute' | 'feed-exceeds-machine' | 'tool-number-duplicate' | 'bend-rounded' | 'gouge' | 'facing-depth' | 'wrong-tool'
   | 'slot-width-mismatch' | 'slot-too-narrow' | 'slot-ends-unset' | 'slot-overcut' | 'wrong-geometry'
   | 'flute-exceeded' | 'vcarve-uncleared' | 'source-missing' | 'source-incomplete' | 'internal'
   | 'font-unreadable' | 'font-missing' | 'text-empty' | 'text-missing-glyphs' | 'text-fit' | 'text-arc' | 'text-no-stock' | 'text-single-line'

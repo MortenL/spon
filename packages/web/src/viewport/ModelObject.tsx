@@ -12,6 +12,7 @@ import { appStore, type ModelGeometry, useApp } from '@/state/store';
 import { applyPick, pickMesh } from './camPick';
 import { layerLinePositions, lineColor, meshToGeometry, subsetGeometry, toThreeQuaternion } from './convert';
 import { noRaycast } from './SceneObjects';
+import { hitsTab } from './tabPath';
 
 type MeshGeometry = Extract<ModelGeometry, { kind: 'mesh' }>;
 type DrawingGeometry = Extract<ModelGeometry, { kind: 'drawing' }>;
@@ -71,6 +72,7 @@ function ModelMesh({ geometry, importUnits }: { geometry: MeshGeometry; importUn
 
   const onClick = (e: ThreeEvent<MouseEvent>) => {
     if ((pickMode === 'none' && !picking) || e.faceIndex == null || e.delta > 4) return; // ignore the end of an orbit drag
+    if (hitsTab(e)) return; // a tab handle or path under the pointer takes the click
     e.stopPropagation();
     const { commit, setPickMode, requestView, job, setCamPick, setTextPick } = appStore.getState();
     if (pickMode === 'face') {

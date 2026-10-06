@@ -3,7 +3,9 @@ import { movePlayhead, togglePlaying } from '@/gcode/playback';
 import { buildTimeline, stepTime } from '@/gcode/timeline';
 import { openViaPicker, saveDocument } from '@/state/documents';
 import { allPrograms } from '@/state/programList';
+import { runCommand } from '@/state/camView';
 import { appStore } from '@/state/store';
+import { removeSelectedTabCommand } from '@/state/tabEdits';
 
 const PLAYBACK_KEYS = [' ', 'arrowleft', 'arrowright', 'home', 'end'];
 
@@ -24,8 +26,9 @@ function isTypingForPlaybackKeys(target: EventTarget | null): boolean {
 
 /**
  * Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y undo-redo, Ctrl+S save (Shift = Save As), Ctrl+O open, F fit,
- * Esc cancels a CAM pick or lay-flat picking, Space play/pause, ←/→ step one move, Home/End jump.
- * (Delete, Ctrl+D and Alt+↑/↓ on the selected operation live in the Operations panel.)
+ * Esc deselects a tab or cancels a CAM pick or lay-flat picking, Space play/pause, ←/→ step one move, Home/End jump,
+ * Delete/Backspace removes the selected tab. (Delete, Ctrl+D and Alt+↑/↓ on the selected operation live in the
+ * Operations panel; it leaves Delete alone while a tab is selected or once this handler has used the key.)
  */
 export function useKeyboardShortcuts(): void {
   useEffect(() => {
@@ -61,6 +64,14 @@ export function useKeyboardShortcuts(): void {
         else movePlayhead(stepTime(tl, s.programData, s.playhead, key === 'arrowright' ? 1 : -1));
         return;
       }
+      if (!mod && !e.altKey && (key === 'delete' || key === 'backspace') && s.selectedTab) {
+        if (document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]')) return;
+        e.preventDefault();
+        const command = removeSelectedTabCommand(s);
+        if (command) runCommand(command);
+        else s.selectTab(null);
+        return;
+      }
       if (mod && key === 'z') {
         e.preventDefault();
         if (e.shiftKey) s.redo();
@@ -71,7 +82,8 @@ export function useKeyboardShortcuts(): void {
       } else if (!mod && key === 'f') {
         s.requestView('fit');
       } else if (key === 'escape') {
-        if (s.camPick) s.setCamPick(null);
+        if (s.selectedTab) s.selectTab(null);
+        else if (s.camPick) s.setCamPick(null);
         else if (s.pickMode !== 'none') s.setPickMode('none');
       }
     };

@@ -29,6 +29,10 @@ export type JobCommand =
   | { type: 'addOperation'; opType: OperationType; toolId: string | null; id?: string; name?: string }
   | { type: 'updateOperation'; id: string; patch: OperationPatch }
   | { type: 'removeOperation'; id: string }
+  | { type: 'addTab'; opId: string; refIndex: number; t: number; current: number[] }
+  | { type: 'removeTab'; opId: string; refIndex: number; index: number; current: number[] }
+  | { type: 'moveTab'; opId: string; refIndex: number; index: number; t: number; current: number[] }
+  | { type: 'resetTabs'; opId: string; refIndex?: number }
   | { type: 'duplicateOperation'; id: string; newId?: string }
   | { type: 'moveOperation'; id: string; delta: -1 | 1 }
   | { type: 'setOperationEnabled'; id: string; enabled: boolean }
@@ -161,9 +165,12 @@ function checkTabs(t: Partial<TabSettings>): void {
 /** Validates manual tab positions and returns them with each contour's t ascending. */
 function checkManualTabs(manual: unknown): ManualTabs[] {
   if (!Array.isArray(manual)) throw new CommandError('Manual tabs must be a list');
+  const seen = new Set<number>();
   return manual.map((m) => {
     if (!isObj(m) || !Number.isInteger(m.refIndex) || (m.refIndex as number) < 0) throw new CommandError('Tab contour index must be 0 or more');
     if (!Array.isArray(m.t) || m.t.some((t) => typeof t !== 'number' || !(t >= 0 && t < 1))) throw new CommandError('Tab positions must be from 0 to below 1');
+    if (seen.has(m.refIndex as number)) throw new CommandError('Each tab contour may appear only once');
+    seen.add(m.refIndex as number);
     return { refIndex: m.refIndex as number, t: [...(m.t as number[])].sort((a, b) => a - b) };
   });
 }
@@ -239,6 +246,39 @@ function patchOperation(job: Job, op: Operation, patch: OperationPatch): Operati
   return next as unknown as Operation;
 }
 
+/** Wraps a tab position into [0, 1); 0.9999 and 0 stay distinct. */
+function normaliseTab(t: unknown): number {
+  if (typeof t !== 'number' || !Number.isFinite(t)) throw new CommandError('Tab positions must be from 0 to below 1');
+  const r = t % 1;
+  return r < 0 ? (r + 1 >= 1 ? 0 : r + 1) : r;
+}
+const normaliseTabs = (ts: readonly unknown[]): number[] => ts.map(normaliseTab).sort((a, b) => a - b);
+
+/**
+ * Edits one contour's manual tab positions. An automatic contour is frozen first from `current`
+ * (the positions the UI shows); a manual one ignores it. Keeps one entry per contour, sorted by refIndex.
+ */
+function editTabs(job: Job, opId: string, refIndex: number, edit: (t: number[]) => number[], current: readonly unknown[]): Job {
+  const op = findOp(job, opId);
+  if (op.type !== 'profile' && op.type !== 'pocket' && op.type !== 'slot') throw new CommandError('This operation has no tabs');
+  if (!Number.isInteger(refIndex) || refIndex < 0) throw new CommandError('Tab contour index must be 0 or more');
+  const existing = op.tabs.manual.find((m) => m.refIndex === refIndex);
+  const t = edit(existing ? [...existing.t] : normaliseTabs(current));
+  const manual = [...op.tabs.manual.filter((m) => m.refIndex !== refIndex), { refIndex, t: normaliseTabs(t) }].sort((a, b) => a.refIndex - b.refIndex);
+  return replaceOp(job, { ...op, tabs: { ...op.tabs, manual } });
+}
+
+function resetTabs(job: Job, opId: string, refIndex: number | undefined): Job {
+  const op = findOp(job, opId);
+  if (op.type !== 'profile' && op.type !== 'pocket' && op.type !== 'slot') throw new CommandError('This operation has no tabs');
+  const manual = refIndex === undefined ? [] : op.tabs.manual.filter((m) => m.refIndex !== refIndex);
+  return replaceOp(job, { ...op, tabs: { ...op.tabs, manual } });
+}
+
+const checkTabIndex = (ts: readonly number[], index: number): void => {
+  if (!Number.isInteger(index) || index < 0 || index >= ts.length) throw new CommandError('No such tab');
+};
+
 const replaceOp = (job: Job, op: Operation): Job => ({ ...job, operations: job.operations.map((o) => (o.id === op.id ? op : o)) });
 
 export function applyCommand(job: Job, c: JobCommand): Job {
@@ -267,6 +307,10 @@ export function applyCommand(job: Job, c: JobCommand): Job {
     }
     case 'updateOperation': return replaceOp(job, patchOperation(job, findOp(job, c.id), c.patch));
     case 'removeOperation': findOp(job, c.id); return { ...job, operations: job.operations.filter((o) => o.id !== c.id) };
+    case 'addTab': return editTabs(job, c.opId, c.refIndex, (ts) => [...ts, normaliseTab(c.t)], c.current);
+    case 'removeTab': return editTabs(job, c.opId, c.refIndex, (ts) => { checkTabIndex(ts, c.index); return ts.filter((_, i) => i !== c.index); }, c.current);
+    case 'moveTab': return editTabs(job, c.opId, c.refIndex, (ts) => { checkTabIndex(ts, c.index); return ts.map((v, i) => (i === c.index ? normaliseTab(c.t) : v)); }, c.current);
+    case 'resetTabs': return resetTabs(job, c.opId, c.refIndex);
     case 'duplicateOperation': {
       const op = findOp(job, c.id);
       const id = c.newId ?? crypto.randomUUID();
