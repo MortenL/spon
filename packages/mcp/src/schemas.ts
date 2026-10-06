@@ -68,7 +68,7 @@ export const operationPatchSchema = z.strictObject({
   leads: z.strictObject({ mode: z.enum(['none', 'arc', 'line']), length: z.number(), startPoint: z.union([z.literal('auto'), lapPosition]) }).partial(),
   tabs: z.strictObject({
     enabled: z.boolean(), shape: z.enum(['rect', 'triangle']), width: z.number(), height: z.number(), placement: z.enum(['count', 'spacing']),
-    count: z.number(), spacing: z.number(), positions: z.array(lapPosition).nullable(),
+    count: z.number(), spacing: z.number(), manual: z.array(z.strictObject({ refIndex: z.number().int(), t: z.array(z.number()) })),
   }).partial(),
   stepoverPct: z.number(),
   finishWalls: z.boolean(),

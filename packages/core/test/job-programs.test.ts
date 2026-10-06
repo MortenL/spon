@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v1Job from './fixtures/job-v1.json';
-import { CURRENT_SCHEMA_VERSION, migrateJob } from '../src/io/migrations';
+import { CURRENT_SCHEMA_VERSION, MIGRATIONS, migrateJob } from '../src/io/migrations';
 import { createJob } from '../src/job/defaults';
 import { DEFAULT_MACHINE_PRESET, MACHINE_PRESET_NAMES, machinePreset } from '../src/job/machine';
 import {
@@ -72,10 +72,9 @@ describe('job v2', () => {
 
 describe('migration v8 → v9', () => {
   it('gives the machine profile a 0.5 mm spoilboard allowance', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(9);
     const { spoilboardAllowance: _, ...machine } = createJob().machine;
     const v8 = { ...createJob(), machine, schemaVersion: 8 };
-    expect(migrateJob(v8)).toEqual({ ...v8, machine: { ...machine, spoilboardAllowance: 0.5 }, schemaVersion: 9 });
+    expect(migrateJob(v8, MIGRATIONS, 9)).toEqual({ ...v8, machine: { ...machine, spoilboardAllowance: 0.5 }, schemaVersion: 9 });
   });
 });
 

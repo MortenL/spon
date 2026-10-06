@@ -1,15 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { applyCommand, applyCommands, createJob, CURRENT_SCHEMA_VERSION, fontBlobPath, migrateJob, readSpon, setStock, writeSpon } from '../src';
+import { applyCommand, applyCommands, createJob, fontBlobPath, MIGRATIONS, migrateJob, readSpon, setStock, writeSpon } from '../src';
 
 const fixed = () => setStock(createJob(), { mode: 'fixed', size: { x: 200, y: 100, z: 18 }, modelOffset: { x: 0, y: 0, z: 0 } });
 
 describe('texts in the job', () => {
   it('starts empty and migrates schema 5 jobs', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(9);
     expect(createJob().texts).toEqual([]);
     const v5 = { ...createJob(), schemaVersion: 5 } as Record<string, unknown>;
     delete v5.texts;
-    expect(migrateJob(v5).texts).toEqual([]);
+    expect(migrateJob(v5, MIGRATIONS, 6).texts).toEqual([]);
   });
 
   it('adds a text with defaults, centred on a fixed stock', () => {

@@ -10,6 +10,7 @@ import { appStore, useApp } from '@/state/store';
 import { toolLibraryStore } from '@/state/toolLibrary';
 import { addClearingBatch, clearingFor, engraveModeUi } from './vcarveInfo';
 import { chamferInfo } from './chamferInfo';
+import { TabsBlock } from './TabsBlock';
 import { slotView } from './slotInfo';
 import { contourKinds } from './openChains';
 import { kindSwitchPatch, pitchFromTpi, pitchToTpi, sizeOptions, THREAD_STANDARD_OPTIONS, parseToothAngle, threadReadouts } from './threadInfo';
@@ -68,7 +69,6 @@ function EntryFields({ entry, showAngles, onPatch }: { entry: EntrySettings; sho
 
 function ProfilePasses({ op }: { op: ProfileOp }) {
   const patch = (p: Partial<ProfileOp>) => runCommand({ type: 'updateOperation', id: op.id, patch: p });
-  const { tabs } = op;
   const job = useApp((s) => s.job);
   const geometry = useApp((s) => s.geometry);
   const kinds = useMemo(() => contourKinds(op, camContext(job, geometry)), [op, job, geometry]);
@@ -138,45 +138,7 @@ function ProfilePasses({ op }: { op: ProfileOp }) {
         onCommit={(v) => patch({ leads: { ...op.leads, length: v } })}
       />
 
-      <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" data-testid="pass-tabs" className="accent-primary" checked={tabs.enabled} onChange={(e) => patch({ tabs: { ...tabs, enabled: e.target.checked } })} />
-        Tabs
-      </label>
-      {tabs.enabled && (
-        <div className="space-y-2 pl-1">
-          <label className="grid grid-cols-[1fr_8rem] items-center gap-2 text-sm">
-            <span className="text-muted-foreground">Shape</span>
-            <select
-              data-testid="pass-tab-shape" value={tabs.shape} className="h-8 rounded-md border bg-transparent px-2 text-sm"
-              onChange={(e) => patch({ tabs: { ...tabs, shape: e.target.value as ProfileOp['tabs']['shape'] } })}
-            >
-              <option value="rect" className="bg-background">Rectangle</option>
-              <option value="triangle" className="bg-background">Triangle</option>
-            </select>
-          </label>
-          <LengthField label="Width" valueMm={tabs.width} testId="pass-tab-width" min={0.01} onCommit={(v) => patch({ tabs: { ...tabs, width: v } })} />
-          <LengthField label="Height" valueMm={tabs.height} testId="pass-tab-height" min={0.01} onCommit={(v) => patch({ tabs: { ...tabs, height: v } })} />
-          <label className="grid grid-cols-[1fr_8rem] items-center gap-2 text-sm">
-            <span className="text-muted-foreground">Placement</span>
-            <select
-              data-testid="pass-tab-placement" value={tabs.placement} className="h-8 rounded-md border bg-transparent px-2 text-sm"
-              onChange={(e) => patch({ tabs: { ...tabs, placement: e.target.value as ProfileOp['tabs']['placement'] } })}
-            >
-              <option value="count" className="bg-background">Count</option>
-              <option value="spacing" className="bg-background">Spacing</option>
-            </select>
-          </label>
-          {tabs.placement === 'count'
-            ? intField('Count', tabs.count, 'pass-tab-count', 1, (v) => patch({ tabs: { ...tabs, count: v } }))
-            : <LengthField label="Spacing" valueMm={tabs.spacing} testId="pass-tab-spacing" min={0.01} onCommit={(v) => patch({ tabs: { ...tabs, spacing: v } })} />}
-          <Button
-            variant="outline" size="sm" data-testid="pass-tab-reset" disabled={tabs.positions === null}
-            onClick={() => patch({ tabs: { ...tabs, positions: null } })}
-          >
-            Reset tab positions
-          </Button>
-        </div>
-      )}
+      <TabsBlock op={op} />
     </div>
   );
 }

@@ -29,7 +29,7 @@ describe('newOperation', () => {
     expect(defaultHeights('drill', 'mesh').bottom).toEqual({ from: 'holeBottom', offset: 0 });
     const p = newOperation('profile', { id: 'p', name: 'P', tool, modelKind: 'mesh' });
     expect(p).toMatchObject({ side: 'outside', direction: 'climb', leads: { mode: 'arc', length: 3, startPoint: 'auto' } });
-    expect(p.type === 'profile' && p.tabs).toEqual({ enabled: false, shape: 'rect', width: 6, height: 2, placement: 'count', count: 4, spacing: 50, positions: null });
+    expect(p.type === 'profile' && p.tabs).toEqual({ enabled: false, shape: 'rect', width: 6, height: 2, placement: 'count', count: 4, spacing: 50, manual: [] });
   });
 
   it('falls back to neutral feeds without a tool', () => {

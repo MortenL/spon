@@ -27,7 +27,9 @@ export function tabIntervals(
   if (!(total > 0) || 2 * half >= total) return { intervals: [], skipped: n };
   const make = (center: number) => ({ s0: center - half, s1: center + half, center, shape: t.shape });
   if (explicitT) {
-    return { intervals: explicitT.map((f) => make(Math.min(total - half, Math.max(half, f * total)))), skipped: 0 };
+    // a position that is not a number cannot be placed; the others are clamped inside the lap (it is longer than a tab here)
+    const valid = explicitT.filter((f) => Number.isFinite(f));
+    return { intervals: valid.map((f) => make(Math.min(total - half, Math.max(half, f * total)))), skipped: explicitT.length - valid.length };
   }
   const corners = path.closed ? cornerDistances(path, 30) : [];
   const cyc = (a: number, b: number) => { const d = Math.abs(a - b) % total; return Math.min(d, total - d); };
@@ -45,4 +47,16 @@ export function tabIntervals(
     else intervals.push(make(placed));
   }
   return { intervals, skipped };
+}
+
+/**
+ * Tab intervals for one contour's lap: the manual entry for `refIndex` if there is one (its first, if duplicated;
+ * exact positions, clamped inside the lap, none for an empty list), else automatic placement. A tab that does not
+ * fit on a lap shorter than itself is skipped and counted.
+ */
+export function contourTabs(
+  path: Path2D, t: TabSettings, toolRadius: number, refIndex: number,
+): { intervals: (TabInterval & { center: number })[]; skipped: number; manual: boolean } {
+  const entry = t.manual.find((m) => m.refIndex === refIndex);
+  return { ...tabIntervals(path, t, toolRadius, entry ? entry.t : null), manual: !!entry };
 }

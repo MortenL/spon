@@ -6,6 +6,7 @@ import type { ResolvedShape } from '../features/resolve';
 import { resolveGeometry } from '../features/resolve';
 import { resolveHeights } from '../heights';
 import { plugFloor, plugWallRegions } from '../inlay/plugStrokes';
+import { defaultTabs } from '../defaults';
 import type { CamCode, CamSeverity, PocketOp, VClearOp } from '../types';
 import { emptyOverlays, type OpOutput } from './output';
 import { pocketToolpath } from './pocket';
@@ -91,7 +92,7 @@ export function vclearToolpath(op: VClearOp, tool: Tool, ctx: CamContext): OpOut
     return out;
   }
   const pocket: PocketOp = {
-    ...op, type: 'pocket', stockRadial: 0, stockAxial: 0, finishWalls: false, finishFloor: false, geometry: [],
+    ...op, type: 'pocket', stockRadial: 0, stockAxial: 0, finishWalls: false, finishFloor: false, tabs: defaultTabs(0), geometry: [],
     heights: {
       ...op.heights, top: source.heights.top,
       bottom: { ...source.heights.top, offset: source.heights.top.offset - depth },
@@ -126,7 +127,7 @@ export function vclearToolpath(op: VClearOp, tool: Tool, ctx: CamContext): OpOut
     diagnostics: cut.flatMap((r) => r.diagnostics),
     overlays: {
       ...first.overlays,
-      tabs: cut.flatMap((r) => r.overlays.tabs), laps: cut.flatMap((r) => r.overlays.laps), gouges: cut.flatMap((r) => r.overlays.gouges),
+      tabs: cut.flatMap((r) => r.overlays.tabs), tabPaths: cut.flatMap((r) => r.overlays.tabPaths), tabBridges: cut.flatMap((r) => r.overlays.tabBridges), gouges: cut.flatMap((r) => r.overlays.gouges),
       unmachined: [
         ...cut.flatMap((r) => r.overlays.unmachined),
         ...left.map(({ shape }) => ({ regions: [{ outer: flattenPath(shape.shape.outer, tol), holes: shape.shape.islands.map((i) => flattenPath(i, tol)) }], z: first.heights?.bottom ?? 0 })),

@@ -1,6 +1,6 @@
 import {
   camContext, type CamContext, type DxfPathRef, drawingPath, drawingPathToProgram, flattenPath, type GeometryRef,
-  HEIGHT_NAMES, type HeightName, type Job, meshSlots, offsetOpenPath, pathLength, pointAt, type LapPosition, type Operation, type OpOverlays, type Path2D, type ResolvedHeights,
+  HEIGHT_NAMES, type HeightName, type Job, meshSlots, offsetOpenPath, pathLength, pointAt, type Operation, type OpOverlays, type Path2D, type ResolvedHeights,
   programContext, programOrigin, resolveFaceRef, type Vec2, type Vec3,
 } from '@sponcam/core';
 import { Line } from '@react-three/drei';
@@ -211,7 +211,7 @@ function TabHandles({ op, overlays, origin }: { op: Operation; overlays: OpOverl
   return (
     <>
       {overlays.tabs.map((tab, i) => {
-        const lap = overlays.laps.find((l) => l.refIndex === tab.refIndex);
+        const lap = overlays.tabPaths.find((l) => l.refIndex === tab.refIndex);
         if (!lap) return null;
         const point = drag && drag.index === i ? drag.point : tab.point;
         return (
@@ -236,8 +236,16 @@ function TabHandles({ op, overlays, origin }: { op: Operation; overlays: OpOverl
               e.stopPropagation();
               (e.target as Element).releasePointerCapture(e.pointerId);
               if (drag && drag.index === i) {
-                const positions: LapPosition[] = overlays.tabs.map((tb, idx) => ({ refIndex: tb.refIndex, t: idx === i ? drag.t : tb.t }));
-                runCommand({ type: 'updateOperation', id: op.id, patch: { tabs: { positions } } });
+                // freeze this contour's current tabs, with the dragged one moved
+                const closed = lap.closed;
+                const norm = (v: number) => (closed ? (v >= 1 || v < 0 ? ((v % 1) + 1) % 1 : v) : Math.min(1 - 1e-9, Math.max(0, v)));
+                const t = overlays.tabs
+                  .flatMap((tb, idx) => (tb.refIndex === tab.refIndex ? [idx === i ? drag.t : tb.t] : []))
+                  .map(norm)
+                  .sort((a, b) => a - b);
+                const current = op.type === 'profile' || op.type === 'pocket' || op.type === 'slot' ? op.tabs.manual : [];
+                const manual = [...current.filter((m) => m.refIndex !== tab.refIndex), { refIndex: tab.refIndex, t }];
+                runCommand({ type: 'updateOperation', id: op.id, patch: { tabs: { manual } } });
               }
               setDrag(null);
             }}

@@ -3,7 +3,7 @@ import type { Job } from '../job/types';
 import { defaultPostSettings } from '../post/types';
 import { SponFileError } from './errors';
 
-export const CURRENT_SCHEMA_VERSION = 9;
+export const CURRENT_SCHEMA_VERSION = 10;
 
 export type Migration = (job: Record<string, unknown>) => Record<string, unknown>;
 
@@ -36,6 +36,30 @@ export const MIGRATIONS: Readonly<Record<number, Migration>> = {
   7: (job) => job,
   // v8 → v9: the machine profile allows cuts 0.5 mm into the spoilboard (a through profile breaks through by 0.2 mm)
   8: (job) => ({ ...job, machine: { spoilboardAllowance: 0.5, ...(job.machine as object) } }),
+  // v9 → v10: tabs are kept per contour (`manual`) and pockets and slots carry tab settings. Contours that had no
+  // explicit positions become automatic again; in schema 9 pockets and slots had no tabs.
+  9: (job) => {
+    const tools = (Array.isArray(job.tools) ? job.tools : []) as Array<{ id?: unknown; diameter?: unknown }>;
+    return {
+      ...job,
+      operations: (Array.isArray(job.operations) ? job.operations : []).map((raw) => {
+        const op = raw as { type?: unknown; toolId?: unknown; tabs?: Record<string, unknown> };
+        if (op.type === 'profile' && op.tabs) {
+          const { positions, ...rest } = op.tabs as { positions?: Array<{ refIndex: number; t: number }> | null };
+          const byContour = new Map<number, number[]>();
+          for (const p of positions ?? []) byContour.set(p.refIndex, [...(byContour.get(p.refIndex) ?? []), p.t]);
+          const manual = [...byContour].sort((a, b) => a[0] - b[0]).map(([refIndex, t]) => ({ refIndex, t: t.sort((a, b) => a - b) }));
+          return { ...op, tabs: { ...rest, manual } };
+        }
+        if (op.type === 'pocket' || op.type === 'slot') {
+          const diameter = tools.find((t) => t.id === op.toolId)?.diameter;
+          const d = typeof diameter === 'number' ? diameter : 0;
+          return { ...op, tabs: { enabled: false, shape: 'rect', width: Math.max(4, d), height: 2, placement: 'count', count: 4, spacing: 50, manual: [] } };
+        }
+        return raw;
+      }),
+    };
+  },
 };
 
 export function migrateJob(raw: unknown, migrations: Readonly<Record<number, Migration>> = MIGRATIONS, current = CURRENT_SCHEMA_VERSION): Job {

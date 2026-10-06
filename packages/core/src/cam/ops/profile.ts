@@ -12,7 +12,7 @@ import { resolveHeights, type ResolvedHeights } from '../heights';
 import type { CamCode, CamSeverity, ProfileOp } from '../types';
 import { leadIn, leadOut } from './leads';
 import { emptyOverlays, type OpOutput } from './output';
-import { tabIntervals } from './tabs';
+import { contourTabs } from './tabs';
 import { depthLevels, emitLap, emitRampLaps, MoveWriter, type TabProfile } from './writer';
 
 const lerp = (a: Vec2, b: Vec2, t: number): Vec2 => v2(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
@@ -99,6 +99,33 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
     }
   };
 
+  const tabWarned = new Set<number>();
+  /**
+   * Tab intervals of a lap and, per level, the profile to cut with (null at or above the tab top). `mirrored` flips
+   * the intervals for a lap cut in reverse. Overlays are recorded once per contour, when `recordOverlay` is set.
+   */
+  const planTabs = (path: Path2D, h: ResolvedHeights, index: number, useExplicit: boolean, recordOverlay: boolean) => {
+    if (!op.tabs.enabled) return { at: (_z: number, _mirrored: boolean): TabProfile | null => null };
+    // later pieces of a split contour are placed automatically, except that an empty manual list still means no tabs
+    const emptyEntry = op.tabs.manual.find((m) => m.refIndex === index);
+    const noManualTabs = emptyEntry && emptyEntry.t.length === 0 ? [emptyEntry] : [];
+    const total = pathLength(path);
+    const { intervals, skipped, manual } = contourTabs(path, useExplicit ? op.tabs : { ...op.tabs, manual: noManualTabs }, r, index);
+    if (skipped && !tabWarned.has(index)) {
+      tabWarned.add(index);
+      diag('warning', 'tab-skipped', `${skipped} tab(s) did not fit and were skipped`);
+    }
+    const top = h.bottom + op.tabs.height;
+    const forward: TabProfile = { top, base: h.bottom, intervals };
+    const mirrored: TabProfile = { top, base: h.bottom, intervals: intervals.map((iv) => ({ ...iv, s0: total - iv.s1, s1: total - iv.s0 })) };
+    if (recordOverlay) {
+      intervals.forEach((iv, i) =>
+        out.overlays.tabs.push({ refIndex: index, index: i, t: iv.center / total, point: pointAt(path, iv.center).point, manual }));
+      out.overlays.tabPaths.push({ refIndex: index, points: flattenPath(path, 0.01), z: top, closed: path.closed });
+    }
+    return { at: (z: number, rev: boolean): TabProfile | null => (intervals.length && z < top - 1e-9 ? (rev ? mirrored : forward) : null) };
+  };
+
   /**
    * Cuts one closed lap at the given levels; the tool travels to it first. `index` is the contour's index in
    * `geo.contours` (the refIndex tabs and lead start points key on). `useExplicit` is true for a contour's first
@@ -155,21 +182,8 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
     const S = inSegs.length ? segmentStart(inSegs[0]) : P;
     const inLen = inSegs.reduce((a, s) => a + segmentLength(s), 0);
 
-    let tabsAt: (z: number) => TabProfile | null = () => null;
-    if (op.tabs.enabled) {
-      const explicit = useExplicit && op.tabs.positions ? op.tabs.positions.filter((p) => p.refIndex === index).map((p) => p.t) : null;
-      const { intervals, skipped } = tabIntervals(path, op.tabs, r, explicit);
-      if (skipped) diag('warning', 'tab-skipped', `${skipped} tab(s) did not fit and were skipped`);
-      const top = h.bottom + op.tabs.height;
-      const profile: TabProfile = { top, base: h.bottom, intervals };
-      tabsAt = (z) => (intervals.length && z < top - 1e-9 ? profile : null);
-      if (recordOverlay) {
-        for (const iv of intervals) out.overlays.tabs.push({ refIndex: index, t: iv.center / total, point: pointAt(path, iv.center).point });
-        if (intervals.length || (useExplicit && op.tabs.positions)) {
-          out.overlays.laps.push({ refIndex: index, points: flattenPath(path, 0.01), z: top });
-        }
-      }
-    }
+    const plan = planTabs(path, h, index, useExplicit, recordOverlay);
+    const tabsAt = (z: number) => plan.at(z, false);
 
     w.travel(S, first ? h.clearance : h.retract, h.feed);
     let prev = h.feed;
@@ -199,18 +213,22 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
     w.up(h.retract);
   };
 
-  const cutOpen = (lap: Path2D, levels: number[], h: ResolvedHeights, first: boolean, sameWay: boolean) => {
+  const cutOpen = (
+    lap: Path2D, levels: number[], h: ResolvedHeights, first: boolean, sameWay: boolean, index: number, useExplicit: boolean, recordOverlay: boolean,
+  ) => {
     if (op.entry.mode !== 'plunge' && !plungeWarned) {
       diag('warning', 'entry-plunge', 'Open contours are entered with a plunge');
       plungeWarned = true;
     }
     let path = lap;
+    const plan = planTabs(lap, h, index, useExplicit, recordOverlay);
+    let reversed = false;
     w.travel(pathStart(path), first ? h.clearance : h.retract, h.feed);
     levels.forEach((z, i) => {
       if (sameWay && i > 0) w.travel(pathStart(path), h.retract, h.feed); // back over the top: every level cuts the same way
       w.line({ x: w.pos!.x, y: w.pos!.y, z }, plunge);
-      emitLap(w, path, z, z, feed, null);
-      if (!sameWay) path = reversePath(path);
+      emitLap(w, path, z, z, feed, plan.at(z, reversed));
+      if (!sameWay) { path = reversePath(path); reversed = !reversed; }
     });
     w.up(h.retract);
   };
@@ -236,7 +254,7 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
     const levels = depthLevels(h.top, h.bottom + op.stockAxial, op.stepdown);
     laps.forEach((lap, i) => {
       if (lap.closed) cutClosed(lap, levels, h, first, index, c.ref, i === 0, i === 0);
-      else cutOpen(lap, levels, h, first, op.openSide !== 'on');
+      else cutOpen(lap, levels, h, first, op.openSide !== 'on', index, i === 0, i === 0);
       first = false;
     });
     if (op.finishPass && (c.path.closed || op.openSide !== 'on')) {
@@ -244,7 +262,7 @@ export function profileToolpath(op: ProfileOp, tool: Tool, ctx: CamContext, geo:
       const finishLaps = contourLaps(c.path, side, op.openSide, op.direction, r, tol)?.laps ?? [];
       finishLaps.forEach((lap, i) => {
         if (lap.closed) cutClosed(lap, [h.bottom], h, false, index, c.ref, i === 0, false);
-        else cutOpen(lap, [h.bottom], h, false, true);
+        else cutOpen(lap, [h.bottom], h, false, true, index, i === 0, false);
       });
     }
   });

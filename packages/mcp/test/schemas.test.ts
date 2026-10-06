@@ -39,7 +39,7 @@ const SAMPLES: JobCommand[] = [
     type: 'updateOperation', id: 'o',
     patch: {
       geometry: [face, { kind: 'meshLoop', face, loop: 1 }], heights: { bottom: { from: 'face', offset: -0.5, face } }, stepoverPct: 40,
-      tabs: { enabled: true, positions: [{ refIndex: 0, t: 0.25 }] }, leads: { startPoint: 'auto' }, diameterFilter: null,
+      tabs: { enabled: true, manual: [{ refIndex: 0, t: [0.25] }] }, leads: { startPoint: 'auto' }, diameterFilter: null,
     },
   },
   { type: 'updateOperation', id: 'o', patch: { geometry: [{ kind: 'meshSlot', face }, { kind: 'meshSlot', face, loop: 2 }], strategy: 'toolWidth', trochoidal: { stepPct: 12 }, squareEnds: 'dogbone', heights: { bottom: { from: 'slotBottom', offset: 0 } } } },

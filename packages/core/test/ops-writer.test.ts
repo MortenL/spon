@@ -6,7 +6,7 @@ import {
 
 const square = pathFromPoints([v2(0, 0), v2(10, 0), v2(10, 10), v2(0, 10)], true); // CCW, length 40
 const ends = (moves: Move[]) => moves.map((m) => (m.kind === 'cycle' ? null : [m.kind, +m.to.x.toFixed(3), +m.to.y.toFixed(3), +m.to.z.toFixed(3)]));
-const tabs = (o: Partial<TabSettings>): TabSettings => ({ enabled: true, shape: 'rect', width: 4, height: 2, placement: 'count', count: 4, spacing: 50, positions: null, ...o });
+const tabs = (o: Partial<TabSettings>): TabSettings => ({ enabled: true, shape: 'rect', width: 4, height: 2, placement: 'count', count: 4, spacing: 50, manual: [], ...o });
 
 describe('depthLevels', () => {
   it('splits the depth into equal steps no deeper than the stepdown', () => {
