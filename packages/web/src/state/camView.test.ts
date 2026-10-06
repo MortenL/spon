@@ -1,6 +1,6 @@
 import { applyCommand, createJob, type JobCommand, starterLibrary } from '@sponcam/core';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { addOperation, operationSeconds, operationStatus, runCommand } from './camView';
+import { addOperation, operationSeconds, operationStatus, problemCount, runCommand } from './camView';
 import { appStore } from './store';
 import { toolLibraryStore } from './toolLibrary';
 
@@ -50,5 +50,12 @@ describe('camView', () => {
 
   it('turns command errors into a false result instead of throwing', () => {
     expect(runCommand({ type: 'removeOperation', id: 'missing' })).toBe(false);
+  });
+
+  it('counts only warnings and errors as problems, not info rows', () => {
+    const d = (severity: 'error' | 'warning' | 'info') => ({ operationId: 'p', severity, code: 'tab-no-islands' as const, message: '' });
+    expect(problemCount([d('info')])).toBe(0);
+    expect(problemCount([d('info'), d('warning'), d('error')])).toBe(2);
+    expect(problemCount([])).toBe(0);
   });
 });

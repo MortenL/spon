@@ -21,15 +21,20 @@ describe('tab edits', () => {
   });
 
   it('removes the selected tab, freezing its contour from the shown positions', () => {
-    const s = { job, selectedOperationId: 'p', selectedTab: { refIndex: 0, index: 1 }, camResults: results };
+    const s = { job, selectedOperationId: 'p', selectedTab: { refIndex: 0, index: 1 }, camResults: results, camStatus: 'idle' as const };
     expect(removeSelectedTabCommand(s)).toEqual({ type: 'removeTab', opId: 'p', refIndex: 0, index: 1, current: [0.1, 0.6] });
   });
 
   it('is null without a selection, or when the selected tab is no longer shown', () => {
-    const base = { job, selectedOperationId: 'p', camResults: results };
+    const base = { job, selectedOperationId: 'p', camResults: results, camStatus: 'idle' as const };
     expect(removeSelectedTabCommand({ ...base, selectedTab: null })).toBeNull();
     expect(removeSelectedTabCommand({ ...base, selectedTab: { refIndex: 0, index: 2 } })).toBeNull();
     expect(removeSelectedTabCommand({ ...base, selectedOperationId: null, selectedTab: { refIndex: 0, index: 0 } })).toBeNull();
     expect(removeSelectedTabCommand({ ...base, camResults: {}, selectedTab: { refIndex: 0, index: 0 } })).toBeNull();
+  });
+
+  it('is null while toolpaths are regenerating: the shown tabs may be stale', () => {
+    const s = { job, selectedOperationId: 'p', selectedTab: { refIndex: 0, index: 1 }, camResults: results, camStatus: 'generating' as const };
+    expect(removeSelectedTabCommand(s)).toBeNull();
   });
 });

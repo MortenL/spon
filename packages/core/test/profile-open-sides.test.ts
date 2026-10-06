@@ -142,6 +142,10 @@ describe('open-line sides', () => {
       expect(cx).toBeCloseTo(30, 6);
       expect(spans.some((s) => s.z < -6.1 && s.lo <= mx - 4.99 && s.hi >= mx + 4.99)).toBe(true);
       expect(Math.min(...moves.map((p) => p.z))).toBeCloseTo(-6.2, 6);
+      // Reverse runs the line the other way (and cuts the other side of it): the tab stays where it is along the line
+      const flipped = run(line, { openSide: openSide === 'left' ? 'right' : 'on', tabs, stepdown: 4, entry: { mode: 'plunge' } }, true);
+      expect(flipped.overlays.tabs[0].point.x).toBeCloseTo(30, 3);
+      expect(flipped.overlays.tabs[0].t).toBeCloseTo(overlays.tabs[0].t, 6);
     }
   });
 

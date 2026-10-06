@@ -58,8 +58,11 @@ test('tabs: add on the path, select, remove with Delete and ×, reset one contou
   await expect(handles(page)).toHaveCount(4);
   await expect(page.getByTestId('pass-tab-manual-count')).toHaveCount(0);
 
-  // a drag moves a tab along its contour and freezes the contour
-  const before = await markerCentre(page, 'tab-handle-0-0');
+  // a drag moves a tab along its contour and freezes the contour: the topmost tab, on the outline's top edge, to the right
+  const centres = async () =>
+    Promise.all((await handles(page).evaluateAll((els) => els.map((el) => el.getAttribute('data-testid')!))).map((id) => markerCentre(page, id)));
+  const nearest = async (to: { x: number; y: number }) => Math.min(...(await centres()).map((c) => Math.hypot(c.x - to.x, c.y - to.y)));
+  const before = (await centres()).reduce((a, b) => (b.y < a.y ? b : a));
   await page.mouse.move(before.x, before.y);
   await page.mouse.down();
   await page.mouse.move(before.x + 15, before.y, { steps: 5 });
@@ -67,7 +70,10 @@ test('tabs: add on the path, select, remove with Delete and ×, reset one contou
   await page.mouse.up();
   await expect(page.getByTestId('pass-tab-manual-count')).toHaveText('1 contour placed by hand');
   await expect(handles(page)).toHaveCount(4);
-  await expect.poll(async () => Math.abs((await markerCentre(page, 'tab-handle-0-0')).x - before.x)).toBeGreaterThan(10);
+  // the tab sits where it was dropped and none is left where it was (its index may change: tabs are numbered along
+  // the contour from a start of their own)
+  await expect.poll(() => nearest(before)).toBeGreaterThan(10);
+  await expect.poll(() => nearest({ x: before.x + 30, y: before.y })).toBeLessThan(6);
   await expect(page.getByTestId('tab-remove')).toHaveCount(0); // a drag does not select
   await page.keyboard.press('Control+z');
   await expect(page.getByTestId('pass-tab-manual-count')).toHaveCount(0);

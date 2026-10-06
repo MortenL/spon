@@ -33,6 +33,30 @@ describe('tabs model (schema 10)', () => {
     expect('positions' in b.tabs).toBe(false);
   });
 
+  it('converts schema 9 positions to the counter-clockwise tab frame where the cut direction tells how', () => {
+    const positions = [{ refIndex: 0, t: 0.1 }, { refIndex: 0, t: 0.6 }, { refIndex: 1, t: 0.25 }];
+    const profile = (id: string, side: string, direction: string, startPoint: unknown = 'auto') => {
+      const tabs = { ...defaultTabs(6), positions } as Record<string, unknown>;
+      delete tabs.manual;
+      return { ...base(id, 't1'), type: 'profile', side, direction, leads: { mode: 'none', length: 0, startPoint }, tabs };
+    };
+    const job = migrateJob(v9Job([
+      profile('cw', 'outside', 'climb'), // schema 9 measured these clockwise: mirrored
+      profile('ccw', 'outside', 'conventional'), // counter-clockwise already: kept
+      profile('in', 'inside', 'conventional'), // inside, conventional runs clockwise: mirrored
+      profile('on', 'on', 'climb'),
+      profile('lead', 'outside', 'climb', { refIndex: 0, t: 0.4 }), // contour 0 started at its lead start point: kept
+    ]), MIGRATIONS, 10);
+    const manual = (job.operations as Array<Extract<Operation, { type: 'profile' }>>).map((o) => o.tabs.manual);
+    const mirrored = [{ refIndex: 0, t: [0.4, 0.9] }, { refIndex: 1, t: [0.75] }];
+    const kept = [{ refIndex: 0, t: [0.1, 0.6] }, { refIndex: 1, t: [0.25] }];
+    expect(manual[0]).toEqual(mirrored);
+    expect(manual[1]).toEqual(kept);
+    expect(manual[2]).toEqual(mirrored);
+    expect(manual[3]).toEqual(mirrored);
+    expect(manual[4]).toEqual([{ refIndex: 0, t: [0.1, 0.6] }, { refIndex: 1, t: [0.75] }]);
+  });
+
   it('gives pockets and slots disabled tabs', () => {
     const job = migrateJob(v9Job([
       { ...base('k1', 't1'), type: 'pocket' },

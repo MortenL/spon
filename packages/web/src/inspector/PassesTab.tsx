@@ -77,7 +77,7 @@ function ProfilePasses({ op }: { op: ProfileOp }) {
   return (
     <div className="space-y-3">
       {(kinds.closed || !kinds.open) && (
-      <label className="grid grid-cols-[1fr_10rem] items-center gap-2 text-sm">
+      <label className="grid grid-cols-[1fr_auto] items-center gap-2 text-sm">
         <span className="text-muted-foreground">Side</span>
         <ToggleGroup
           type="single" variant="outline" size="sm" data-testid="pass-side" value={op.side}
@@ -90,7 +90,7 @@ function ProfilePasses({ op }: { op: ProfileOp }) {
       </label>
       )}
       {kinds.open && (
-        <label className="grid grid-cols-[1fr_10rem] items-center gap-2 text-sm">
+        <label className="grid grid-cols-[1fr_auto] items-center gap-2 text-sm">
           <span className="text-muted-foreground">Open side</span>
           <ToggleGroup
             type="single" variant="outline" size="sm" data-testid="pass-open-side" value={op.openSide}
@@ -102,7 +102,7 @@ function ProfilePasses({ op }: { op: ProfileOp }) {
           </ToggleGroup>
         </label>
       )}
-      <label className="grid grid-cols-[1fr_10rem] items-center gap-2 text-sm">
+      <label className="grid grid-cols-[1fr_auto] items-center gap-2 text-sm">
         <span className="text-muted-foreground">Direction</span>
         <ToggleGroup
           type="single" variant="outline" size="sm" data-testid="pass-direction" value={op.direction}
@@ -157,7 +157,7 @@ function PocketPasses({ op }: { op: PocketOp }) {
 
   return (
     <div className="space-y-3">
-      <label className="grid grid-cols-[1fr_10rem] items-center gap-2 text-sm">
+      <label className="grid grid-cols-[1fr_auto] items-center gap-2 text-sm">
         <span className="text-muted-foreground">Direction</span>
         <ToggleGroup
           type="single" variant="outline" size="sm" data-testid="pass-direction" value={op.direction}
@@ -220,7 +220,7 @@ function DrillPasses({ op }: { op: DrillOp }) {
 }
 
 const directionField = (value: 'climb' | 'conventional', onChange: (v: 'climb' | 'conventional') => void) => (
-  <label className="grid grid-cols-[1fr_10rem] items-center gap-2 text-sm">
+  <label className="grid grid-cols-[1fr_auto] items-center gap-2 text-sm">
     <span className="text-muted-foreground">Direction</span>
     <ToggleGroup
       type="single" variant="outline" size="sm" data-testid="pass-direction" value={value}
@@ -237,7 +237,7 @@ function FacePasses({ op }: { op: FaceOp }) {
 
   return (
     <div className="space-y-3">
-      <label className="grid grid-cols-[1fr_10rem] items-center gap-2 text-sm">
+      <label className="grid grid-cols-[1fr_auto] items-center gap-2 text-sm">
         <span className="text-muted-foreground">Area</span>
         <ToggleGroup
           type="single" variant="outline" size="sm" data-testid="pass-face-area" value={op.area}
@@ -247,7 +247,7 @@ function FacePasses({ op }: { op: FaceOp }) {
           <ToggleGroupItem value="picked">Picked</ToggleGroupItem>
         </ToggleGroup>
       </label>
-      <label className="grid grid-cols-[1fr_10rem] items-center gap-2 text-sm">
+      <label className="grid grid-cols-[1fr_auto] items-center gap-2 text-sm">
         <span className="text-muted-foreground">Pattern</span>
         <ToggleGroup
           type="single" variant="outline" size="sm" data-testid="pass-face-pattern" value={op.pattern}
@@ -309,7 +309,7 @@ function ChamferPasses({ op }: { op: ChamferOp }) {
       )}
       {info.error && <p data-testid="chamfer-error" className="text-xs text-destructive">{info.error}</p>}
       {(kinds.closed || !kinds.open) && (
-        <label className="grid grid-cols-[1fr_10rem] items-center gap-2 text-sm">
+        <label className="grid grid-cols-[1fr_auto] items-center gap-2 text-sm">
           <span className="text-muted-foreground">Side</span>
           <ToggleGroup
             type="single" variant="outline" size="sm" data-testid="pass-side" value={op.side}
@@ -322,7 +322,7 @@ function ChamferPasses({ op }: { op: ChamferOp }) {
         </label>
       )}
       {kinds.open && (
-        <label className="grid grid-cols-[1fr_10rem] items-center gap-2 text-sm">
+        <label className="grid grid-cols-[1fr_auto] items-center gap-2 text-sm">
           <span className="text-muted-foreground">Open side</span>
           <ToggleGroup
             type="single" variant="outline" size="sm" data-testid="pass-open-side" value={op.openSide}
@@ -417,7 +417,7 @@ function ThreadPasses({ op }: { op: ThreadOp }) {
     </label>
   );
   const toggle = (testId: string, label: string, value: string, options: readonly [string, string][], onChange: (v: string) => void) => (
-    <label className="grid grid-cols-[1fr_10rem] items-center gap-2 text-sm">
+    <label className="grid grid-cols-[1fr_auto] items-center gap-2 text-sm">
       <span className="text-muted-foreground">{label}</span>
       <ToggleGroup type="single" variant="outline" size="sm" data-testid={testId} value={value} onValueChange={(v) => v && onChange(v)}>
         {options.map(([v, text]) => <ToggleGroupItem key={v} value={v}>{text}</ToggleGroupItem>)}

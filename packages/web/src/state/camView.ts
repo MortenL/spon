@@ -12,6 +12,11 @@ export function operationStatus(op: Operation, s: Pick<AppState, 'camResults' | 
   return d.some((x) => x.severity === 'error') ? 'error' : d.some((x) => x.severity === 'warning') ? 'warning' : 'ok';
 }
 
+/** How many of these diagnostics are problems (warnings and errors); info rows are not. */
+export function problemCount(diagnostics: readonly { severity: 'error' | 'warning' | 'info' }[]): number {
+  return diagnostics.filter((d) => d.severity !== 'info').length;
+}
+
 /** Estimated seconds of an operation: sum of row durations whose source line lies in its section. */
 export function operationSeconds(opId: string, s: Pick<AppState, 'camFiles' | 'programData'>): number | null {
   for (const f of s.camFiles) {
