@@ -29,6 +29,12 @@ const union = (a: BBox | null, b: BBox): BBox => (a
   }
   : b);
 
+function tabsLine(tabs: { t: number[]; manual: boolean }[], skipped: number): string {
+  const n = tabs.reduce((sum, c) => sum + c.t.length, 0);
+  const manual = tabs.filter((c) => c.manual).length;
+  return `${n} on ${tabs.length} contour${tabs.length === 1 ? '' : 's'}${manual ? ` (${manual} manual)` : ''}${skipped ? `, ${skipped} skipped` : ''}`;
+}
+
 const previewShape = {
   view: z.enum(['top', 'front', 'iso']).optional().describe('Default top'),
   operations: z.array(z.string()).optional().describe('Operation ids to show (default: all enabled)'),
@@ -56,8 +62,10 @@ export function registerOutputTools(server: McpServer, ctx: ToolContext): void {
     const operations = job.operations.map((op) => {
       const r = results.get(op.id);
       const diagnostics = (r?.diagnostics ?? []).map(({ severity, code, message: text }) => ({ severity, code, message: text }));
-      const status = !op.enabled ? 'disabled' : diagnostics.some((d) => d.severity === 'error') ? 'error' : diagnostics.length ? 'warning' : 'ok';
-      return { id: op.id, name: op.name, type: op.type, status, diagnostics, heights: r?.heights ?? null };
+      const status = !op.enabled ? 'disabled' : diagnostics.some((d) => d.severity === 'error') ? 'error' : diagnostics.some((d) => d.severity === 'warning') ? 'warning' : 'ok';
+      const tabs = r?.tabs ?? [];
+      const tabsSkipped = diagnostics.filter((d) => d.code === 'tab-skipped').reduce((n, d) => n + (Number.parseInt(d.message, 10) || 0), 0);
+      return { id: op.id, name: op.name, type: op.type, status, diagnostics, heights: r?.heights ?? null, tabs, tabsSkipped };
     });
     const files = run.files.map((f) => ({ name: f.name, lines: f.lineCount, tools: f.tools, seconds: f.seconds }));
     const cycleSeconds = files.reduce((t, f) => t + f.seconds, 0);
@@ -65,7 +73,8 @@ export function registerOutputTools(server: McpServer, ctx: ToolContext): void {
     for (const f of run.files) if (f.extents) extents = union(extents, f.extents);
     const verdict = run.export;
     const lines = [
-      ...operations.map((o) => `${o.status.toUpperCase()} ${o.name} (${o.type}, ${o.id})${o.diagnostics.map((d) => `\n  ${d.severity}: ${d.message}`).join('')}`),
+      ...operations.map((o) => `${o.status.toUpperCase()} ${o.name} (${o.type}, ${o.id})${o.tabs.length || o.tabsSkipped ? `
+  tabs: ${tabsLine(o.tabs, o.tabsSkipped)}` : ''}${o.diagnostics.map((d) => `\n  ${d.severity}: ${d.message}`).join('')}`),
       ...files.map((f) => `${f.name}: ${f.lines} lines, ${f.tools.length ? `T${f.tools.join(', T')}` : 'no tool change'}, ${fmtTime(f.seconds)}`),
       `Cycle time ${fmtTime(cycleSeconds)}.`,
       extents ? `Toolpath extents: ${range(extents)}.` : 'No toolpaths.',

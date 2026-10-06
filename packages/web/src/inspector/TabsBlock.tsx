@@ -69,7 +69,7 @@ export function TabsBlock({ op, islands, selectedTab = null }: {
               {`${manualCount} ${manualCount === 1 ? 'contour' : 'contours'} placed by hand`}
             </p>
           )}
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" data-testid="pass-tab-reset" disabled={off || manualCount === 0} onClick={() => runCommand({ type: 'resetTabs', opId: op.id })}>
               Reset tab positions
             </Button>

@@ -26,6 +26,7 @@ Authoritative docs:
 | Dev server | `pnpm dev` → http://localhost:5173 |
 | End-to-end (Playwright) | `pnpm e2e` (first time: `pnpm --filter @sponcam/web exec playwright install chromium`) |
 | Live bridge (dev) | run the MCP server, open http://localhost:5173 and click **Claude** in the status bar (port 5197; `--port` / `SPON_BRIDGE_PORT` to change) |
+| README screenshots | `pnpm --filter @sponcam/web screenshots` → `docs/screenshots/*.png` (scenes in `packages/web/screenshots/readme.spec.ts`) |
 | Regenerate e2e fixtures | `node packages/core/test/fixtures/make-fixtures.mjs` |
 
 Import fixtures: STL/DXF in `packages/core/test/fixtures/`, SVG files (Inkscape mm, Illustrator px, etc.) in `packages/core/test/fixtures/svg/`, and the LinuxCNC `tool.tbl` sample in `packages/core/test/fixtures/tool.tbl`. `e2e/inputs.spec.ts` drives SVG import, open-line sides and tool.tbl import. `stepped.stl` (a 60×40×10 slab with a 20×20×10 boss, no units) is built by `make-fixtures.mjs` from `steppedData.mjs`; `e2e/face-chamfer.spec.ts` uses it for the gouge check. `slot-plate.stl` and `slot-lines.dxf` are built by `make-fixtures.mjs` from `terraced.mjs`; `e2e/slots.spec.ts` and the MCP tests use them. `vcarve-spon.svg` (letters S, P, O, N with holes, in a `LETTERS` layer, 200 × 60 mm) and `engrave-lines.dxf` (two lines and a square on layer `ENGRAVE`) are also built by `make-fixtures.mjs`; `e2e/vcarve.spec.ts` uses them. `TestSans.otf` (a tiny font with only H, O, A and V, built by `make-fixtures.mjs` from `testFontData.mjs`, which `testFont.ts` re-exports for unit tests) is the upload fixture of `e2e/text.spec.ts`. The bundled text fonts (`packages/core/src/text/bundled/*.ts`) are generated and committed: regenerate them with `pnpm --filter @sponcam/core build:fonts`.
@@ -43,6 +44,7 @@ Before claiming a change works: run the focused tests for the files you touched,
 ## Rules that are easy to break
 
 - The root `README.md` is kept current: a change that adds, removes or changes a user-visible feature, a command, a package or a milestone's status updates the README in the same branch (Features, Getting started, Development or Status and roadmap).
+- The README screenshots (`docs/screenshots/*.png`) are kept current too: a change to the UI or to what a screenshot shows (layout, panels, an operation's toolpaths) regenerates them in the same branch with `pnpm --filter @sponcam/web screenshots`, and a new headline feature gets a scene in `packages/web/screenshots/readme.spec.ts`. Look at the new images before committing.
 - `@sponcam/core` must not import React, three.js or DOM-only APIs (its tsconfig lib is `ES2022` + `WebWorker`).
 - Stored lengths are mm, stored angles degrees; convert only at the UI boundary (`formatLength` / `parseLength`).
 - Job changes go through pure functions in `core/src/job/update.ts` and the store's `commit()` so undo works.

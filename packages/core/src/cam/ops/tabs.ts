@@ -1,6 +1,7 @@
-import { cornerDistances, flattenPath, pathLength, segmentLength, segmentPointAt } from '../../geometry/offset/pathOps';
+import { cornerDistances, flattenPath, pathLength, pointAt, segmentLength, segmentPointAt } from '../../geometry/offset/pathOps';
 import type { Path2D, Vec2 } from '../../geometry/path2d';
 import type { TabSettings } from '../types';
+import type { OpOverlays } from './output';
 import type { TabInterval } from './writer';
 
 /** Upper bound on automatic tabs per lap (a tiny spacing must not hang the worker). */
@@ -284,4 +285,16 @@ export function contourTabs(
 ): { intervals: (TabInterval & { center: number })[]; skipped: number; manual: boolean } {
   const entry = t.manual.find((m) => m.refIndex === refIndex);
   return { ...tabIntervals(path, t, toolRadius, entry ? entry.t : null), manual: !!entry };
+}
+
+/**
+ * Records one contour's tabs in the overlays: each tab (its index, fraction along `path`, point, whether the contour
+ * was placed by hand) and the tab path itself at the tab top, the target for adding and dragging tabs.
+ */
+export function pushTabOverlays(
+  overlays: OpOverlays, path: Path2D, centres: readonly number[], refIndex: number, manual: boolean, top: number,
+): void {
+  const total = pathLength(path);
+  centres.forEach((center, index) => overlays.tabs.push({ refIndex, index, t: center / total, point: pointAt(path, center).point, manual }));
+  overlays.tabPaths.push({ refIndex, points: flattenPath(path, 0.01), z: top, closed: path.closed });
 }
