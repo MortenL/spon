@@ -68,7 +68,7 @@ export const operationPatchSchema = z.strictObject({
   leads: z.strictObject({ mode: z.enum(['none', 'arc', 'line']), length: z.number(), startPoint: z.union([z.literal('auto'), lapPosition]) }).partial(),
   tabs: z.strictObject({
     enabled: z.boolean(), shape: z.enum(['rect', 'triangle']), width: z.number(), height: z.number(), placement: z.enum(['count', 'spacing']),
-    count: z.number(), spacing: z.number(), positions: z.array(lapPosition).nullable(),
+    count: z.number(), spacing: z.number(), manual: z.array(z.strictObject({ refIndex: z.number().int(), t: z.array(z.number()) })),
   }).partial(),
   stepoverPct: z.number(),
   finishWalls: z.boolean(),
@@ -143,7 +143,7 @@ const wcsPatch = z.strictObject({
   workOffset: z.enum(['G54', 'G55', 'G56', 'G57', 'G58', 'G59']),
   axes: z.strictObject({ reverseX: z.boolean(), reverseY: z.boolean(), swapXY: z.boolean() }).partial(),
 }).partial();
-const machinePatch = z.strictObject({ rapid: vec3Partial, accel: vec3Partial, maxFeed: z.number(), toolChangeSeconds: z.number() }).partial();
+const machinePatch = z.strictObject({ rapid: vec3Partial, accel: vec3Partial, maxFeed: z.number(), toolChangeSeconds: z.number(), spoilboardAllowance: z.number().min(0) }).partial();
 const postPatch = z.strictObject({
   dialect: dialectSchema, splitByTool: z.boolean(), decimals: z.number().int(), arcFormat: z.enum(['ij', 'r']), lineNumbers: z.boolean(),
   lineNumberStep: z.number().int(), coolant: z.boolean(), spindleDwell: z.number(), safeStart: z.string(), programNumber: z.number().int(),
@@ -168,6 +168,10 @@ export const jobCommandSchema = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('addOperation'), opType: operationTypeSchema, toolId: z.string().nullable(), id: z.string().optional(), name: z.string().optional() }),
   z.strictObject({ type: z.literal('updateOperation'), id: z.string(), patch: operationPatchSchema }),
   z.strictObject({ type: z.literal('removeOperation'), id: z.string() }),
+  z.strictObject({ type: z.literal('addTab'), opId: z.string(), refIndex: z.number(), t: z.number(), current: z.array(z.number()) }),
+  z.strictObject({ type: z.literal('removeTab'), opId: z.string(), refIndex: z.number(), index: z.number(), current: z.array(z.number()) }),
+  z.strictObject({ type: z.literal('moveTab'), opId: z.string(), refIndex: z.number(), index: z.number(), t: z.number(), current: z.array(z.number()) }),
+  z.strictObject({ type: z.literal('resetTabs'), opId: z.string(), refIndex: z.number().optional() }),
   z.strictObject({ type: z.literal('duplicateOperation'), id: z.string(), newId: z.string().optional() }),
   z.strictObject({ type: z.literal('moveOperation'), id: z.string(), delta }),
   z.strictObject({ type: z.literal('setOperationEnabled'), id: z.string(), enabled: z.boolean() }),

@@ -13,12 +13,14 @@ export interface ExportInput {
   files: readonly ExportFileInput[];
 }
 
-/** Errors block an export; warnings need the user's confirmation (web) or are relayed (MCP). */
+/** Errors block an export; warnings need the user's confirmation (web) or are relayed (MCP); info notes do neither. */
 export function exportProblems(input: ExportInput): { errors: string[]; warnings: string[] } {
   const errors: string[] = [];
   const warnings: string[] = [];
   for (const op of input.operations) {
-    for (const d of input.results[op.id]?.diagnostics ?? []) (d.severity === 'error' ? errors : warnings).push(`${op.name}: ${d.message}`);
+    for (const d of input.results[op.id]?.diagnostics ?? []) {
+      if (d.severity !== 'info') (d.severity === 'error' ? errors : warnings).push(`${op.name}: ${d.message}`); // info is not a problem
+    }
   }
   for (const f of input.files) {
     for (const d of f.postErrors) errors.push(`${f.name}: post-processor produced invalid G-code (${d.message})`);

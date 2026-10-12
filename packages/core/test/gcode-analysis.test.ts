@@ -54,6 +54,17 @@ describe('analyzeTable: stock checks', () => {
     expect(codes(analyse('G1 Z-7 F300\nG0 Z5\n'))).toEqual(['below-stock-bottom@3']);
   });
 
+  it("allows cuts into the spoilboard down to the machine's allowance", () => {
+    expect(profile.spoilboardAllowance).toBe(0.5);
+    expect(codes(analyse('G1 Z-6.2 F300\nG0 Z5\n'))).toEqual([]); // a through profile's 0.2 mm breakthrough
+    expect(codes(analyse('G1 Z-6.5 F300\nG0 Z5\n'))).toEqual([]);
+    expect(codes(analyse('G1 Z-6.6 F300\nG0 Z5\n'))).toEqual(['below-stock-bottom@3']);
+    expect(analyse('G1 Z-7 F300\n').a.diagnostics.map((d) => d.message)).toEqual(['Tool goes more than 0.5 mm below the stock bottom']);
+    const r = interpretProgram(PRE + 'G1 Z-6.2 F300\n', { jobWorkOffset: 'G54' });
+    const none = analyzeTable(r.table, r.lineFlags, { profile: { ...profile, spoilboardAllowance: 0 }, stock: STOCK });
+    expect(none.diagnostics.map((d) => d.message)).toEqual(['Tool goes below the stock bottom']);
+  });
+
   it('ignores G53 (machine-coordinate) moves and the move directly after one, checked in program coordinates', () => {
     // G53 targets are machine coordinates, not program coordinates, so checking them (or the very
     // next move, whose start is really the machine-coordinate end point) against the program's

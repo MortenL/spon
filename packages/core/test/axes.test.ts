@@ -20,10 +20,10 @@ describe('axis map', () => {
 });
 
 describe('WCS axes in the job', () => {
-  it('defaults off, migrates schema 8 and merges partial patches', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(9);
+  it('defaults off, migrates schema 10 and merges partial patches', () => {
+    expect(CURRENT_SCHEMA_VERSION).toBe(11);
     expect(createJob().wcs.axes).toEqual({ reverseX: false, reverseY: false, swapXY: false });
-    const v8 = { ...createJob(), schemaVersion: 8 } as Record<string, unknown>;
+    const v8 = { ...createJob(), schemaVersion: 10 } as Record<string, unknown>;
     v8.wcs = { ...(v8.wcs as object) };
     delete (v8.wcs as Record<string, unknown>).axes;
     expect(migrateJob(v8).wcs.axes).toEqual({ reverseX: false, reverseY: false, swapXY: false });

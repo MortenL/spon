@@ -27,6 +27,21 @@ describe('output tools', () => {
     expect(text(r)).toContain('Cycle time');
   });
 
+  it('lists tabs per contour in the generate summary', async () => {
+    const { call, op } = await profiled();
+    const tabs = { enabled: true, shape: 'rect', width: 4, height: 2, placement: 'count', count: 4, spacing: 50, manual: [] };
+    await call('apply_commands', { commands: [{ type: 'updateOperation', id: op.id, patch: { tabs } }] });
+    const d = data(await call('generate'));
+    const listed = d.operations[0].tabs;
+    expect(d.operations[0].tabsSkipped).toBe(0);
+    expect(listed).toHaveLength(1);
+    expect(listed[0]).toMatchObject({ refIndex: 0, manual: false });
+    expect(listed[0].t).toHaveLength(4);
+    expect(text(await call('generate'))).toContain('tabs: 4 on 1 contour');
+    await call('apply_commands', { commands: [{ type: 'updateOperation', id: op.id, patch: { tabs: { ...tabs, enabled: false } } }] });
+    expect(data(await call('generate')).operations[0].tabs).toEqual([]);
+  });
+
   it('writes posted files and writes nothing while there are errors', async () => {
     const { call, dir } = await profiled();
     const written = await call('export_gcode', { dir: 'out' });

@@ -29,7 +29,7 @@ describe('newOperation', () => {
     expect(defaultHeights('drill', 'mesh').bottom).toEqual({ from: 'holeBottom', offset: 0 });
     const p = newOperation('profile', { id: 'p', name: 'P', tool, modelKind: 'mesh' });
     expect(p).toMatchObject({ side: 'outside', direction: 'climb', leads: { mode: 'arc', length: 3, startPoint: 'auto' } });
-    expect(p.type === 'profile' && p.tabs).toEqual({ enabled: false, shape: 'rect', width: 6, height: 2, placement: 'count', count: 4, spacing: 50, positions: null });
+    expect(p.type === 'profile' && p.tabs).toEqual({ enabled: false, shape: 'rect', width: 6, height: 2, placement: 'count', count: 4, spacing: 50, manual: [] });
   });
 
   it('falls back to neutral feeds without a tool', () => {
@@ -170,9 +170,13 @@ describe('applyCommand', () => {
       { type: 'moveText', id: 'tx2', delta: -1 },
       { type: 'removeText', id: 'tx1' },
       { type: 'setTolerance', tolerance: 0.005 },
+      { type: 'addTab', opId: 'op1', refIndex: 0, t: 0.5, current: [0.25, 0.75] },
+      { type: 'moveTab', opId: 'op1', refIndex: 0, index: 0, t: 0.3, current: [] },
+      { type: 'removeTab', opId: 'op1', refIndex: 0, index: 1, current: [] },
+      { type: 'resetTabs', opId: 'op1', refIndex: 0 },
     ];
 
-    // Exhaustiveness guard: ensure all 29 variants are covered
+    // Exhaustiveness guard: ensure all 33 variants are covered
     const covered = {
       renameJob: 1, setDisplayUnits: 1, setImportUnits: 1, rotateQuarter: 1, layFlat: 1, setZSpin: 1,
       resetOrientation: 1, setStock: 1, setWcs: 1, setMachineProfile: 1, applyMachinePreset: 1,
@@ -180,6 +184,7 @@ describe('applyCommand', () => {
       removeOperation: 1, duplicateOperation: 1, moveOperation: 1, setOperationEnabled: 1, addTool: 1,
       updateTool: 1, removeTool: 1, setPost: 1, setTolerance: 1,
       addText: 1, updateText: 1, removeText: 1, moveText: 1,
+      addTab: 1, removeTab: 1, moveTab: 1, resetTabs: 1,
     } satisfies Record<JobCommand['type'], 1>;
     const commandTypes = new Set(commands.map((c) => c.type));
     const coveredTypes = Object.keys(covered);

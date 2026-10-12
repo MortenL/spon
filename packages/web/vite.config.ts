@@ -8,5 +8,5 @@ export default defineConfig({
   resolve: { alias: { '@': path.resolve(import.meta.dirname, 'src') } },
   worker: { format: 'es' },
   optimizeDeps: { include: ['occt-import-js'] },
-  test: { include: ['src/**/*.test.ts'], environment: 'node' },
+  test: { include: ['src/**/*.test.{ts,tsx}'], environment: 'node' },
 });

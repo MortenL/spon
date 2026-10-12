@@ -182,3 +182,33 @@ describe('program and playback state', () => {
     expect(s().job.operations).toEqual([]);
   });
 });
+
+describe('tab selection', () => {
+  it('keeps a selected tab until the operation changes or the job is edited', () => {
+    const store = createAppStore(createJob('A'));
+    const s = () => store.getState();
+    const add = (id: string): JobCommand => ({ type: 'addOperation', opType: 'profile', toolId: null, id });
+    s().dispatchBatch([add('a'), add('b')]);
+    s().selectOperation('a');
+    expect(s().selectedTab).toBeNull();
+    s().selectTab({ refIndex: 1, index: 2 });
+    expect(s().selectedTab).toEqual({ refIndex: 1, index: 2 });
+    s().selectOperation('a'); // the same operation: kept
+    expect(s().selectedTab).toEqual({ refIndex: 1, index: 2 });
+    s().selectOperation('b');
+    expect(s().selectedTab).toBeNull();
+    // a job edit renumbers tabs, so it clears the selection; so do undo and redo
+    s().selectTab({ refIndex: 0, index: 0 });
+    s().commit(rename('B'));
+    expect(s().selectedTab).toBeNull();
+    s().selectTab({ refIndex: 0, index: 0 });
+    s().undo();
+    expect(s().selectedTab).toBeNull();
+    s().selectTab({ refIndex: 0, index: 0 });
+    s().redo();
+    expect(s().selectedTab).toBeNull();
+    s().selectTab({ refIndex: 0, index: 0 });
+    s().selectText('t1');
+    expect(s().selectedTab).toBeNull();
+  });
+});

@@ -25,6 +25,15 @@ export interface OcctBody {
   triangles: number;
   bbox: BBox;
   degenerateRemoved: number;
+  /** B-rep faces the reader left without triangles: they are missing from `mesh`. */
+  unmeshedFaces: number;
+}
+
+/** B-rep faces of reader meshes that got no triangles (an empty `first..last` range). */
+export function unmeshedFaces(meshes: readonly OcctMesh[]): number {
+  let n = 0;
+  for (const m of meshes) for (const f of m.brep_faces ?? []) if (f.last < f.first) n++;
+  return n;
 }
 
 export const CAD_LABEL: Record<CadFormat, 'STEP' | 'IGES'> = { step: 'STEP', iges: 'IGES' };
@@ -65,8 +74,9 @@ function toBody(group: readonly OcctMesh[], name: string): OcctBody | null {
   }
   const { mesh, degenerateRemoved, kept } = weldTriangles(soup);
   if (kept.length === 0) return null;
+  const unmeshed = unmeshedFaces(group);
   if (!sourceFace) {
-    return { name, mesh, faceIds: new Uint32Array(0), triangles: kept.length, bbox: bboxOfPoints(mesh.positions)!, degenerateRemoved };
+    return { name, mesh, faceIds: new Uint32Array(0), triangles: kept.length, bbox: bboxOfPoints(mesh.positions)!, degenerateRemoved, unmeshedFaces: unmeshed };
   }
   const dense = new Map<number, number>();
   const faceIds = new Uint32Array(kept.length);
@@ -80,7 +90,7 @@ function toBody(group: readonly OcctMesh[], name: string): OcctBody | null {
     faceIds[i] = id;
   }
   mesh.faceIds = faceIds;
-  return { name, mesh, faceIds, triangles: kept.length, bbox: bboxOfPoints(mesh.positions)!, degenerateRemoved };
+  return { name, mesh, faceIds, triangles: kept.length, bbox: bboxOfPoints(mesh.positions)!, degenerateRemoved, unmeshedFaces: unmeshed };
 }
 
 /**
@@ -112,5 +122,7 @@ export function cadImport(result: OcctResult, format: CadFormat, body?: number):
   const chosen = Number.isInteger(index) ? bodies[index] : undefined;
   if (!chosen) return { ok: false, error: `The ${label} file has no body ${index + 1}` };
   const imported = finishMeshImport(chosen.mesh, chosen.degenerateRemoved);
+  const n = chosen.unmeshedFaces;
+  if (n) imported.warnings.push(n === 1 ? '1 face could not be meshed and is missing from the model' : `${n} faces could not be meshed and are missing from the model`);
   return { ok: true, kind: 'mesh', ...imported, detectedUnits: 'mm', source: { format, body: index, bodies: bodies.length, name: chosen.name } };
 }

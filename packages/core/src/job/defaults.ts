@@ -20,7 +20,7 @@ export function identityTransform(): ModelTransform {
 
 export function createJob(name = 'Untitled'): Job {
   return {
-    schemaVersion: 9,
+    schemaVersion: 11,
     id: crypto.randomUUID(),
     name,
     displayUnits: 'mm',

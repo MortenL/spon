@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { seekToLine, useTimeline } from '@/gcode/playback';
 import { formatDuration, formatPoint, formatSize } from '@/panels/format';
 import type { InspectorTab } from '@/state/camTypes';
+import { problemCount } from '@/state/camView';
 import { findProgram } from '@/state/programList';
 import { appStore, useApp } from '@/state/store';
 
@@ -35,6 +36,8 @@ function OperationDiagnostics() {
   const operations = useApp((s) => s.job.operations);
   const camResults = useApp((s) => s.camResults);
   const rows = operations.flatMap((op) => (camResults[op.id]?.diagnostics ?? []).map((d) => ({ op, d })));
+  // info rows (a pocket without islands for its tabs) are listed but are not problems
+  const problems = problemCount(rows.map((row) => row.d));
 
   const open = (operationId: string, code: CamCode) => {
     const { selectOperation, setInspectorTab } = appStore.getState();
@@ -44,10 +47,9 @@ function OperationDiagnostics() {
 
   return (
     <div>
-      <div className="mb-1 font-medium">Operations ({rows.length})</div>
-      {rows.length === 0 ? (
-        <p className="text-muted-foreground">No problems found.</p>
-      ) : (
+      <div className="mb-1 font-medium">Operations ({problems})</div>
+      {problems === 0 && <p className="text-muted-foreground">No problems found.</p>}
+      {rows.length > 0 && (
         <ul className="space-y-0.5">
           {rows.map(({ op, d }, i) => {
             const Icon = ICON[d.severity];

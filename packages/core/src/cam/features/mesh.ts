@@ -5,7 +5,7 @@ import { orientPath, polyArea, v2 } from '../../geometry/offset/pathOps';
 import type { Path2D, Vec2 } from '../../geometry/path2d';
 import { faceRegion } from '../../geometry/faces';
 import { quatRotate } from '../../geometry/quat';
-import { v3dot, vec3 } from '../../geometry/vec3';
+import { type Vec3, v3cross, v3dot, v3length, v3sub, vec3 } from '../../geometry/vec3';
 import { type CamContext, toProgram } from '../context';
 import type { CamCode, MeshFaceRef } from '../types';
 import { circleOf } from './dxf';
@@ -111,16 +111,45 @@ export function resolveFaceRef(ctx: CamContext, ref: MeshFaceRef): { ok: true; f
   if (!g || g.kind !== 'mesh' || !ctx.job.model || ctx.job.model.blobId !== ref.blobId || !ctx.placement) {
     return { ok: false, code: 'ref-missing', message: 'The model this face belongs to is not loaded' };
   }
-  if (!Number.isInteger(ref.seed) || ref.seed < 0 || ref.seed >= triangleCount(g.mesh)) {
-    return { ok: false, code: 'ref-missing', message: 'The picked face no longer exists in the model' };
-  }
-  if (v3dot(triangleNormal(g.mesh, ref.seed), ref.normal) < COS_1DEG) {
-    return { ok: false, code: 'ref-changed', message: 'The picked face has changed; pick it again' };
+  const seed = refTriangle(g.mesh, ref);
+  if (seed < 0) {
+    const exists = Number.isInteger(ref.seed) && ref.seed >= 0 && ref.seed < triangleCount(g.mesh);
+    return exists
+      ? { ok: false, code: 'ref-changed', message: 'The picked face has changed; pick it again' }
+      : { ok: false, code: 'ref-missing', message: 'The picked face no longer exists in the model' };
   }
   if (quatRotate(ctx.placement.rotation, ref.normal).z < COS_1DEG) {
     return { ok: false, code: 'face-not-horizontal', message: 'The face is not horizontal and facing up in the current orientation' };
   }
-  return { ok: true, face: faceGeometry(ctx, faceRegion(g.mesh, g.adjacency, ref.seed)) };
+  return { ok: true, face: faceGeometry(ctx, faceRegion(g.mesh, g.adjacency, seed)) };
+}
+
+/** How far (mm) a reference's point may sit off a triangle and still be on it: float32 rounding of a re-read model. */
+const POINT_TOLERANCE = 1e-3;
+
+/** Is `p` on triangle `tri` (within POINT_TOLERANCE of its plane and inside its edges)? */
+function onTriangle(mesh: Mesh, tri: number, p: Vec3): boolean {
+  const [a, b, c] = triangleVertices(mesh, tri);
+  const n = triangleNormal(mesh, tri);
+  if (Math.abs(v3dot(n, v3sub(p, a))) > POINT_TOLERANCE) return false;
+  for (const [u, v] of [[a, b], [b, c], [c, a]]) {
+    const edge = v3sub(v, u);
+    if (v3dot(v3cross(edge, v3sub(p, u)), n) < -POINT_TOLERANCE * v3length(edge)) return false;
+  }
+  return true;
+}
+
+/**
+ * The triangle a face reference stands for, or -1. The reference's own triangle when it still holds the picked point;
+ * otherwise any triangle with the same normal that holds it. A STEP file read again with other tessellation settings
+ * keeps its faces where they were but numbers their triangles differently, and the old number could land on another
+ * face with the same normal.
+ */
+function refTriangle(mesh: Mesh, ref: MeshFaceRef): number {
+  const matches = (t: number) => v3dot(triangleNormal(mesh, t), ref.normal) >= COS_1DEG && onTriangle(mesh, t, ref.point);
+  if (Number.isInteger(ref.seed) && ref.seed >= 0 && ref.seed < triangleCount(mesh) && matches(ref.seed)) return ref.seed;
+  for (let t = 0; t < triangleCount(mesh); t++) if (matches(t)) return t;
+  return -1;
 }
 
 /** Do the walls just outside a round loop `circle` of a face drop below the face? True for a boss outline or a hole wall; false for a recess floor or the base ring of a boss, where they rise. */

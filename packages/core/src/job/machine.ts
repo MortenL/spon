@@ -11,6 +11,8 @@ export interface MachineProfile {
   accel: AxisValues;
   maxFeed: number;
   toolChangeSeconds: number;
+  /** How far (mm) a cut may go below the stock bottom, into the spoilboard or fixture, before the analysis calls it an error. */
+  spoilboardAllowance: number;
 }
 
 export type MachinePresetName = 'Hobby GRBL router' | 'Generic VMC';
@@ -20,10 +22,10 @@ export const CUSTOM_MACHINE_NAME = 'Custom';
 
 const PRESETS: Record<MachinePresetName, MachineProfile> = {
   'Hobby GRBL router': {
-    name: 'Hobby GRBL router', rapid: { x: 5000, y: 5000, z: 1500 }, accel: { x: 500, y: 500, z: 200 }, maxFeed: 5000, toolChangeSeconds: 30,
+    name: 'Hobby GRBL router', rapid: { x: 5000, y: 5000, z: 1500 }, accel: { x: 500, y: 500, z: 200 }, maxFeed: 5000, toolChangeSeconds: 30, spoilboardAllowance: 0.5,
   },
   'Generic VMC': {
-    name: 'Generic VMC', rapid: { x: 30000, y: 30000, z: 24000 }, accel: { x: 3000, y: 3000, z: 2500 }, maxFeed: 12000, toolChangeSeconds: 5,
+    name: 'Generic VMC', rapid: { x: 30000, y: 30000, z: 24000 }, accel: { x: 3000, y: 3000, z: 2500 }, maxFeed: 12000, toolChangeSeconds: 5, spoilboardAllowance: 0.5,
   },
 };
 

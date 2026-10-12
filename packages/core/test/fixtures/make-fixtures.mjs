@@ -241,7 +241,11 @@ writeFileSync(join(here, 'two-bodies.step'), stepFile('two-bodies.step', [
   { name: 'Large block', origin: [30, 0, 0], size: [40, 20, 10] },
 ]));
 writeFileSync(join(here, 'box.iges'), igesFile('box.iges', { origin: [0, 0, 0], size: [20, 10, 5] }));
-console.log('Wrote box-20x10x5.stl, plate-pocket.stl, plate-mm.dxf, cam-part.dxf, box-hole.step, two-bodies.step, box.iges and stepped.stl');
+// a neck-like blank whose top is one B-spline surface: a too-fine angular deflection used to leave that face without triangles
+writeFileSync(join(here, 'arch.step'), stepFile('arch.step', [
+  { name: 'Arch', arch: { halfWidths: [21, 28], length: 150, height: 22 } },
+]));
+console.log('Wrote box-20x10x5.stl, plate-pocket.stl, plate-mm.dxf, cam-part.dxf, box-hole.step, two-bodies.step, box.iges, arch.step and stepped.stl');
 
 // stepped.stl: the slab with a boss from stepped.ts, written from the same vertex list
 const stepped = steppedData();

@@ -39,7 +39,7 @@ describe('box-hole.step', () => {
     if (!res.ok) throw new Error(res.message);
     const top = mesh.faceIds![ref.seed];
     expect(res.face.tris.length).toBe(mesh.faceIds!.filter((id) => id === top).length);
-    expect(res.face.tris.length).toBe(1444);
+    expect(res.face.tris.length).toBe(148);
     expect(res.face.loops).toHaveLength(2);
   });
 

@@ -17,6 +17,8 @@ export interface ResolvedContour {
   path: Path2D; z: number; ref: number; members?: number[];
   /** Mesh faces: the outline (`outer`) or an inner loop; drawing contours count as `outer`. */
   kind?: 'outer' | 'inner';
+  /** Open chains run against their drawn direction (a Reverse flag): `path` is the drawn line reversed. */
+  reversed?: true;
 }
 export interface ResolvedShape { shape: Shape; z: number; ref: number }
 export interface ResolvedHole { center: Vec2; diameter: number; top: number; bottom: number; through: boolean; ref: number }
@@ -240,7 +242,10 @@ export function resolveGeometry(op: Operation, ctx: CamContext): ResolvedGeometr
             const g = op.geometry[dxf[m].ref];
             return g.kind === 'dxfPath' && g.reverse === true;
           });
-          out.contours.push({ path: reversed ? reversePath(path) : path, z: drawingZ, ref: seed, members: openMembers[k].map((m) => dxf[m].ref) });
+          out.contours.push({
+            path: reversed ? reversePath(path) : path, z: drawingZ, ref: seed, members: openMembers[k].map((m) => dxf[m].ref),
+            ...(reversed ? { reversed: true as const } : {}),
+          });
         });
       } else {
         for (const shape of nestLoops(closed, ctx.tolerance)) out.shapes.push({ shape, z: drawingZ, ref: firstRef });

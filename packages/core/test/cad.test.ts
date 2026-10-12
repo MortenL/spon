@@ -34,6 +34,18 @@ describe('weldTriangles', () => {
   });
 });
 
+describe('cadImport', () => {
+  it('warns about faces the reader left without triangles', () => {
+    const rec = recorded('box-hole.step');
+    rec.meshes![0].brep_faces!.push({ first: 0, last: -1 }, { first: 0, last: -1 });
+    const r = cadImport(rec, 'step');
+    if (!r.ok || r.kind !== 'mesh') throw new Error('expected a mesh');
+    expect(r.warnings).toContain('2 faces could not be meshed and are missing from the model');
+    const clean = cadImport(recorded('box-hole.step'), 'step');
+    expect(clean.ok && clean.kind === 'mesh' && clean.warnings).toEqual([]);
+  });
+});
+
 describe('occtToBodies', () => {
   it('box-hole.step: one closed body whose face ids follow the B-rep face ranges', () => {
     const rec = recorded('box-hole.step');
@@ -41,10 +53,10 @@ describe('occtToBodies', () => {
     expect(bodies).toHaveLength(1);
     const [b] = bodies;
     expect(b.name).toBe('Bracket');
-    expect(b.triangles).toBe(5776);
+    expect(b.triangles).toBe(592);
     expect(b.degenerateRemoved).toBe(0);
     expect(b.mesh.faceIds).toBe(b.faceIds);
-    expect(b.faceIds.length).toBe(5776);
+    expect(b.faceIds.length).toBe(592);
     rec.meshes![0].brep_faces!.forEach((f, id) => {
       for (let t = f.first; t <= f.last; t++) expect(b.faceIds[t]).toBe(id);
     });

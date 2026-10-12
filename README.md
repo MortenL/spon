@@ -4,6 +4,8 @@ Spon is a browser-based CAM tool for 2.5D CNC machining. You import a model or d
 
 An MCP server lets Claude (or any MCP client) drive the same jobs: on `.spon` files from the terminal, or in the open browser tab.
 
+![Toolpaths: a profile with tabs and a drilled hole on a model](docs/screenshots/toolpaths.png)
+
 ## Features
 
 **Workspace**
@@ -11,7 +13,7 @@ An MCP server lets Claude (or any MCP client) drive the same jobs: on `.spon` fi
 - Operation rows show the first problem, reorder by dragging, and have a ⋯ menu and shortcuts that act while the Operations panel is open (Ctrl+D duplicates, Del deletes, Alt+↑/↓ moves). Machine settings are in the top bar.
 
 **Import**
-- STL meshes, STEP and IGES solids (multi-body files ask which body), DXF drawings and SVG drawings.
+- STL meshes, STEP and IGES solids (multi-body files ask which body; faces the reader cannot mesh are retried coarser, or reported as missing), DXF drawings and SVG drawings.
 - SVG files from Inkscape, Illustrator, Affinity, CAD exports and web artwork. Shapes are layered by Inkscape layer or by colour. Pixel-based files ask for a scale: 96 dpi, 72 dpi or a target width.
 - Files without units ask for millimetres or inches.
 
@@ -19,14 +21,19 @@ An MCP server lets Claude (or any MCP client) drive the same jobs: on `.spon` fi
 - Orient the model by quarter turns, by laying a face flat, or by spinning it about Z.
 - Auto or fixed stock, and a work coordinate system (G54–G59) anchored to the corners, edges or centre of the stock, with an offset.
 - With no model, set the stock size yourself: a spoilboard or blank can be faced without importing anything.
-- Machine profiles (rapid speeds, acceleration, maximum feed) for cycle-time estimates and feed checks.
+- Machine profiles (rapid speeds, acceleration, maximum feed) for cycle-time estimates and feed checks, and how far a through cut may go into the spoilboard (0.5 mm by default) before the G-code check calls it an error.
 
 **Operations**
 - **Profile** outside, inside or on a contour.
   - Open lines can be cut on the line, or to its left or right, with a Reverse toggle.
   - Climb or conventional milling, stepdowns, radial and axial stock, and a finish pass.
-  - Ramp, helix or plunge entry; arc or line leads; and tabs you can drag in the viewport.
-- **Pocket** with islands, stepover, and wall and floor finishing; unmachined areas are shown.
+  - Ramp, helix or plunge entry; arc or line leads.
+  - Tabs on closed and open contours (see Tabs below).
+- **Pocket** with islands, stepover, and wall and floor finishing; unmachined areas are shown. Tabs on a through pocket are bridges that leave each island joined to the wall (or the next island), so the islands stay in place.
+- **Tabs** keep a through cut from freeing the part, on profile (closed and open lines), slot and pocket (bridges to islands).
+  - Shape, width, height, and a count or a spacing. Automatic tabs prefer straight edges, stay clear of corners and balance around the part.
+  - Edit them in the viewport: click a toolpath to add a tab, click a tab to select it, drag to move it, Del or × removes it, Esc deselects. A contour you edit turns manual (drawn in a second colour); "Automatic for this contour" and "Reset tab positions" in the inspector undo that.
+  - Tabs that do not fit, a bridge that would be too long and a bridge that would end on its own island (across the mouth of a C-shaped island) are reported as warnings.
 - **Drill**: plain drilling, dwell, peck and chip-break cycles, with a diameter filter.
 - **Face** the whole stock or picked areas, zig-zag or spiral, with overlap, stepdown and a finish pass.
 - **Chamfer** an edge or contour with a chamfer mill or V-bit, countersink a hole, or cut an open line to its left or right. You give the chamfer width, and Spon computes the depth from the tool's tip angle. A deburr button sets a small edge break.
@@ -34,6 +41,7 @@ An MCP server lets Claude (or any MCP client) drive the same jobs: on `.spon` fi
   - Tool-width, wider and trochoidal slots along drawn lines and arcs.
   - Straight and arc slots found in STL, STEP and IGES models, closed or open, blind or through.
   - Square ends cut inside, to the wall, or with dogbones, as you choose.
+  - Tabs across the slot, placed along its centreline; trochoidal loops at a tab are left out.
 - **Engraving and V-carve** from drawings and flat faces of models.
   - Engrave lines and outlines by depth, or by V-bit line width.
   - V-carve closed outlines with the depth following the width and sharp corners.
@@ -45,6 +53,10 @@ An MCP server lets Claude (or any MCP client) drive the same jobs: on `.spon` fi
 - **Machine axis layout.** Reverse X, Reverse Y and Swap X/Y in the work origin panel: G-code output and imported programs follow the machine's axes.
 - Geometry is picked in the viewport, or from a catalog of faces, edge loops, holes and drawing contours.
 
+![The SPON letters V-carved to a 2 mm max depth, with the linked clearing](docs/screenshots/vcarve.png)
+
+![An external M20 thread milled on a boss](docs/screenshots/threads.png)
+
 **Tools**
 - A tool library in the browser, starting from a set of starter tools.
 - Imports Spon libraries, Fusion 360 libraries (`.json` / `.tools`) and LinuxCNC tool tables (`tool.tbl`). For a tool table, the T numbers are kept and the tool types are guessed from the comments.
@@ -54,8 +66,10 @@ An MCP server lets Claude (or any MCP client) drive the same jobs: on `.spon` fi
 - Generated programs are played back, timed and analysed in the viewport, together with any G-code you import.
 - Export refuses on errors. Warnings ask for confirmation.
 
+![Playback of the generated programs with the analysis](docs/screenshots/playback.png)
+
 **Claude integration (MCP)**
-- `packages/mcp` is a local stdio MCP server with tools for jobs, import, setup, geometry, operations (profile, pocket, drill, face, chamfer and thread), round holes and bosses with handles, a `list_threads` table, generation, a PNG preview, export and the tool library.
+- `packages/mcp` is a local stdio MCP server with tools for jobs, import, setup, geometry, operations (profile, pocket, drill, face, chamfer and thread; tabs included, with `generate` listing each operation's tabs per contour), round holes and bosses with handles, a `list_threads` table, generation, a PNG preview, export and the tool library.
 - **Live mode.** Click **Claude** in the app's status bar, and Claude drives the job open in that tab. Each change is one undo step.
 - See [`packages/mcp/README.md`](packages/mcp/README.md).
 

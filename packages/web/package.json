@@ -11,7 +11,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p .",
     "e2e": "playwright test",
-    "e2e:preview": "playwright test -c playwright.preview.config.ts"
+    "e2e:preview": "playwright test -c playwright.preview.config.ts",
+    "screenshots": "playwright test -c playwright.screenshots.config.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

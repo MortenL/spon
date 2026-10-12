@@ -29,7 +29,7 @@ describe('runReport', () => {
     const { run } = runPipeline(job, geometry, programContext(job, geometry), new PipelineCache(), { date: '2026-01-01' });
     const report = runReport(job, run);
     expect(JSON.parse(JSON.stringify(report))).toEqual(report);
-    expect(report.results).toEqual([{ operationId: 'p', diagnostics: run.results[0].diagnostics, heights: run.results[0].heights, hasToolpath: true }]);
+    expect(report.results).toEqual([{ operationId: 'p', diagnostics: run.results[0].diagnostics, heights: run.results[0].heights, hasToolpath: true, tabs: [] }]);
     const summary = run.files[0].parsed.analysis.summary;
     expect(report.files[0]).toEqual({
       name: run.files[0].name, text: run.files[0].text, operationIds: ['p'], tools: run.files[0].tools,

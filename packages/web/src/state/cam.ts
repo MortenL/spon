@@ -46,6 +46,12 @@ let sentEpoch = -1;
 const sentFontIds = new Set<string>();
 let sentFontEpoch = -1;
 
+/**
+ * The generation the worker is running. The worker runs calls one at a time and cannot drop a queued one, so a newer
+ * request waits for this instead of queueing behind it: only the newest waiting request is sent.
+ */
+let inFlight: Promise<unknown> | null = null;
+
 /** The newest finished run and the inputs it was made from. */
 let latest: { job: Job; geometry: ModelGeometry | null; run: CamRun } | null = null;
 
@@ -98,13 +104,25 @@ export async function regenerate(): Promise<void> {
     const now = appStore.getState();
     return now.job !== job || now.geometry !== geometry ? 'changed' : 'current';
   };
-  try {
+  while (inFlight) {
+    await inFlight.catch(() => {});
+    if (gen !== generation) return; // a newer request goes instead
+  }
+  const work = (async () => {
     // the worker keeps its own copy of the model; a replaced worker has lost it
     // no await when the worker already has the model: generation then starts synchronously
     if (!camModelSent(geometry)) await ensureCamModel(geometry);
     // no await when the worker has every font: generation then starts synchronously
     if (freshFonts().length) await ensureCamFonts();
-    const result = await generateInWorker(job, programContext(job, geometry));
+    return generateInWorker(job, programContext(job, geometry));
+  })();
+  inFlight = work;
+  const clear = () => {
+    if (inFlight === work) inFlight = null;
+  };
+  work.then(clear, clear);
+  try {
+    const result = await work;
     const state = check();
     if (state === 'superseded') return;
     if (state === 'changed') return regenerate(); // never leave the status at 'generating'

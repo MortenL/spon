@@ -1,6 +1,6 @@
 import type { Poly } from '../../geometry/offset/clipper';
 import { segmentInside } from '../../geometry/offset/clipper';
-import { nearestS, pathLength, pathStart, pointAt, reversePath, rotateStart, subPath } from '../../geometry/offset/pathOps';
+import { nearestS, pathFromPoints, pathLength, pathStart, pointAt, reversePath, rotateStart, subPath } from '../../geometry/offset/pathOps';
 import type { Path2D, Vec2 } from '../../geometry/path2d';
 import type { Tool } from '../../tools/types';
 import type { CamContext } from '../context';
@@ -11,7 +11,9 @@ import type { CamCode, CamSeverity, SlotOp } from '../types';
 import { emptyOverlays, type OpOutput } from './output';
 import { adjustCentreline, centreRegion, dogboneCorners, type DogbonePass, overcutZones, type SlotCuts, slotCuts } from './slotEnds';
 import { emitRampOpen, regionLoops, slotStrategy, trochoidCentres } from './slotPaths';
-import { depthLevels, emitHelix, emitLap, emitRampLaps, MoveWriter } from './writer';
+import { type SlotTabs, slotTabs } from './slotTabs';
+import { contourTabs, pushTabOverlays } from './tabs';
+import { depthLevels, emitHelix, emitLap, emitRampLaps, MoveWriter, type TabProfile } from './writer';
 
 const LIFT = 1; // mm above the previous level for moves inside the cleared slot
 export const hasSquareEnd = (s: ResolvedSlot) => !s.centreline.closed && (s.startEnd === 'square' || s.endEnd === 'square');
@@ -46,10 +48,37 @@ export function slotToolpath(op: SlotOp, tool: Tool, ctx: CamContext, geo: Resol
   let first = true;
   /** The slot being cut is the first move of a slot after the first: the crossing from the previous slot happens at retract height (spec 3.9). */
   let newSlot = false;
+  /** Tabs of the slot being cut (null when it has none). */
+  let tabs: SlotTabs | null = null;
+  /** Trochoid loops left out at tabs, over all slots. */
+  let loopsLeftOut = 0;
+  const tabsOn = (path: Path2D, z: number): TabProfile | null => tabs?.on(path, z) ?? null;
+  /** The lowest the tool may go at `xy` at level z: the tab top where the tool would touch a tab, else z. */
+  const floorAt = (xy: Vec2, z: number) => (tabs?.blocks(xy, z) ? tabs.top : z);
+  /** A straight feed move to `xy` at level z, rising over any tab on the way. */
+  const feedTo = (xy: Vec2, z: number) => {
+    const from = w.pos!;
+    if (!tabs || Math.hypot(xy.x - from.x, xy.y - from.y) < 1e-9) { w.line({ ...xy, z: floorAt(xy, z) }, feed); return; }
+    const seg = pathFromPoints([from, xy], false);
+    emitLap(w, seg, z, z, feed, tabsOn(seg, z));
+  };
+  /** A start for a closed pass near `s` but not on a tab, so the pass is not entered over one. */
+  const startOffTabs = (path: Path2D, s: number): number => {
+    if (!tabs) return s;
+    const total = pathLength(path);
+    const ivs = tabs.intervals(path);
+    // step past the tab the start lies on (and, wrapping round, past one starting at 0)
+    for (let k = 0; k <= ivs.length; k++) {
+      const iv = ivs.find((i) => s > i.s0 - 1e-9 && s < i.s1 - 1e-9);
+      if (!iv) return s;
+      s = iv.s1 >= total - 1e-9 ? 0 : iv.s1;
+    }
+    return s;
+  };
 
   /** Up to feed height (clearance for the first slot, retract when crossing from another slot), across, and down by rapid to `downZ` (inside the cleared slot or above it). */
   const liftAcross = (xy: Vec2, h: ResolvedHeights, downZ: number) => {
-    w.travel(xy, first ? h.clearance : newSlot ? h.retract : h.feed, downZ);
+    w.travel(xy, first ? h.clearance : newSlot ? h.retract : h.feed, floorAt(xy, downZ));
     first = false;
     newSlot = false;
   };
@@ -67,14 +96,14 @@ export function slotToolpath(op: SlotOp, tool: Tool, ctx: CamContext, geo: Resol
     const hi = L - (slot.endEnd === 'square' ? clear : 0);
     const s = lo > hi ? L / 2 : Math.min(hi, Math.max(lo, nearestS(slot.centreline, xy).s));
     liftAcross(pointAt(slot.centreline, s).point, h, entryZ);
-    if (Math.hypot(w.pos!.x - xy.x, w.pos!.y - xy.y) > 1e-9) w.line({ ...xy, z: entryZ }, feed);
+    if (Math.hypot(w.pos!.x - xy.x, w.pos!.y - xy.y) > 1e-9) feedTo(xy, entryZ);
   };
   /** A straight feed move to `xy` at the current Z when it stays inside `region`, else lift across. */
   const linkTo = (xy: Vec2, region: Poly[], h: ResolvedHeights, z: number, safeZ: number) => {
-    if (w.pos && Math.abs(w.pos.z - z) < 1e-9 && region.length && segmentInside(w.pos, xy, region)) w.line({ ...xy, z }, feed);
+    if (w.pos && Math.abs(w.pos.z - floorAt(w.pos, z)) < 1e-9 && region.length && segmentInside(w.pos, xy, region)) feedTo(xy, z);
     else {
       liftAcross(xy, h, safeZ);
-      w.line({ ...xy, z }, plunge);
+      w.line({ ...xy, z: floorAt(xy, z) }, plunge);
     }
   };
 
@@ -93,10 +122,10 @@ export function slotToolpath(op: SlotOp, tool: Tool, ctx: CamContext, geo: Resol
       const a = (w.pos.x - p.x) * t.x + (w.pos.y - p.y) * t.y; // along the outward tangent from the wall
       if (!(a > -(r + margin) + 1e-9 && a < r)) return;
       const z = w.pos.z;
-      if (Math.hypot(w.pos.x - p.x, w.pos.y - p.y) > 1e-9) w.line({ ...p, z }, feed);
+      if (Math.hypot(w.pos.x - p.x, w.pos.y - p.y) > 1e-9) feedTo(p, z);
       const d = Math.min(r + margin, L);
       const back: Path2D = which === 'start' ? { closed: false, segments: subPath(slot.centreline, 0, d) } : reversePath({ closed: false, segments: subPath(slot.centreline, L - d, L) });
-      emitLap(w, back, z, z, feed, null);
+      emitLap(w, back, z, z, feed, tabsOn(back, z));
     });
   };
 
@@ -105,8 +134,8 @@ export function slotToolpath(op: SlotOp, tool: Tool, ctx: CamContext, geo: Resol
     if (op.squareEnds !== 'dogbone') return;
     for (const { q, tip } of dogboneCorners(slot, r, stock, Math.max(0, dnHere), cuts)) {
       if (!(w.pos && Math.abs(w.pos.z - z) < 1e-9 && Math.hypot(w.pos.x - q.x, w.pos.y - q.y) < 1e-9)) linkTo(q, region, h, z, safeZ);
-      w.line({ ...tip, z }, feed);
-      w.line({ ...q, z }, feed);
+      feedTo(tip, z);
+      feedTo(q, z);
     }
   };
 
@@ -120,30 +149,34 @@ export function slotToolpath(op: SlotOp, tool: Tool, ctx: CamContext, geo: Resol
     const L = pathLength(centre);
     const startCut = !centre.closed && cuts.start !== null;
     const helixFits = (op.entry.mode === 'auto' || op.entry.mode === 'helix') && rh > 0 && rh <= room - margin && (!startCut || L >= 2 * rh);
-    if (helixFits) {
-      const c = startCut ? pointAt(centre, rh).point : pathStart(centre);
-      lift({ x: c.x + rh, y: c.y });
-      emitHelix(w, c, rh, entryZ, z, angle, feed);
-      w.line({ ...pathStart(centre), z }, feed);
-      emitLap(w, centre, z, z, feed, null);
+    const hc = startCut ? pointAt(centre, rh).point : pathStart(centre);
+    // a helix that would reach into a tab is left out: the ramp along the centreline rises over tabs
+    if (helixFits && !(tabs && z < tabs.top - 1e-9 && tabs.distance(hc) < rh + r - 1e-7)) {
+      lift({ x: hc.x + rh, y: hc.y });
+      emitHelix(w, hc, rh, entryZ, z, angle, feed);
+      feedTo(pathStart(centre), z);
+      emitLap(w, centre, z, z, feed, tabsOn(centre, z));
       return;
     }
-    lift(pathStart(centre));
+    const start = pathStart(centre);
+    lift(start);
     if (op.entry.mode === 'plunge') {
-      w.line({ ...pathStart(centre), z }, plunge);
-      emitLap(w, centre, z, z, feed, null);
+      w.line({ ...start, z: floorAt(start, z) }, plunge);
+      emitLap(w, centre, z, z, feed, tabsOn(centre, z));
     } else if (centre.closed) {
-      emitRampLaps(w, centre, entryZ, z, angle, feed, null);
-      emitLap(w, centre, z, z, feed, null);
+      emitRampLaps(w, centre, entryZ, z, angle, feed, tabsOn(centre, z));
+      emitLap(w, centre, z, z, feed, tabsOn(centre, z));
     } else {
-      const { atEnd, plunged } = emitRampOpen(w, centre, entryZ, z, angle, feed, false, plunge);
+      const { atEnd, plunged } = emitRampOpen(w, centre, entryZ, z, angle, feed, false, plunge, (pass) => tabsOn(pass, z));
       if (plunged) warnPlunge();
-      emitLap(w, atEnd ? reversePath(centre) : centre, z, z, feed, null);
+      const cut = atEnd ? reversePath(centre) : centre;
+      emitLap(w, cut, z, z, feed, tabsOn(cut, z));
     }
   };
 
-  for (const slot of geo.slots) {
+  for (const [index, slot] of geo.slots.entries()) {
     newSlot = !first;
+    tabs = null;
     const st = slotStrategy(op.strategy, slot.width, tool.diameter);
     if ('error' in st) { diag('error', st.error.code, st.error.message, slot.ref); continue; }
     const hr = resolveHeights(op.heights, ctx, { contourZ: slot.top, holeBottom: null, slotBottom: slot.bottom, faceZ: geo.faceZ });
@@ -157,6 +190,7 @@ export function slotToolpath(op: SlotOp, tool: Tool, ctx: CamContext, geo: Resol
     const centre = adjustCentreline(slot.centreline, cuts.start, cuts.end);
     if (!centre) { diag('error', 'offset-collapsed', 'The tool does not fit in this slot', slot.ref); continue; }
     if (squareEnds === 'inside' && hasSquareEnd(slot)) diag('warning', 'unmachined-area', 'Square slot ends keep the tool radius in their corners', slot.ref);
+    tabs = planTabs(slot, index, h);
     const dn = st.strategy === 'toolWidth' ? 0 : slot.width / 2 - r - sr;
     if (op.squareEnds === 'dogbone' || op.squareEnds === 'endWall') {
       const passes: DogbonePass[] = [{ stock: sr, dn: st.strategy === 'toolWidth' ? 0 : Math.max(0, dn - margin), cuts }];
@@ -169,9 +203,9 @@ export function slotToolpath(op: SlotOp, tool: Tool, ctx: CamContext, geo: Resol
       if (centre.closed) {
         levels.forEach((z, li) => {
           if (li === 0) liftAcross(pathStart(centre), h, h.feed);
-          if (op.entry.mode === 'plunge') w.line({ ...pathStart(centre), z }, plunge);
-          else emitRampLaps(w, centre, li === 0 ? h.feed : levels[li - 1], z, angle, feed, null);
-          emitLap(w, centre, z, z, feed, null);
+          if (op.entry.mode === 'plunge') w.line({ ...pathStart(centre), z: floorAt(pathStart(centre), z) }, plunge);
+          else emitRampLaps(w, centre, li === 0 ? h.feed : levels[li - 1], z, angle, feed, tabsOn(centre, z));
+          emitLap(w, centre, z, z, feed, tabsOn(centre, z));
         });
       } else {
         // each layer ramps (an even number of passes, so back at its start) from where the last one ended and cuts the other way: no retracts (spec §3.2)
@@ -181,14 +215,14 @@ export function slotToolpath(op: SlotOp, tool: Tool, ctx: CamContext, geo: Resol
           if (li === 0) liftAcross(pathStart(cur), h, h.feed);
           const from = li === 0 ? h.feed : levels[li - 1];
           let atEnd = false;
-          if (op.entry.mode === 'plunge') w.line({ ...pathStart(cur), z }, plunge);
+          if (op.entry.mode === 'plunge') w.line({ ...pathStart(cur), z: floorAt(pathStart(cur), z) }, plunge);
           else {
-            const ramp = emitRampOpen(w, cur, from, z, angle, feed, true, plunge);
+            const ramp = emitRampOpen(w, cur, from, z, angle, feed, true, plunge, (pass) => tabsOn(pass, z));
             atEnd = ramp.atEnd;
             if (ramp.plunged) warnPlunge();
           }
           const cut = atEnd ? reversePath(cur) : cur;
-          emitLap(w, cut, z, z, feed, null);
+          emitLap(w, cut, z, z, feed, tabsOn(cut, z));
           cur = reversePath(cut);
           dogbones(slot, cuts, 0, 0, keyway, h, z, z);
           // the next layer starts from wherever the tool is: the end it last reached
@@ -217,9 +251,9 @@ export function slotToolpath(op: SlotOp, tool: Tool, ctx: CamContext, geo: Resol
         enterAndCut(slot, li, centre, dn, cuts, entryZ, z, h);
         for (const ring of loops) {
           for (const path of ring) {
-            const start = rotateStart(path, nearestS(path, w.pos!).s);
+            const start = rotateStart(path, z < (tabs?.top ?? -Infinity) ? startOffTabs(path, nearestS(path, w.pos!).s) : nearestS(path, w.pos!).s);
             linkTo(pathStart(start), region, h, z, entryZ);
-            emitLap(w, start, z, z, feed, null);
+            emitLap(w, start, z, z, feed, tabsOn(start, z));
           }
         }
         dogbones(slot, cuts, dn - margin, sr, region, h, z, entryZ);
@@ -242,26 +276,54 @@ export function slotToolpath(op: SlotOp, tool: Tool, ctx: CamContext, geo: Resol
       const depth = h.top - (h.bottom + op.stockAxial);
       const layers = Math.max(1, Math.ceil(depth / tool.fluteLength - 1e-9));
       const levels = depthLevels(h.top, h.bottom + op.stockAxial, depth / layers);
+      // loops whose circle, widened by the tool radius, reaches a tab are left out below the tab top (spec §4, Slot)
+      const atTab = centres.map((c) => tabs !== null && tabs.distance(c.p) < R + r - 1e-7);
+      const tabTop = tabs?.top ?? -Infinity;
+      if (levels.some((z) => z < tabTop - 1e-9)) loopsLeftOut += atTab.filter(Boolean).length;
+      const side = (j: number, z: number) => ({ x: centres[j].p.x + centres[j].n.x * R, y: centres[j].p.y + centres[j].n.y * R, z });
       let prev = h.feed;
       levels.forEach((z, li) => {
         const entryZ = li === 0 ? h.feed : Math.min(h.feed, prev + LIFT);
-        const c0 = centres[0];
-        if (op.entry.mode === 'plunge') {
-          const at = { x: c0.p.x + c0.n.x * R, y: c0.p.y + c0.n.y * R };
-          if (li > 0) nextLayer(slot, at, h, entryZ); else liftAcross(at, h, entryZ);
-          w.line({ ...w.pos!, z }, plunge);
-        } else {
-          // the first loop's circle is the helix (spec 3.6: a helix fits whenever trochoidal does); ramp entry uses it too
-          const at = { x: c0.p.x + R, y: c0.p.y };
-          if (li > 0) nextLayer(slot, at, h, entryZ); else liftAcross(at, h, entryZ);
-          emitHelix(w, c0.p, R, entryZ, z, angle, feed);
-          w.arc({ x: c0.p.x + c0.n.x * R, y: c0.p.y + c0.n.y * R, z }, c0.p, true, feed);
-        }
-        for (const c of centres) {
-          const s = { x: c.p.x + c.n.x * R, y: c.p.y + c.n.y * R, z };
-          w.line(s, feed); // a step along the cleared side (no-op for the first loop)
+        const below = z < tabTop - 1e-9;
+        // the first level below the tab top cuts the left-out loops at the tab top, so the slot over each tab is cleared down to it
+        const overTabs = below && prev > tabTop + 1e-9;
+        const loopZ = (j: number): number | null => (!below || !atTab[j] ? z : overTabs ? tabTop : null);
+        /** Down into loop j at zj from `fromZ` (above the material there): by its circle as a helix, or a plunge on its side. */
+        const enter = (j: number, fromZ: number, zj: number) => {
+          const c = centres[j];
+          if (op.entry.mode === 'plunge') {
+            w.line({ ...side(j, fromZ) }, feed);
+            w.line(side(j, zj), plunge);
+          } else {
+            // the loop's circle is the helix (spec 3.6: a helix fits whenever trochoidal does); ramp entry uses it too
+            emitHelix(w, c.p, R, Math.max(fromZ, zj), zj, angle, feed);
+            w.arc(side(j, zj), c.p, true, feed);
+          }
+        };
+        let last = -1;
+        centres.forEach((c, j) => {
+          const zj = loopZ(j);
+          if (zj === null) return;
+          if (last < 0) {
+            // the first loop of the layer
+            const at = op.entry.mode === 'plunge' ? side(j, entryZ) : { x: c.p.x + R, y: c.p.y };
+            if (li > 0) nextLayer(slot, at, h, entryZ); else liftAcross(at, h, entryZ);
+            enter(j, Math.max(entryZ, zj), zj);
+          } else if (last === j - 1 && zj >= w.pos!.z - 1e-9) {
+            if (zj > w.pos!.z + 1e-9) w.line({ ...w.pos!, z: zj }, feed); // up from a loop at z to one at the tab top
+          } else {
+            // past left-out loops (or down from the tab top): up, along the centreline over the tabs, and down into loop j
+            const hz = Math.max(tabTop, entryZ);
+            w.line({ ...w.pos!, z: Math.max(hz, w.pos!.z) }, feed);
+            for (let k = last; k <= j; k++) w.line({ ...centres[k].p, z: w.pos!.z }, feed);
+            if (op.entry.mode !== 'plunge') w.line({ x: c.p.x + R, y: c.p.y, z: w.pos!.z }, feed);
+            enter(j, w.pos!.z, zj);
+          }
+          const s = side(j, zj);
+          w.line(s, feed); // a step along the cleared side (no-op after an entry)
           w.arc(s, c.p, climb, feed); // one full circle: the front half cuts, the back half returns over cleared ground
-        }
+          last = j;
+        });
         dogbones(slot, cuts, dn - margin, sr, region, h, z, entryZ);
         prev = z;
       });
@@ -278,14 +340,29 @@ export function slotToolpath(op: SlotOp, tool: Tool, ctx: CamContext, geo: Resol
     const region = centreRegion(slot.centreline, cuts, d, tol);
     for (const path of regionLoops(region, climb, fitTol)) {
       w.travel(pathStart(path), h.retract, h.feed);
-      emitRampLaps(w, path, h.feed, h.bottom, angle, feed, null);
-      emitLap(w, path, h.bottom, h.bottom, feed, null);
+      emitRampLaps(w, path, h.feed, h.bottom, angle, feed, tabsOn(path, h.bottom));
+      emitLap(w, path, h.bottom, h.bottom, feed, tabsOn(path, h.bottom));
       dogbones(slot, cuts, d, 0, region, h, h.bottom, h.feed);
       leaveEnds(slot);
       w.up(h.retract);
     }
   }
 
+  /**
+   * Tabs of one slot along its centreline (the tab path; its refIndex is the slot's index in `geo.slots`). Records
+   * the overlays and warns once per slot of tabs that did not fit. Null when tabs are off or none were placed.
+   */
+  function planTabs(slot: ResolvedSlot, index: number, h: ResolvedHeights): SlotTabs | null {
+    if (!op.tabs.enabled) return null;
+    const { intervals, skipped, manual } = contourTabs(slot.centreline, op.tabs, r, index);
+    if (skipped) diag('warning', 'tab-skipped', `${skipped} tab(s) did not fit and were skipped`, slot.ref);
+    const top = h.bottom + op.tabs.height;
+    const at = intervals.map((iv) => iv.center);
+    pushTabOverlays(out.overlays, slot.centreline, at, index, manual, top);
+    return slotTabs(slot.centreline, at, op.tabs, slot.width, r, top, h.bottom);
+  }
+
+  if (loopsLeftOut) diag('warning', 'tab-trochoid-skipped', `${loopsLeftOut} trochoid loops were left out at tabs`);
   if (!w.moves.length || out.diagnostics.some((d) => d.severity === 'error')) return out;
   w.up(clearance);
   out.toolpath = { operationId: op.id, operationName: op.name, toolId: tool.id, rpm: op.feeds.rpm, coolant: op.feeds.coolant, clearance, moves: w.moves };

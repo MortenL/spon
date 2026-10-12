@@ -3,7 +3,7 @@ import { fitArcs } from '../../geometry/offset/arcFit';
 import type { Poly } from '../../geometry/offset/clipper';
 import { orientPath, pathLength, pointAt, polyArea, reversePath } from '../../geometry/offset/pathOps';
 import type { Path2D, Vec2 } from '../../geometry/path2d';
-import { emitLap, type MoveWriter } from './writer';
+import { emitLap, type MoveWriter, type TabProfile } from './writer';
 
 
 /** A slot this close to the tool diameter (mm) is a tool-width slot. */
@@ -42,12 +42,15 @@ const EPS = 1e-9;
 /**
  * Ramps down along an open path, forward then back, never steeper than `angleDeg` (the tool must be at the path
  * start). Returns true when it ends at the path's end; `evenPasses` makes it end back at the start. A path shorter than 1 µm cannot be ramped: the tool feeds
- * straight down.
+ * straight down. `tabs` gives the tab profile of each pass (forward and back), so the ramp rises over tabs too.
  */
 export const MAX_RAMP_PASSES = 200;
 export interface RampResult { atEnd: boolean; plunged: boolean }
 
-export function emitRampOpen(w: MoveWriter, path: Path2D, zFrom: number, zTo: number, angleDeg: number, feed: number, evenPasses = false, plungeFeed = feed): RampResult {
+export function emitRampOpen(
+  w: MoveWriter, path: Path2D, zFrom: number, zTo: number, angleDeg: number, feed: number, evenPasses = false, plungeFeed = feed,
+  tabs: ((pass: Path2D) => TabProfile | null) | null = null,
+): RampResult {
   const total = pathLength(path);
   const drop = zFrom - zTo;
   if (drop <= EPS) return { atEnd: false, plunged: false };
@@ -60,7 +63,10 @@ export function emitRampOpen(w: MoveWriter, path: Path2D, zFrom: number, zTo: nu
   }
   if (evenPasses && passes % 2 === 1) passes++;
   const back = reversePath(path);
-  for (let k = 0; k < passes; k++) emitLap(w, k % 2 === 0 ? path : back, zFrom - (drop * k) / passes, zFrom - (drop * (k + 1)) / passes, feed, null);
+  for (let k = 0; k < passes; k++) {
+    const pass = k % 2 === 0 ? path : back;
+    emitLap(w, pass, zFrom - (drop * k) / passes, zFrom - (drop * (k + 1)) / passes, feed, tabs?.(pass) ?? null);
+  }
   return { atEnd: passes % 2 === 1, plunged: false };
 }
 

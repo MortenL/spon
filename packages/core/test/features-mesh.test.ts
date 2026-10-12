@@ -33,10 +33,30 @@ describe('mesh faces', () => {
     const ctx = camContext(job, geometry);
     const top = faceAt(geometry as CamGeometry & { kind: 'mesh' }, 5, 5, 10);
     expect(resolveFaceRef(ctx, { ...top, normal: vec3(1, 0, 0) })).toMatchObject({ ok: false, code: 'ref-changed' });
-    expect(resolveFaceRef(ctx, { ...top, seed: 1e9 })).toMatchObject({ ok: false, code: 'ref-missing' });
+    const nowhere = vec3(5, 5, 99);
+    expect(resolveFaceRef(ctx, { ...top, seed: 1e9, point: nowhere })).toMatchObject({ ok: false, code: 'ref-missing' });
+    expect(resolveFaceRef(ctx, { ...top, point: nowhere })).toMatchObject({ ok: false, code: 'ref-changed' });
     expect(resolveFaceRef(ctx, { ...top, blobId: 'other' })).toMatchObject({ ok: false, code: 'ref-missing' });
     const tipped = camContext(layFlat(job, vec3(1, 0, 0)), geometry); // the +X side now faces down
     expect(resolveFaceRef(tipped, top)).toMatchObject({ ok: false, code: 'face-not-horizontal' });
+  });
+
+  it('finds a face again by its point when the model was triangulated differently (a re-read STEP file)', () => {
+    const { job, geometry } = plateSetup();
+    const ctx = camContext(job, geometry);
+    const mesh = geometry as CamGeometry & { kind: 'mesh' };
+    const top = faceAt(mesh, 5, 5, 10);
+    const floor = faceAt(mesh, 12, 17, 6);
+    const expected = resolveFaceRef(ctx, top);
+    if (!expected.ok) throw new Error(expected.message);
+    // the old triangle number now lands on the pocket floor: same normal, different face
+    const moved = resolveFaceRef(ctx, { ...top, seed: floor.seed });
+    if (!moved.ok) throw new Error(moved.message);
+    expect([...moved.face.tris].sort((a, b) => a - b)).toEqual([...expected.face.tris].sort((a, b) => a - b));
+    // the old triangle number is past the end of the new mesh
+    const gone = resolveFaceRef(ctx, { ...top, seed: 1e9 });
+    if (!gone.ok) throw new Error(gone.message);
+    expect(gone.face.tris.length).toBe(expected.face.tris.length);
   });
 });
 
@@ -65,7 +85,7 @@ describe('resolveGeometry', () => {
     const { job, geometry } = plateSetup();
     const floor = faceAt(geometry as CamGeometry & { kind: 'mesh' }, 12, 17, 6);
     let j = applyCommand(job, { type: 'addOperation', opType: 'profile', toolId: null, id: 'p' });
-    j = applyCommand(j, { type: 'updateOperation', id: 'p', patch: { geometry: [{ ...floor, seed: 1e9 }, floor] } });
+    j = applyCommand(j, { type: 'updateOperation', id: 'p', patch: { geometry: [{ ...floor, seed: 1e9, point: vec3(12, 17, 99) }, floor] } });
     const res = resolveGeometry(j.operations[0], camContext(j, geometry));
     expect(res.contours).toHaveLength(1);
     expect(res.diagnostics).toMatchObject([{ severity: 'error', code: 'ref-missing', ref: 0 }]);

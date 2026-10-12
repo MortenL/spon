@@ -12,6 +12,7 @@ import { applyPick, pickDxf } from './camPick';
 import { CamOverlays } from './CamOverlays';
 import { ModelObject } from './ModelObject';
 import { BedGrid, CameraRig, CursorTracker, StockBox, WcsTriad } from './SceneObjects';
+import { hitsTab } from './tabPath';
 import { TextObjects } from './TextObjects';
 import { Toolpaths } from './Toolpaths';
 
@@ -40,7 +41,7 @@ export function Viewport() {
   const pickOp = camPick ? job.operations.find((o) => o.id === camPick.operationId) : null;
 
   const onDxfPlaneClick = (e: ThreeEvent<MouseEvent>) => {
-    if (!camPick || !pickOp || e.delta > 4) return;
+    if (!camPick || !pickOp || e.delta > 4 || hitsTab(e)) return;
     e.stopPropagation();
     if (camPick.target !== 'geometry') {
       // a drawing has no mesh face for a height pick

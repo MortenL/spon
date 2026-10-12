@@ -3,7 +3,7 @@ import type { Job } from '../job/types';
 import { defaultPostSettings } from '../post/types';
 import { SponFileError } from './errors';
 
-export const CURRENT_SCHEMA_VERSION = 9;
+export const CURRENT_SCHEMA_VERSION = 11;
 
 export type Migration = (job: Record<string, unknown>) => Record<string, unknown>;
 
@@ -34,8 +34,51 @@ export const MIGRATIONS: Readonly<Record<number, Migration>> = {
   6: (job) => job,
   // v7 → v8 (Milestone 4.5): thread milling; nothing to change in older jobs
   7: (job) => job,
-  // v8 → v9 (WCS axis flips): axis switches, all off
-  8: (job) => ({ ...job, wcs: { ...(job.wcs as object), axes: { reverseX: false, reverseY: false, swapXY: false } } }),
+  // v8 → v9: the machine profile allows cuts 0.5 mm into the spoilboard (a through profile breaks through by 0.2 mm)
+  8: (job) => ({ ...job, machine: { spoilboardAllowance: 0.5, ...(job.machine as object) } }),
+  // v9 → v10: tabs are kept per contour (`manual`) and pockets and slots carry tab settings. Contours that had no
+  // explicit positions become automatic again; in schema 9 pockets and slots had no tabs.
+  // Schema 9 measured a contour's positions along its first lap as cut: oriented for the cut direction and started at
+  // the lead start point, or the automatic start. Schema 10 measures them in a frame of their own: the lap
+  // counter-clockwise from the automatic start (see `tabFrame` in cam/ops/profile.ts). A lap that was cut clockwise
+  // (outside climb, inside conventional, on climb) is mirrored, t → 1 - t; one cut counter-clockwise keeps its t.
+  // Without the geometry some positions cannot be converted and are kept as they were (their tabs may move):
+  // - those of the contour that had an explicit lead start point (they were measured from it);
+  // - those of an inner loop of a face or letter (cut on the opposite side, so in the opposite direction);
+  // - on a counter-clockwise lap whose longest straight edges tie (a rectangle cut conventional outside), the
+  //   automatic start was on another of them than the frame's (the one a clockwise lap picks).
+  9: (job) => {
+    const tools = (Array.isArray(job.tools) ? job.tools : []) as Array<{ id?: unknown; diameter?: unknown }>;
+    return {
+      ...job,
+      operations: (Array.isArray(job.operations) ? job.operations : []).map((raw) => {
+        const op = raw as {
+          type?: unknown; toolId?: unknown; side?: unknown; direction?: unknown; leads?: { startPoint?: unknown }; tabs?: Record<string, unknown>;
+        };
+        if (op.type === 'profile' && op.tabs) {
+          const { positions, ...rest } = op.tabs as { positions?: Array<{ refIndex: number; t: number }> | null };
+          const side = op.side, direction = op.direction;
+          const known = (side === 'outside' || side === 'inside' || side === 'on') && (direction === 'climb' || direction === 'conventional');
+          const clockwise = known && (side !== 'inside') === (direction === 'climb'); // lapRunsCW
+          const start = op.leads?.startPoint as { refIndex?: unknown } | undefined;
+          const startRef = typeof start === 'object' && start !== null ? start.refIndex : undefined;
+          const convert = (refIndex: number, t: number) => (clockwise && refIndex !== startRef && t > 0 ? 1 - t : t);
+          const byContour = new Map<number, number[]>();
+          for (const p of positions ?? []) byContour.set(p.refIndex, [...(byContour.get(p.refIndex) ?? []), convert(p.refIndex, p.t)]);
+          const manual = [...byContour].sort((a, b) => a[0] - b[0]).map(([refIndex, t]) => ({ refIndex, t: t.sort((a, b) => a - b) }));
+          return { ...op, tabs: { ...rest, manual } };
+        }
+        if (op.type === 'pocket' || op.type === 'slot') {
+          const diameter = tools.find((t) => t.id === op.toolId)?.diameter;
+          const d = typeof diameter === 'number' ? diameter : 0;
+          return { ...op, tabs: { enabled: false, shape: 'rect', width: Math.max(4, d), height: 2, placement: 'count', count: 4, spacing: 50, manual: [] } };
+        }
+        return raw;
+      }),
+    };
+  },
+  // v10 → v11 (WCS axis flips): axis switches, all off
+  10: (job) => ({ ...job, wcs: { ...(job.wcs as object), axes: { reverseX: false, reverseY: false, swapXY: false } } }),
 };
 
 export function migrateJob(raw: unknown, migrations: Readonly<Record<number, Migration>> = MIGRATIONS, current = CURRENT_SCHEMA_VERSION): Job {
