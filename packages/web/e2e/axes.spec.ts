@@ -14,11 +14,13 @@ test.beforeEach(async ({ page }) => {
 
 /** Exports the generated G-code and returns the X and Y of the first G1 line that moves both. */
 async function firstCut(page: Page): Promise<{ x: number; y: number }> {
+  await openPanel(page, 'operations');
+  // an export while the toolpaths regenerate is refused, so wait for the operation to settle
+  await expect(page.locator('[data-testid^="op-row-"]').last()).toHaveAttribute('data-status', /ok|warning/);
   await openPanel(page, 'programs');
   const downloadPromise = page.waitForEvent('download');
   await page.getByTestId('export-gcode').click();
-  await expect(page.getByTestId('export-dialog')).toBeVisible();
-  await page.getByTestId('export-confirm').click();
+  await page.getByTestId('export-confirm').click({ timeout: 2000 }).catch(() => undefined); // only asked when there are warnings
   const download = await downloadPromise;
   const zipPath = await download.path();
   if (!zipPath) throw new Error('download has no local path');
