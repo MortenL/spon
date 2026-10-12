@@ -6,6 +6,7 @@ import { appStore, useApp } from '@/state/store';
 import { formatPoint } from './format';
 import { LengthField } from './NumericField';
 import { PanelBody } from './PanelBody';
+import { axesHint } from './wcsAxes';
 
 // Seen from above: Y points away from the viewer, so the top row is Y max.
 const ROWS: AxisAnchor[] = ['max', 'center', 'min'];
@@ -53,6 +54,18 @@ export function WcsPanel() {
             {WORK_OFFSETS.map((o) => <option key={o} value={o} className="bg-background">{o}</option>)}
           </select>
         </label>
+      </div>
+
+      <div className="mt-3 space-y-1.5" role="group" aria-label="Axes">
+        <p className="text-sm font-medium">Axes</p>
+        {([['reverseX', 'Reverse X', 'wcs-reverse-x'], ['reverseY', 'Reverse Y', 'wcs-reverse-y'], ['swapXY', 'Swap X and Y', 'wcs-swap-xy']] as const).map(([key, label, testId]) => (
+          <label key={key} className="flex items-center justify-between gap-2 text-sm">
+            <span className="text-muted-foreground">{label}</span>
+            <input type="checkbox" className="accent-primary" data-testid={testId} checked={wcs.axes[key]}
+              onChange={(e) => commit((j) => setWcs(j, { axes: { [key]: e.target.checked } }))} />
+          </label>
+        ))}
+        <p className="text-xs text-muted-foreground" data-testid="wcs-axes-hint">{axesHint(wcs.axes)}</p>
       </div>
 
       <p className="mt-3 text-xs text-muted-foreground">

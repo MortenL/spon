@@ -1,4 +1,4 @@
-import { type Job, type MotionTable, type ParsedProgram, positionAt, type ProgramRef, rowStartTime } from '@sponcam/core';
+import { type Job, type MotionTable, type ParsedProgram, positionAt, type ProgramRef, rowStartTime, timingProfile } from '@sponcam/core';
 import { useMemo } from 'react';
 import { allPrograms, findProgram } from '../state/programList';
 import { appStore, type ProgramData, useApp } from '../state/store';
@@ -25,7 +25,7 @@ export function playbackCursor(job: Job, programs: readonly ProgramRef[], data: 
   const table = parsed.table;
   const row = rowStartingAt(table, at.local);
   const position: [number, number, number] = [0, 0, 0];
-  positionAt(table, job.machine, row, at.local - rowStartTime(table, row), position);
+  positionAt(table, timingProfile(job.machine, job.wcs.axes), row, at.local - rowStartTime(table, row), position);
   return { entry: at.entry, program, parsed, row, line: table.line[row], kind: table.kind[row], feed: table.feed[row], position };
 }
 

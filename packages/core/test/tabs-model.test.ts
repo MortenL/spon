@@ -13,9 +13,9 @@ function v9Job(ops: Record<string, unknown>[]) {
 }
 
 describe('tabs model (schema 10)', () => {
-  it('is schema 10', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(10);
-    expect(createJob().schemaVersion).toBe(10);
+  it('is at least schema 10', () => {
+    expect(CURRENT_SCHEMA_VERSION).toBeGreaterThanOrEqual(10);
+    expect(createJob().schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
   });
 
   it('migrates schema 9 profile positions to per-contour manual tabs', () => {

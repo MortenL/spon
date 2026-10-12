@@ -1,3 +1,4 @@
+import type { WcsAxes } from '../job/axes';
 import type { MachineProfile } from '../job/machine';
 import { arcGeometry, arcLength, arcPointInto, type Plane, planeAxes } from './arcs';
 import { rowStart } from './motion';
@@ -49,6 +50,12 @@ function loadRow(table: MotionTable, i: number): void {
     e[k] = table.end[i * 3 + k];
     c[k] = table.arc[i * 3 + k];
   }
+}
+
+/** The profile as the table's axes see it: with swapXY the machine's X rates limit Spon's Y and vice versa. */
+export function timingProfile(profile: MachineProfile, axes?: WcsAxes): MachineProfile {
+  if (!axes?.swapXY) return profile;
+  return { ...profile, rapid: { ...profile.rapid, x: profile.rapid.y, y: profile.rapid.x }, accel: { ...profile.accel, x: profile.accel.y, y: profile.accel.x } };
 }
 
 export function rowKinematics(table: MotionTable, i: number, profile: MachineProfile): MoveKinematics {

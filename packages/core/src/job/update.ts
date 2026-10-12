@@ -4,6 +4,7 @@ import type { ModelKind } from '../import/importFile';
 import type { LengthUnit } from '../units/units';
 import { identityTransform } from './defaults';
 import { normalizeDegrees } from './orientation';
+import type { WcsAxes } from './axes';
 import type { Job, ModelTransform, Stock, Wcs } from './types';
 
 export interface NewModel {
@@ -85,6 +86,7 @@ export function setStock(job: Job, stock: Stock): Job {
   return { ...job, stock };
 }
 
-export function setWcs(job: Job, patch: Partial<Wcs>): Job {
-  return { ...job, wcs: { ...job.wcs, ...patch } };
+export function setWcs(job: Job, patch: Omit<Partial<Wcs>, 'axes'> & { axes?: Partial<WcsAxes> }): Job {
+  const { axes, ...rest } = patch;
+  return { ...job, wcs: { ...job.wcs, ...rest, axes: { ...job.wcs.axes, ...axes } } };
 }

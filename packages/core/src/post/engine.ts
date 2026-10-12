@@ -1,9 +1,11 @@
 import type { Move, Toolpath } from '../cam/types';
 import { arcSweepBetween } from '../geometry/offset/pathOps';
 import type { Vec3 } from '../geometry/vec3';
+import { axisMap } from '../job/axes';
 import type { Job } from '../job/types';
 import { type Dialect, DIALECTS } from './dialects';
 import { commentText, fmtNum, sanitizeName } from './format';
+import { mapToolpath } from './mapToolpath';
 import type { PostSettings } from './types';
 
 export interface PostSection { operationId: string; firstLine: number; lastLine: number }
@@ -31,8 +33,10 @@ class Lines {
   text(): string { return `${this.out.join('\n')}\n`; }
 }
 
-export function postProcess(job: Job, toolpaths: readonly Toolpath[], opts: PostOptions = {}): PostFile[] {
-  if (!toolpaths.length) return [];
+export function postProcess(job: Job, toolpathsIn: readonly Toolpath[], opts: PostOptions = {}): PostFile[] {
+  if (!toolpathsIn.length) return [];
+  const map = axisMap(job.wcs.axes);
+  const toolpaths = map.identity ? toolpathsIn : toolpathsIn.map((tp) => mapToolpath(tp, map));
   const s = job.post;
   const d = DIALECTS[s.dialect];
   const groups: Toolpath[][] = [];

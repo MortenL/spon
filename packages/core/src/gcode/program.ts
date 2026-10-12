@@ -1,7 +1,9 @@
+import { axisMap, NO_AXIS_FLIPS } from '../job/axes';
 import type { WorkOffset } from '../job/types';
 import { type AnalysisContext, type AnalysisResult, analyzeTable } from './analysis';
 import { decodeProgramText } from './decode';
 import { interpretProgram } from './interpreter';
+import { mapTableToSpon } from './mapTable';
 import type { Diagnostic, MotionTable } from './types';
 
 export interface ProgramContext extends AnalysisContext {
@@ -23,6 +25,7 @@ export interface ParsedProgram {
 
 export function parseProgram(bytes: Uint8Array, ctx: ProgramContext): ParsedProgram {
   const result = interpretProgram(decodeProgramText(bytes), { jobWorkOffset: ctx.jobWorkOffset });
+  mapTableToSpon(result.table, axisMap(ctx.axes ?? NO_AXIS_FLIPS));
   const analysis = analyzeTable(result.table, result.lineFlags, ctx);
   return {
     table: result.table,

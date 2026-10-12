@@ -1,3 +1,4 @@
+import type { WcsAxes } from './axes';
 import type { MachineProfile } from './machine';
 import type { Quat } from '../geometry/quat';
 import type { Vec3 } from '../geometry/vec3';
@@ -52,6 +53,8 @@ export interface Wcs {
   anchor: { x: AxisAnchor; y: AxisAnchor; z: ZAnchor };
   offset: Vec3;
   workOffset: WorkOffset;
+  /** Axis switches matching Spon's X/Y to the machine's. */
+  axes: WcsAxes;
 }
 
 export interface ProgramRef {
@@ -70,7 +73,7 @@ export interface ProgramRef {
 
 /** All lengths in mm, angles in degrees. */
 export interface Job {
-  schemaVersion: 10;
+  schemaVersion: 11;
   id: string;
   name: string;
   displayUnits: LengthUnit;

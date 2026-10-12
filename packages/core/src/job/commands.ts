@@ -8,8 +8,21 @@ import type { Tool } from '../tools/types';
 import type { LengthUnit } from '../units/units';
 import type { MachinePresetName } from './machine';
 import { applyMachinePreset, type MachinePatch, moveProgram, removeProgram, setMachineProfile, setProgramInTimeline } from './programs';
+import type { WcsAxes } from './axes';
 import type { Job, Stock, Wcs } from './types';
 import { layFlat, renameJob, resetOrientation, rotateQuarter, setDisplayUnits, setImportUnits, setStock, setWcs, setZSpin } from './update';
+
+export type WcsPatch = Omit<Partial<Wcs>, 'axes'> & { axes?: Partial<WcsAxes> };
+
+function checkWcsPatch(patch: WcsPatch): WcsPatch {
+  const axes = patch.axes as Record<string, unknown> | undefined;
+  if (axes !== undefined) {
+    for (const key of ['reverseX', 'reverseY', 'swapXY']) {
+      if (axes[key] !== undefined && typeof axes[key] !== 'boolean') throw new CommandError(`axes.${key} must be true or false`);
+    }
+  }
+  return patch;
+}
 
 export type JobCommand =
   | { type: 'renameJob'; name: string }
@@ -20,7 +33,7 @@ export type JobCommand =
   | { type: 'setZSpin'; degrees: number }
   | { type: 'resetOrientation' }
   | { type: 'setStock'; stock: Stock }
-  | { type: 'setWcs'; patch: Partial<Wcs> }
+  | { type: 'setWcs'; patch: WcsPatch }
   | { type: 'setMachineProfile'; patch: MachinePatch }
   | { type: 'applyMachinePreset'; name: MachinePresetName }
   | { type: 'moveProgram'; id: string; delta: -1 | 1 }
@@ -291,7 +304,7 @@ export function applyCommand(job: Job, c: JobCommand): Job {
     case 'setZSpin': return setZSpin(job, c.degrees);
     case 'resetOrientation': return resetOrientation(job);
     case 'setStock': return setStock(job, c.stock);
-    case 'setWcs': return setWcs(job, c.patch);
+    case 'setWcs': return setWcs(job, checkWcsPatch(c.patch));
     case 'setMachineProfile': return setMachineProfile(job, c.patch);
     case 'applyMachinePreset': return applyMachinePreset(job, c.name);
     case 'moveProgram': return moveProgram(job, c.id, c.delta);

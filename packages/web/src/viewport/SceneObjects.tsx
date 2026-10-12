@@ -1,10 +1,11 @@
 import { bboxCenter, bboxSize } from '@sponcam/core';
 import { Edges, Grid, Html } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import * as THREE from 'three';
 import { usePlacement, useStockBox, useWcsPoint } from '@/state/selectors';
 import { appStore, useApp } from '@/state/store';
+import { triadDirections } from '@/panels/wcsAxes';
 import { fitDistance, sceneBounds, VIEW_DIRECTIONS } from './camera';
 import { niceGridStep } from './convert';
 
@@ -59,8 +60,37 @@ export function StockBox() {
   );
 }
 
+const TRIAD_COLORS = { x: 0xe5484d, y: 0x30a46c, z: 0x3e63dd } as const;
+
+function TriadArrow({ dir, length, color, label }: { dir: THREE.Vector3; length: number; color: number; label: string }) {
+  const arrow = useMemo(() => {
+    const a = new THREE.ArrowHelper(dir, new THREE.Vector3(), length, color, length * 0.25, length * 0.12);
+    a.traverse((o) => { o.raycast = noRaycast; });
+    return a;
+  }, [dir, length, color]);
+  useEffect(() => () => {
+    arrow.line.geometry.dispose();
+    (arrow.line.material as THREE.Material).dispose();
+    arrow.cone.geometry.dispose();
+    (arrow.cone.material as THREE.Material).dispose();
+  }, [arrow]);
+  return (
+    <>
+      <primitive object={arrow} dispose={null} />
+      <Html position={dir.clone().multiplyScalar(length * 1.12)} center className="pointer-events-none select-none font-mono text-[11px] font-semibold" style={{ color: `#${color.toString(16).padStart(6, '0')}` }}>
+        {label}
+      </Html>
+    </>
+  );
+}
+
 export function WcsTriad() {
   const point = useWcsPoint();
+  const axes = useApp((s) => s.job.wcs.axes);
+  const dirs = useMemo(() => {
+    const d = triadDirections(axes);
+    return { x: new THREE.Vector3(d.x.x, d.x.y, 0), y: new THREE.Vector3(d.y.x, d.y.y, 0), z: new THREE.Vector3(0, 0, 1) };
+  }, [axes]);
   const stock = useStockBox();
   const label = useApp((s) => s.job.wcs.workOffset);
   if (!point || !stock) return null;
@@ -68,7 +98,9 @@ export function WcsTriad() {
   const length = Math.max(5, 0.2 * Math.max(size.x, size.y, size.z));
   return (
     <group position={[point.x, point.y, point.z]}>
-      <axesHelper args={[length]} raycast={noRaycast} />
+      <TriadArrow dir={dirs.x} length={length} color={TRIAD_COLORS.x} label="X" />
+      <TriadArrow dir={dirs.y} length={length} color={TRIAD_COLORS.y} label="Y" />
+      <TriadArrow dir={dirs.z} length={length} color={TRIAD_COLORS.z} label="Z" />
       <Html position={[0, 0, length * 0.25]} center className="pointer-events-none select-none rounded bg-black/70 px-1.5 py-0.5 font-mono text-[11px] text-white">
         {label}
       </Html>

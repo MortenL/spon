@@ -141,6 +141,7 @@ const wcsPatch = z.strictObject({
   anchor: z.strictObject({ x: z.enum(['min', 'center', 'max']), y: z.enum(['min', 'center', 'max']), z: z.enum(['top', 'bottom']) }),
   offset: vec3Schema,
   workOffset: z.enum(['G54', 'G55', 'G56', 'G57', 'G58', 'G59']),
+  axes: z.strictObject({ reverseX: z.boolean(), reverseY: z.boolean(), swapXY: z.boolean() }).partial(),
 }).partial();
 const machinePatch = z.strictObject({ rapid: vec3Partial, accel: vec3Partial, maxFeed: z.number(), toolChangeSeconds: z.number(), spoilboardAllowance: z.number().min(0) }).partial();
 const postPatch = z.strictObject({

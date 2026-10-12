@@ -11,6 +11,7 @@ export const DEFAULT_WCS: Readonly<Wcs> = Object.freeze({
   anchor: { x: 'min', y: 'min', z: 'top' },
   offset: { x: 0, y: 0, z: 0 },
   workOffset: 'G54',
+  axes: { reverseX: false, reverseY: false, swapXY: false },
 } as Wcs) as Readonly<Wcs>;
 
 export function identityTransform(): ModelTransform {
@@ -19,7 +20,7 @@ export function identityTransform(): ModelTransform {
 
 export function createJob(name = 'Untitled'): Job {
   return {
-    schemaVersion: 10,
+    schemaVersion: 11,
     id: crypto.randomUUID(),
     name,
     displayUnits: 'mm',
